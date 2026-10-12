@@ -25,3 +25,4 @@
 Adapted (copied, not imported) from VoxelLib `cmd/explorer`: main loop and screenshot code (main.go), input/capture (play.go), crossbow hold matrix and arrow sprite (draw.go), box-model builder (from `arrowModel`, draw.go), overlay text drawing (hud.go). The crossbow model itself is loaded from the cleannrooster pack at runtime (`repeater_crossbow_arrow` bone). `voxel/nav` in VoxelLib was written fresh (no code copied). All sounds are synthesized in sound.go; no audio assets.
 
 - `cmd/voxelstealth/arrow.go`: bolt model copied from VoxelLib `cmd/explorer/crossbow.go` (`arrowModel`), head colour made a parameter.
+- `cmd/voxelstealth/corpse.go`: exact arrow hits, bone-riding arrows and the topple-over death, copied from VoxelLib `cmd/explorer/crossbow.go` (shapeInfo, creatureMatrix, Joint/Intersect/Reach, deathTilt); bodies stay instead of fading.

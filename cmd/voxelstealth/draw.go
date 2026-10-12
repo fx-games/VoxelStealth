@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/go-gl/mathgl/mgl64"
 	"github.com/memmaker/voxellib/importer/mcmodel"
 	"github.com/memmaker/voxellib/model"
+	"github.com/memmaker/voxellib/projectile"
 	"github.com/memmaker/voxellib/voxel/render"
 	"github.com/memmaker/voxelstealth/sim"
 )
@@ -34,6 +36,7 @@ const crossbowGroup = "repeater_crossbow_arrow"
 type npcSkin struct {
 	model  *model.Model
 	handle int
+	shape  *shapeInfo // for exact arrow hits
 }
 
 type npcAnim struct {
@@ -96,7 +99,7 @@ func (g *game) loadAssets(dir string) error {
 				if err != nil {
 					return err
 				}
-				g.skins[key] = &npcSkin{m, h}
+				g.skins[key] = &npcSkin{model: m, handle: h}
 			}
 		}
 		if bow := m.Subtree(crossbowGroup); bow != nil && g.bowModel < 0 {
@@ -235,10 +238,11 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		}
 		b := &n.Body
 		x, y, z := b.Lerp(alpha)
-		tilt := 0.0
-		if !n.Alive() {
-			tilt = math.Pi / 2 // the dead and the unconscious lie flat
-		} else {
+		t := g.npcTargets[k]
+		tilt := t.deathTilt(alpha)
+		t.drawn, t.drawX, t.drawY, t.drawZ, t.drawYaw, t.drawTilt = true, x, y, z, n.Yaw, tilt
+		t.drawFrame++
+		if n.Alive() { // the dead keep their last pose
 			if clip := clipFor(sk.model, n.Moving); clip != a.clip {
 				a.clip = clip
 				a.anim.Play(clip, false)
@@ -254,7 +258,7 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		if !n.Alive() {
 			sky, blk = g.light(x, y+0.3, z)
 		}
-		g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: n.Yaw, Tilt: tilt, TiltYaw: n.Yaw + math.Pi,
+		g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: n.Yaw, Tilt: tilt, TiltYaw: t.fallYaw,
 			Skin: a.skin, Sky: sky, Block: blk})
 	}
 }
@@ -324,6 +328,15 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 func (g *game) drawArrows(alpha float64) {
 	for _, a := range g.arrows.Arrows {
 		x, y, z, yaw, pitch := a.Lerp(alpha)
+		// Ride the bone it is stuck in, with this frame's pose and position.
+		if t, ok := a.In.(*npcTarget); ok && t.drawn {
+			if b, pos, d, ok := a.Attached(); ok {
+				m := mat64(creatureMatrix(t.drawX, t.drawY, t.drawZ, t.drawYaw, t.drawTilt, t.fallYaw).Mul4(t.boneMatrix(b)))
+				p := mgl64.TransformCoordinate(pos, m)
+				x, y, z = p[0], p[1], p[2]
+				yaw, pitch = projectile.Orient(mgl64.TransformNormal(d, m))
+			}
+		}
 		if a.Flown < 2 {
 			dx, dy, dz := x-g.cam.X, y-g.cam.Y, z-g.cam.Z
 			if dx*dx+dy*dy+dz*dz < 3.5*3.5 {

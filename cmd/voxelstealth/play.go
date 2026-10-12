@@ -9,7 +9,6 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/projectile"
-	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxelstealth/sim"
 )
 
@@ -52,26 +51,6 @@ type weapons struct {
 	shotReq    bool
 }
 
-// npcTarget lets arrows hit an NPC's body.
-type npcTarget struct {
-	g *game
-	k int
-}
-
-func (t *npcTarget) Box() collide.AABB {
-	n := t.g.sim.NPCs[t.k]
-	if !n.Alive() {
-		p := n.Pos()
-		return collide.AABB{MinX: p.X - 0.8, MinY: p.Y, MinZ: p.Z - 0.8, MaxX: p.X + 0.8, MaxY: p.Y + 0.45, MaxZ: p.Z + 0.8}
-	}
-	return n.Body.Box()
-}
-
-func (t *npcTarget) Frame() (x, y, z, yaw float64) {
-	n := t.g.sim.NPCs[t.k]
-	return n.Body.X, n.Body.Y, n.Body.Z, n.Yaw
-}
-
 // resetPlay clears per-run glue state (new mission, quickload).
 func (g *game) resetPlay() {
 	g.weapon, g.ammo = wCrossbow, sim.AmmoBroadhead
@@ -79,7 +58,11 @@ func (g *game) resetPlay() {
 	g.arrowAmmo, g.reported = map[*projectile.Arrow]string{}, map[*projectile.Arrow]bool{}
 	g.npcTargets = nil
 	for k := range g.sim.NPCs {
-		g.npcTargets = append(g.npcTargets, &npcTarget{g, k})
+		t := &npcTarget{g: g, k: k}
+		if n := g.sim.NPCs[k]; !n.Alive() { // already down (quickload)
+			t.dying, t.fallYaw = deathTicks+1, n.Yaw+math.Pi
+		}
+		g.npcTargets = append(g.npcTargets, t)
 	}
 	g.arrows.Hit = g.arrowHit
 	g.npcAnims = nil
@@ -356,6 +339,7 @@ func (g *game) tickArrows() {
 	}
 	targets := make([]projectile.Target, 0, len(g.npcTargets))
 	for k, t := range g.npcTargets {
+		t.tickFall()
 		if n := s.NPCs[k]; !n.Hidden && !n.CarriedBy {
 			targets = append(targets, t)
 		}
@@ -386,8 +370,12 @@ func (g *game) arrowHit(a *projectile.Arrow, t projectile.Target) {
 	}
 	g.reported[a] = true
 	ammo := g.arrowAmmo[a]
-	head := a.Height(t) > 1.45 && g.sim.NPCs[nt.k].Alive()
-	g.sim.ArrowHit(ammo, vec(a.X, a.Y, a.Z), nt.k, head)
+	n := g.sim.NPCs[nt.k]
+	alive := n.Alive()
+	g.sim.ArrowHit(ammo, vec(a.X, a.Y, a.Z), nt.k, alive && nt.isHead(a.Part))
+	if alive && !n.Alive() {
+		nt.fall(a.Yaw) // pushed over along the arrow's flight
+	}
 	if ammo != sim.AmmoBroadhead {
 		a.Discard()
 	}
