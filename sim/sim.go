@@ -46,6 +46,7 @@ type Object struct {
 	Locked, Open   bool
 	Lit            bool // torches, lamps (powered and on)
 	Fallen         bool
+	Held           bool // torch in the player's hand
 	Running        bool // faucets
 	Gone           bool // taken or destroyed
 	Burn           int  // ticks burning; 0 = not burning
@@ -328,6 +329,13 @@ func (s *Sim) tickPlayer() {
 				loud *= 1.35
 			}
 			s.emit(p.Pos, loud, "footstep", -1)
+		}
+	}
+	if i := s.HeldTorch(); i >= 0 {
+		o := s.Objects[i]
+		o.Pos = p.Pos.Add(Vec3{0, 0.6, 0}) // its light sits at chest height
+		if o.Lit && (!o.HasLight || o.LightCell != o.Pos.Add(Vec3{0, 0.5, 0}).Cell()) {
+			s.setLight(i, true)
 		}
 	}
 	s.Visibility = s.visibility()
@@ -631,7 +639,7 @@ func (s *Sim) Explode(pos Vec3) {
 		}
 		d := o.Pos.Dist(pos)
 		switch {
-		case d < r && (o.Kind == KindTorch || o.Kind == KindLamp || o.Kind == KindDoor || o.Kind == KindFaucet):
+		case d < r && (o.Kind == KindTorch && !o.Held || o.Kind == KindLamp || o.Kind == KindDoor || o.Kind == KindFaucet):
 			s.setLight(i, false)
 			if o.Kind == KindDoor {
 				for _, dc := range o.doorCells() {
@@ -728,7 +736,7 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 	best := NoTarget
 	best.Dist = Reach
 	for i, o := range s.Objects {
-		if o.Gone || (o.Kind == KindChest && false) {
+		if o.Gone || o.Held {
 			continue
 		}
 		lo, hi := s.ObjectBox(i)
@@ -796,8 +804,8 @@ func (s *Sim) Describe(t Target) string {
 		}
 		return name + " (empty)"
 	case KindTorch:
-		if o.Lit && !o.Fallen {
-			return name + " (knock down)"
+		if s.HeldTorch() < 0 {
+			return name + " (take)"
 		}
 	case KindLamp:
 		if !o.Fallen {
@@ -903,8 +911,9 @@ func (s *Sim) Frob(t Target, held bool) {
 			s.emit(o.Pos, 8, "loot", -1)
 		}
 	case KindTorch:
-		if o.Lit && !o.Fallen {
-			s.knockTorch(t.Obj)
+		if s.HeldTorch() < 0 {
+			o.Held, o.Fallen = true, false
+			s.emit(o.Pos, 6, "swish", -1)
 		}
 	case KindLamp:
 		if !o.Fallen {
@@ -931,18 +940,32 @@ func (s *Sim) doorBlocked(i int) bool {
 	return false
 }
 
-// knockTorch drops a wall torch to the floor below; it sets flammables
-// it lands on alight.
-func (s *Sim) knockTorch(i int) {
-	o := s.Objects[i]
-	g, ok := s.groundBelow(o.Pos.Cell(), 5)
-	if !ok {
+// HeldTorch is the index of the torch in the player's hand, or -1.
+func (s *Sim) HeldTorch() int {
+	for i, o := range s.Objects {
+		if o.Held && !o.Gone {
+			return i
+		}
+	}
+	return -1
+}
+
+// ThrowTorch lobs the held torch up to dist blocks along the view (0 drops
+// it at the player's feet). It clatters where it lands, which draws guards
+// over, and sets flammables there alight.
+func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64) {
+	i := s.HeldTorch()
+	if i < 0 {
 		return
 	}
-	o.Fallen = true
-	o.Pos = g.Floor()
-	s.setLight(i, true)
+	o := s.Objects[i]
+	o.Held, o.Fallen = false, true
+	o.Pos = s.landing(eye, dir, dist)
+	s.setLight(i, o.Lit)
 	s.emit(o.Pos, 22, "clatter", -1)
+	if !o.Lit {
+		return
+	}
 	for j, f := range s.Objects {
 		if f.Kind == KindFlammable && f.Pos.DistXZ(o.Pos) < 1.6 && math.Abs(f.Pos.Y-o.Pos.Y) < 1.5 {
 			s.ignite(j)
@@ -1056,8 +1079,17 @@ func (s *Sim) Throw(eye, dir Vec3) bool {
 		return false
 	}
 	p.Ammo[AmmoExplosive]--
+	land := s.landing(eye, dir, 7)
+	s.Bombs = append(s.Bombs, bomb{Pos: land, Fuse: 3 * TicksPerSecond})
+	s.emit(land, 20, "clatter", -1)
+	return true
+}
+
+// landing is the floor where something thrown up to dist blocks along
+// dir comes down.
+func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 	land := eye
-	for t := 0.0; t < 7; t += 0.25 {
+	for t := 0.0; t < dist; t += 0.25 {
 		q := eye.Add(dir.Scale(t))
 		if s.W.Solid(q.Cell().X, q.Cell().Y, q.Cell().Z) {
 			break
@@ -1067,9 +1099,7 @@ func (s *Sim) Throw(eye, dir Vec3) bool {
 	if g, ok := s.groundBelow(land.Cell(), 8); ok {
 		land = g.Floor()
 	}
-	s.Bombs = append(s.Bombs, bomb{Pos: land, Fuse: 3 * TicksPerSecond})
-	s.emit(land, 20, "clatter", -1)
-	return true
+	return land
 }
 
 // Melee swings the blackjack or the blade at the NPC in front of the

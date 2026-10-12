@@ -262,7 +262,7 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 // drawObjects draws props as box models and loot as item sprites.
 func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 	for _, o := range objs {
-		if o.Gone {
+		if o.Gone || o.Held {
 			continue
 		}
 		p := o.Pos
@@ -344,6 +344,21 @@ func (g *game) drawHand(alpha float64) {
 	bobX, bobY := float32(math.Sin(t))*0.02, -float32(math.Abs(math.Cos(t)))*0.03
 	sky, blk := g.light(g.cam.X, g.cam.Y, g.cam.Z)
 	aspect := float32(g.cam.Aspect)
+	if i := g.sim.HeldTorch(); i >= 0 {
+		name := "torch"
+		if g.sim.Objects[i].Lit {
+			name, blk = "torch_lit", 15
+		}
+		sw := float32(0)
+		if g.swing > 0 {
+			sw = float32(math.Sin(float64(float32(g.swing)-float32(alpha)) / swingTicks * math.Pi))
+		}
+		view := mgl32.Translate3D(-0.35+bobX, -0.6+bobY+0.2*sw, -0.85-0.3*sw).
+			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(15 - 60*sw))).
+			Mul4(mgl32.Scale3D(0.6, 0.6, 0.6))
+		g.modelRend.DrawHand(g.props[name], aspect, view, sky, blk)
+		return
+	}
 	switch g.weapon {
 	case wCrossbow:
 		kick := float32(0)

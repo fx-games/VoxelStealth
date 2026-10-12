@@ -185,6 +185,8 @@ func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 	case k == glfw.KeyG:
 		if s.Player.Carrying >= 0 {
 			s.DropBody()
+		} else {
+			s.ThrowTorch(g.eye(), g.viewDir(), 0)
 		}
 	}
 }
@@ -287,6 +289,13 @@ func (g *game) tickPlay() {
 // useWeapon fires, swings or throws what is in hand.
 func (g *game) useWeapon() {
 	s := g.sim
+	if s.HeldTorch() >= 0 {
+		if g.swing == 0 {
+			s.ThrowTorch(g.eye(), g.viewDir(), 9)
+			g.swing = swingTicks
+		}
+		return
+	}
 	switch g.weapon {
 	case wCrossbow:
 		if g.reload > 0 {

@@ -48,16 +48,17 @@ var helpText = []string{
 	"W A S D / mouse   move, look        Space  jump",
 	"Shift (or C)      crouch: slow, quiet, harder to see",
 	"Ctrl              run: fast and loud",
-	"E (hold)          use: doors, loot, pick locks, carry bodies, knock torches/lamps",
-	"G                 drop the body you carry (E on a chest hides it)",
+	"E (hold)          use: doors, loot, pick locks, carry bodies, take torches, knock lamps",
+	"G                 drop the body or torch you carry (E on a chest hides a body)",
 	"1 2 3 4           crossbow, blackjack, blade, flash bomb",
 	"X                 next arrow type: broadhead, water, noisemaker",
-	"Left mouse        shoot / swing / throw",
+	"Left mouse        shoot / swing / throw (with a torch in hand: throw it)",
 	"Tab               objectives          F5 / F9  quicksave / quickload",
 	"F2                screenshot           Esc  release mouse (again: quit)",
 	"",
 	"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
 	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
+	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
 }
 
 const msgTicks = 6 * sim.TicksPerSecond

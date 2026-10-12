@@ -167,8 +167,14 @@ func TestTorchOnRugFire(t *testing.T) {
 		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 2, 3.5}, Lit: true},
 		&Object{ID: "rug", Kind: KindFlammable, Pos: Vec3{3.5, 1, 3.5}})
 	s := New(w, m)
+	s.Player.Pos = Vec3{6.5, 1, 3.5}
+	s.Frob(Target{Obj: 1, NPC: -1}, false) // take it: its light comes along
+	run(s, 2)
+	if o := s.Objects[1]; !o.Held || o.LightCell != (Cell{6, 2, 3}) {
+		t.Fatalf("torch not carried: held %v light %v", o.Held, o.LightCell)
+	}
+	s.ThrowTorch(s.Player.Eye(), Vec3{-1, 0, 0}, 3) // onto the rug
 	s.Player.Pos = Vec3{18.5, 1, 9.5}
-	s.Frob(Target{Obj: 1, NPC: -1}, false)
 	run(s, 2)
 	if !s.Objects[2].Burning() {
 		t.Fatal("rug not burning")
