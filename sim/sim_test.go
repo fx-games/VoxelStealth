@@ -4,6 +4,8 @@ import (
 	"math"
 	"os"
 	"testing"
+
+	"github.com/memmaker/voxellib/character"
 )
 
 // fakeWorld is a map of blocks with naive light: block light falls off by
@@ -278,5 +280,21 @@ func TestTorchOnSkipsGlass(t *testing.T) {
 	w.b[Cell{1, 0, 0}] = "minecraft:glass"
 	if on := TorchOn(TorchWall(w), Cell{}); on != "floor" {
 		t.Fatalf("torch hangs on %q, want floor", on)
+	}
+}
+
+func TestDecorBlocksButIsNotTargeted(t *testing.T) {
+	w, m := twoRooms()
+	m.Objects = append(m.Objects, &Object{ID: "box", Kind: KindDecor, Name: "Small box", Pos: Vec3{5.5, 1, 2.5}})
+	s := New(w, m)
+	p := character.New(2.5, 1, 2.5)
+	for i := 0; i < 3*TicksPerSecond; i++ {
+		p.Tick(s.Body(), character.Input{Forward: 1, Yaw: math.Pi / 2}) // walk +X into the box
+	}
+	if p.X > 5 || p.X < 4 {
+		t.Fatalf("player at x=%.2f, want stopped against the box's cell (x=5)", p.X)
+	}
+	if tg := s.TargetAt(Vec3{4.5, 1.2, 2.5}, Vec3{1, 0, 0}); tg.Obj >= 0 {
+		t.Fatalf("targeted object %d", tg.Obj)
 	}
 }

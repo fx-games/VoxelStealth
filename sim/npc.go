@@ -116,26 +116,32 @@ func (n *NPC) Alive() bool { return n.alive() }
 // IsGuard reports whether it fights.
 func (n *NPC) IsGuard() bool { return n.Kind == "guard" }
 
-// navWorld lets an NPC's pathfinder walk through door cells (it opens them).
+// navWorld lets an NPC's pathfinder walk through door cells (it opens
+// them), but not decorations.
 type navWorld struct{ s *Sim }
 
 func (w navWorld) Solid(x, y, z int) bool {
 	if _, door := w.s.doors[Cell{x, y, z}]; door {
 		return false
 	}
-	return w.s.W.Solid(x, y, z)
+	return w.s.W.Solid(x, y, z) || w.s.decor[Cell{x, y, z}]
 }
 
-// bodyWorld is the character controller's view: closed doors are solid.
+// bodyWorld is the character controller's view: closed doors are solid,
+// and so are decorations' cells.
+// ponytail: a decoration blocks its whole cell; per-object boxes if small props must be walked around closely
 type bodyWorld struct{ s *Sim }
 
-func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) }
+func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) || w.s.decor[Cell{x, y, z}] }
 func (w bodyWorld) Liquid(x, y, z int) character.Liquid {
 	if b := w.s.W.Block(x, y, z); b == "minecraft:water" {
 		return character.LiquidWater
 	}
 	return character.LiquidNone
 }
+
+// Body is the world as the player's and NPCs' bodies collide with it.
+func (s *Sim) Body() character.World { return bodyWorld{s} }
 
 var _ character.World = bodyWorld{}
 var _ collide.Solids = bodyWorld{}

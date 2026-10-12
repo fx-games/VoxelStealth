@@ -226,7 +226,7 @@ func (g *game) tickPlay() {
 	if running {
 		in = g.movementInput()
 	}
-	p.Tick(g.world, in)
+	p.Tick(s.Body(), in)
 	g.prevWalk = g.walkDist
 	if p.OnGround {
 		g.walkDist += math.Hypot(p.X-p.PrevX, p.Z-p.PrevZ)

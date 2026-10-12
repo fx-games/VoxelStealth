@@ -23,7 +23,7 @@ const (
 	KindKey       = "key"       // opens doors/chests with the same Key
 	KindAmmo      = "ammo"      // Name = ammo type, Count
 	KindFlammable = "flammable" // rugs, tapestries, hay
-	KindDecor     = "decor"     // decoration only: Name picks the model; never targeted
+	KindDecor     = "decor"     // decoration: Name picks the model; blocks its cell, never targeted
 )
 
 // Ammo types.
@@ -220,6 +220,7 @@ type Sim struct {
 	Events  []Event
 
 	doors  map[Cell]int // door cell → object index
+	decor  map[Cell]bool
 	sounds []sound
 	navs   []*nav.Graph
 	rng    *rand.Rand
@@ -231,6 +232,7 @@ func New(w World, m *Mission) *Sim {
 	s := &Sim{W: w, Mission: m, rng: rand.New(rand.NewSource(1))}
 	s.Time = m.StartTime
 	s.Puddles = map[Cell]int{}
+	s.decor = map[Cell]bool{}
 	s.Done = map[int]bool{}
 	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Health: 20, Carrying: -1, Ammo: map[string]int{}}
 	for k, v := range m.Ammo {
@@ -243,6 +245,9 @@ func New(w World, m *Mission) *Sim {
 		}
 		if o.Kind == KindTorch && o.On == "" {
 			o.On = TorchOn(TorchWall(w), o.Pos.Cell())
+		}
+		if o.Kind == KindDecor {
+			s.decor[o.Pos.Cell()] = true
 		}
 		s.Objects = append(s.Objects, &o)
 	}

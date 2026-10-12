@@ -339,6 +339,12 @@ func writeMission(b *builder, dir string) {
 		{ID: "ammo_water", Kind: sim.KindAmmo, Name: sim.AmmoWater, Count: 2, Pos: v(18.5, G, 39.5)},
 		{ID: "ammo_broad", Kind: sim.KindAmmo, Name: sim.AmmoBroadhead, Count: 4, Pos: v(38.5, G+1, 39.5)},
 		{ID: "ammo_noise", Kind: sim.KindAmmo, Name: sim.AmmoNoise, Count: 1, Pos: v(50.5, G, 57.5)},
+		// Decoration.
+		{ID: "kitchen_apples", Kind: sim.KindDecor, Name: "Box of apples", Pos: v(19.5, G+1, 40.5), Yaw: 0.2},
+		{ID: "kitchen_box", Kind: sim.KindDecor, Name: "Small box", Pos: v(16.5, G, 36.5), Yaw: math.Pi / 2},
+		{ID: "guard_bottles", Kind: sim.KindDecor, Name: "Crate of bottles", Pos: v(41.5, G+1, 40.5), Yaw: -0.3},
+		{ID: "cellar_bottles", Kind: sim.KindDecor, Name: "Crate of bottles", Pos: v(47.5, C, 14.5), Yaw: math.Pi / 2},
+		{ID: "cellar_box", Kind: sim.KindDecor, Name: "Small box", Pos: v(47.5, C, 15.5), Yaw: 1.8},
 	}
 	m.Rooms = []*sim.Room{
 		{ID: 1, Name: "Entrance hall", Boxes: []sim.Box{box(27, G, 31, 36, G+3, 40)}},

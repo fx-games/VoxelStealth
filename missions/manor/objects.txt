@@ -228,17 +228,17 @@ Pos: 43.5,62,20.5
 Lit: yes
 On: ceiling
 
-ID: faucet
-Kind: faucet
-Name: Wash basin tap
-Pos: 22.5,69,29.5
-
 ID: study_candles
 Kind: torch
 Name: Candles
 Pos: 46.5,70,20.5
 Lit: yes
 On: floor
+
+ID: faucet
+Kind: faucet
+Name: Wash basin tap
+Pos: 22.5,69,29.5
 
 ID: bath_lamp
 Kind: lamp
@@ -392,3 +392,33 @@ Kind: ammo
 Name: noisemaker
 Pos: 50.5,64,57.5
 Count: 1
+
+ID: kitchen_apples
+Kind: decor
+Name: Box of apples
+Pos: 19.5,65,40.5
+Yaw: 11.46
+
+ID: kitchen_box
+Kind: decor
+Name: Small box
+Pos: 16.5,64,36.5
+Yaw: 90
+
+ID: guard_bottles
+Kind: decor
+Name: Crate of bottles
+Pos: 41.5,65,40.5
+Yaw: -17.19
+
+ID: cellar_bottles
+Kind: decor
+Name: Crate of bottles
+Pos: 47.5,58,14.5
+Yaw: 90
+
+ID: cellar_box
+Kind: decor
+Name: Small box
+Pos: 47.5,58,15.5
+Yaw: 103.13
