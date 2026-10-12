@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/nav"
 )
 
@@ -509,12 +510,8 @@ func (s *Sim) tickObjects() {
 			if o.Burn%30 == 1 {
 				s.emit(o.Pos, 30, "fire", -1)
 			}
-			if o.Burn == 60 { // spreads to flammables nearby
-				for j, p := range s.Objects {
-					if p.Kind == KindFlammable && !p.Burning() && !p.Burnt && !p.Gone && p.Pos.Dist(o.Pos) < 2.6 {
-						s.ignite(j)
-					}
-				}
+			if o.Burn == 60 { // spreads
+				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 2.2})
 			}
 			for k, n := range s.NPCs {
 				if n.alive() && n.pos().DistXZ(o.Pos) < 1.1 && math.Abs(n.pos().Y-o.Pos.Y) < 1.5 {
@@ -527,7 +524,7 @@ func (s *Sim) tickObjects() {
 			}
 		}
 		if o.Kind == KindFaucet && o.Running && s.Now%15 == 0 {
-			s.spreadWater(o.Pos.Cell(), 14)
+			s.Stimulate(Stimulus{Stim: StimWater, Pos: o.Pos, Radius: 0.5, Amount: 1})
 			if s.Now%45 == 0 {
 				s.emit(o.Pos, 14, "water", -1)
 			}
@@ -548,17 +545,6 @@ func (s *Sim) tickObjects() {
 		n.T++
 	}
 	s.Noisemakers = slices.DeleteFunc(s.Noisemakers, func(n noisemaker) bool { return n.T > 6*TicksPerSecond })
-}
-
-// ignite sets a flammable object on fire.
-func (s *Sim) ignite(i int) {
-	o := s.Objects[i]
-	if o.Kind != KindFlammable || o.Burning() || o.Burnt || o.Gone {
-		return
-	}
-	o.Burn = 1
-	s.setLight(i, true)
-	s.emit(o.Pos, 35, "ignite", -1)
 }
 
 // walkable reports whether a feet cell is open with solid floor below.
@@ -699,25 +685,8 @@ func (s *Sim) Explode(pos Vec3) {
 			}
 		}
 	}
-	for i, o := range s.Objects {
-		if o.Gone {
-			continue
-		}
-		d := o.Pos.Dist(pos)
-		switch {
-		case d < r && (o.Kind == KindTorch && !o.Held || o.Kind == KindLamp || o.Kind == KindDoor || o.Kind == KindFaucet):
-			s.setLight(i, false)
-			if o.Kind == KindDoor {
-				for _, dc := range o.doorCells() {
-					s.W.SetBlock(dc.X, dc.Y, dc.Z, BlockAir)
-					delete(s.doors, dc)
-				}
-			}
-			o.Gone = true
-		case d < 4.5 && o.Kind == KindFlammable:
-			s.ignite(i)
-		}
-	}
+	s.Stimulate(Stimulus{Stim: StimBlast, Pos: pos, Radius: r})
+	s.Stimulate(Stimulus{Stim: StimFire, Pos: pos, Radius: 4.5})
 	for k, n := range s.NPCs {
 		if !n.alive() {
 			continue
@@ -781,6 +750,9 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.15, 0.5})
 	case KindFaucet:
 		return p.Add(Vec3{-0.35, 0, -0.35}), p.Add(Vec3{0.35, 1.0, 0.35})
+	case KindDecor:
+		b := s.DecorBox(i)
+		return Vec3{b.MinX, b.MinY, b.MinZ}, Vec3{b.MaxX, b.MaxY, b.MaxZ}
 	}
 	return p.Add(Vec3{-0.3, 0, -0.3}), p.Add(Vec3{0.3, 0.5, 0.3})
 }
@@ -1048,13 +1020,8 @@ func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64) {
 	o.Pos = s.landing(eye, dir, dist)
 	s.setLight(i, o.Lit)
 	s.emit(o.Pos, 22, "clatter", -1)
-	if !o.Lit {
-		return
-	}
-	for j, f := range s.Objects {
-		if f.Kind == KindFlammable && f.Pos.DistXZ(o.Pos) < 1.6 && math.Abs(f.Pos.Y-o.Pos.Y) < 1.5 {
-			s.ignite(j)
-		}
+	if o.Lit {
+		s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2})
 	}
 }
 
@@ -1122,38 +1089,12 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 			s.hurtNPC(npc, dmg, "shot")
 			return
 		}
-		if !s.Shatter(pos.Cell()) {
+		if !s.Shatter(pos.Cell()) && !s.Stimulate(Stimulus{Stim: StimPierce, Pos: pos, Radius: 0.05}) {
 			s.emit(pos, 26, "arrow", -1)
 		}
 	case AmmoWater:
 		s.emit(pos, 18, "splash", -1)
-		doused := false
-		for i, o := range s.Objects {
-			if o.Gone {
-				continue
-			}
-			lo, hi := s.ObjectBox(i)
-			mid := lo.Add(hi).Scale(0.5)
-			switch {
-			case o.Kind == KindTorch && o.Lit && mid.Dist(pos) < 1.4:
-				o.Lit = false
-				s.setLight(i, false)
-				s.emit(o.Pos, 12, "hiss", -1)
-				doused = true
-			case o.Burning() && o.Pos.Dist(pos) < 1.8:
-				o.Burn = 0
-				s.setLight(i, false)
-				s.emit(o.Pos, 14, "hiss", -1)
-				doused = true
-			}
-		}
-		if !doused {
-			if g, ok := s.groundBelow(pos.Add(Vec3{0, 0.3, 0}).Cell(), 2); ok {
-				s.spreadWater(g, 5)
-				s.spreadWater(g, 5)
-				s.spreadWater(g, 5)
-			}
-		}
+		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 3})
 	case AmmoNoise:
 		s.Noisemakers = append(s.Noisemakers, noisemaker{Pos: pos})
 	}
@@ -1190,7 +1131,7 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 }
 
 // Melee swings the blackjack or the blade at the NPC in front of the
-// player. It reports whether it hit anyone.
+// player, else at decoration or a window. It reports whether it hit.
 func (s *Sim) Melee(tool string) bool {
 	p := &s.Player
 	best, bestD := -1, 2.4
@@ -1211,7 +1152,18 @@ func (s *Sim) Melee(tool string) bool {
 		cp := math.Cos(p.Pitch)
 		dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
 		for t := 0.2; t < 2.2; t += 0.1 {
-			c := eye.Add(dir.Scale(t)).Cell()
+			pt := eye.Add(dir.Scale(t))
+			for i, o := range s.Objects {
+				if o.Kind == KindDecor && s.DecorBox(i).Intersects(collide.AABB{MinX: pt.X, MinY: pt.Y, MinZ: pt.Z, MaxX: pt.X, MaxY: pt.Y, MaxZ: pt.Z}) {
+					st := StimBash
+					if tool == "blade" {
+						st = StimPierce
+					}
+					s.Stimulate(Stimulus{Stim: st, Pos: pt})
+					return true
+				}
+			}
+			c := pt.Cell()
 			if s.W.Solid(c.X, c.Y, c.Z) {
 				return s.Shatter(c)
 			}

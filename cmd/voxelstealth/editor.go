@@ -39,6 +39,7 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindDecor, Name: "Box of apples"},
 	{Kind: sim.KindDecor, Name: "Small box"},
 	{Kind: sim.KindDecor, Name: "Crate of bottles"},
+	{Kind: sim.KindDecor, Name: "Barrel"},
 }
 
 var npcKinds = []sim.NPCDef{

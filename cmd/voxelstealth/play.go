@@ -9,6 +9,7 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/projectile"
+	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxelstealth/sim"
 )
 
@@ -356,6 +357,11 @@ func (g *game) tickArrows() {
 			targets = append(targets, t)
 		}
 	}
+	for i, o := range s.Objects {
+		if o.Kind == sim.KindDecor && !o.Gone {
+			targets = append(targets, decorTarget{s, i})
+		}
+	}
 	g.arrows.Tick(g.world, targets)
 	for _, a := range g.arrows.Arrows {
 		if a.Stuck && a.In == nil && !g.reported[a] {
@@ -376,6 +382,14 @@ func (g *game) tickArrows() {
 }
 
 func (g *game) arrowHit(a *projectile.Arrow, t projectile.Target) {
+	if _, ok := t.(decorTarget); ok { // stays stuck, as in a block
+		g.reported[a] = true
+		g.sim.ArrowHit(g.arrowAmmo[a], vec(a.X, a.Y, a.Z), -1, false)
+		if g.arrowAmmo[a] != sim.AmmoBroadhead {
+			a.Discard()
+		}
+		return
+	}
 	nt, ok := t.(*npcTarget)
 	if !ok {
 		return
@@ -484,4 +498,17 @@ func (g *game) runScript() {
 			}
 		}
 	}
+}
+
+// decorTarget lets arrows stick in decoration i.
+type decorTarget struct {
+	s *sim.Sim
+	i int
+}
+
+func (d decorTarget) Box() collide.AABB { return d.s.DecorBox(d.i) }
+
+func (d decorTarget) Frame() (x, y, z, yaw float64) {
+	o := d.s.Objects[d.i]
+	return o.Pos.X, o.Pos.Y, o.Pos.Z, o.Yaw
 }

@@ -134,20 +134,25 @@ type bodyWorld struct{ s *Sim }
 func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) }
 
 func (w bodyWorld) Boxes(area collide.AABB, out []collide.AABB) []collide.AABB {
-	for _, o := range w.s.Objects {
+	for i, o := range w.s.Objects {
 		if o.Kind != KindDecor {
 			continue
 		}
-		sz, ok := DecorSize[o.Name]
-		if !ok {
-			sz = Vec3{0.5, 1, 0.5} // unknown: the whole cell
-		}
-		b := collide.AABB{MinX: o.Pos.X - sz.X, MinY: o.Pos.Y, MinZ: o.Pos.Z - sz.Z, MaxX: o.Pos.X + sz.X, MaxY: o.Pos.Y + sz.Y, MaxZ: o.Pos.Z + sz.Z}
-		if b.Intersects(area) {
+		if b := w.s.DecorBox(i); b.Intersects(area) {
 			out = append(out, b)
 		}
 	}
 	return out
+}
+
+// DecorBox is decoration i's collision box (DecorSize).
+func (s *Sim) DecorBox(i int) collide.AABB {
+	o := s.Objects[i]
+	sz, ok := DecorSize[o.Name]
+	if !ok {
+		sz = Vec3{0.5, 1, 0.5} // unknown: the whole cell
+	}
+	return collide.AABB{MinX: o.Pos.X - sz.X, MinY: o.Pos.Y, MinZ: o.Pos.Z - sz.Z, MaxX: o.Pos.X + sz.X, MaxY: o.Pos.Y + sz.Y, MaxZ: o.Pos.Z + sz.Z}
 }
 
 // DecorSize is each decoration's collision box by Name: half width (X, Z)

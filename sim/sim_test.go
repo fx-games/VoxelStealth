@@ -300,3 +300,35 @@ func TestDecorBlocksButIsNotTargeted(t *testing.T) {
 		t.Fatalf("targeted object %d", tg.Obj)
 	}
 }
+
+func TestPiercedBarrelLeaks(t *testing.T) {
+	w, m := twoRooms()
+	m.Objects = append(m.Objects,
+		&Object{ID: "barrel", Kind: KindDecor, Name: "Barrel", Pos: Vec3{5.5, 1, 2.5}},
+		&Object{ID: "torch", Kind: KindTorch, Lit: true, On: "floor", Pos: Vec3{6.5, 1, 2.5}})
+	s := New(w, m)
+	torch := s.Objects[len(s.Objects)-1]
+	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false)
+	if n := len(s.Puddles); n != 3 {
+		t.Fatalf("water arrow: %d puddle cells, want its own 3", n)
+	}
+	torch.Lit = true
+	clear(s.Puddles)
+	s.Player.Pos, s.Player.Yaw, s.Player.Pitch = Vec3{4.5, 1, 2.5}, math.Pi/2, -0.6 // looking at it
+	s.Melee("blackjack")
+	if len(s.Puddles) != 0 {
+		t.Fatalf("blackjack leaked %d cells", len(s.Puddles))
+	}
+	s.Melee("blade")
+	if len(s.Puddles) < 2 {
+		t.Fatalf("stabbed: puddle of %d cells, want a few", len(s.Puddles))
+	}
+	if torch.Lit {
+		t.Fatal("the leak didn't douse the torch beside the barrel")
+	}
+	clear(s.Puddles)
+	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	if len(s.Puddles) < 2 {
+		t.Fatalf("shot: puddle of %d cells, want a few", len(s.Puddles))
+	}
+}

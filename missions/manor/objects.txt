@@ -422,3 +422,15 @@ Kind: decor
 Name: Small box
 Pos: 47.5,58,15.5
 Yaw: 103.13
+
+ID: cellar_barrel1
+Kind: decor
+Name: Barrel
+Pos: 45.5,58,14.5
+Yaw: 22.92
+
+ID: cellar_barrel2
+Kind: decor
+Name: Barrel
+Pos: 45.5,58,15.5
+Yaw: 63.03
