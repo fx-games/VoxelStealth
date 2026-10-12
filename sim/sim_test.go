@@ -229,4 +229,3 @@ func TestMissionRoundTrip(t *testing.T) {
 	}
 	_ = os.Remove
 }
-
