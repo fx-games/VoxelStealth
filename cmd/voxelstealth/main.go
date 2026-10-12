@@ -59,6 +59,7 @@ func main() {
 		mute       = flag.Bool("mute", false, "no sound")
 		voiceDir   = flag.String("voices", "assets/voice", "voice lines, <dir>/<speaker>/<line>.ogg")
 		sfxDir     = flag.String("sfx", "assets/sfx", "recorded sounds, <dir>/<name>-<n>.ogg")
+		modelDir   = flag.String("models", "assets/models", "prop models (chest, lantern)")
 	)
 	flag.Parse()
 
@@ -132,6 +133,9 @@ func main() {
 	}
 	t0 := time.Now()
 	if err := g.loadAssets(*assets); err != nil {
+		log.Fatal(err)
+	}
+	if err := g.loadModels(*modelDir); err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("assets loaded in %v", time.Since(t0))

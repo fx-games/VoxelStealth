@@ -23,6 +23,7 @@ var palette = []string{
 // placeable objects, cycled with O.
 var objectKinds = []sim.Object{
 	{Kind: sim.KindTorch, Name: "Torch", Lit: true},
+	{Kind: sim.KindTorch, Name: "Lantern", Lit: true},
 	{Kind: sim.KindDoor, Name: "Door"},
 	{Kind: sim.KindDoor, Name: "Locked door", Locked: true, Key: "key1"},
 	{Kind: sim.KindLoot, Name: "Silver plate", Value: 50},

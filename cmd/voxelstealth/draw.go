@@ -309,14 +309,14 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 		p := o.Pos
 		switch o.Kind {
 		case sim.KindTorch:
-			name := "torch"
-			if o.Lit {
-				name = "torch_lit"
-			}
+			name := torchModel(o)
 			if o.Fallen {
 				g.prop(name, p, o.Yaw, math.Pi/2)
 			} else {
 				mp, tilt, tiltYaw := g.torchMount(o)
+				if o.Name == "Lantern" {
+					tilt = 0 // hangs straight, beside the wall
+				}
 				g.propTilted(name, mp, o.Yaw, tilt, tiltYaw)
 			}
 		case sim.KindLamp:
@@ -396,9 +396,9 @@ func (g *game) drawHand(alpha float64) {
 	sky, blk := g.light(g.cam.X, g.cam.Y, g.cam.Z)
 	aspect := float32(g.cam.Aspect)
 	if i := g.sim.HeldTorch(); i >= 0 {
-		name := "torch"
+		name := torchModel(g.sim.Objects[i])
 		if g.sim.Objects[i].Lit {
-			name, blk = "torch_lit", 15
+			blk = 15
 		}
 		sw := float32(0)
 		if g.swing > 0 {
@@ -481,7 +481,6 @@ var propParts = map[string][]part{
 	"lamp_lit":    {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
 	"faucet":      {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
 	"stream":      {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
-	"chest":       {bx(-0.45, 0, -0.32, 0.45, 0.6, 0.32, wood), bx(-0.46, 0.45, -0.33, 0.46, 0.5, 0.33, iron), bx(-0.06, 0.32, -0.34, 0.06, 0.45, -0.32, brass)},
 	"rug":         {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
 	"ash":         {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
 	"flames":      {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},

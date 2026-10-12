@@ -1,0 +1,21 @@
+{
+	"format_version": "1.12.0",
+	"minecraft:geometry": [{
+		"description": {"identifier": "geometry.chest", "texture_width": 64, "texture_height": 64},
+		"bones": [
+			{"name": "base", "pivot": [0, 0, 0], "cubes": [
+				{"origin": [-7, 0, -7], "size": [14, 10, 14], "uv": {
+					"east": {"uv": [0, 33], "uv_size": [14, 10]}, "north": {"uv": [14, 33], "uv_size": [14, 10]},
+					"west": {"uv": [28, 33], "uv_size": [14, 10]}, "south": {"uv": [42, 33], "uv_size": [14, 10]},
+					"up": {"uv": [28, 19], "uv_size": [14, 14]}, "down": {"uv": [14, 19], "uv_size": [14, 14]}}}
+			]},
+			{"name": "lid", "parent": "base", "pivot": [0, 9, 7], "cubes": [
+				{"origin": [-7, 9, -7], "size": [14, 5, 14], "uv": {
+					"east": {"uv": [0, 14], "uv_size": [14, 5]}, "north": {"uv": [14, 14], "uv_size": [14, 5]},
+					"west": {"uv": [28, 14], "uv_size": [14, 5]}, "south": {"uv": [42, 14], "uv_size": [14, 5]},
+					"up": {"uv": [28, 0], "uv_size": [14, 14]}, "down": {"uv": [14, 0], "uv_size": [14, 14]}}},
+				{"origin": [-1, 7, -8], "size": [2, 4, 1], "uv": [0, 0]}
+			]}
+		]
+	}]
+}
