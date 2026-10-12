@@ -286,13 +286,15 @@ func TestTorchOnSkipsGlass(t *testing.T) {
 func TestDecorBlocksButIsNotTargeted(t *testing.T) {
 	w, m := twoRooms()
 	m.Objects = append(m.Objects, &Object{ID: "box", Kind: KindDecor, Name: "Small box", Pos: Vec3{5.5, 1, 2.5}})
+	DecorSize["Small box"] = Vec3{0.25, 0.4, 0.25}
+	defer delete(DecorSize, "Small box")
 	s := New(w, m)
 	p := character.New(2.5, 1, 2.5)
 	for i := 0; i < 3*TicksPerSecond; i++ {
 		p.Tick(s.Body(), character.Input{Forward: 1, Yaw: math.Pi / 2}) // walk +X into the box
 	}
-	if p.X > 5 || p.X < 4 {
-		t.Fatalf("player at x=%.2f, want stopped against the box's cell (x=5)", p.X)
+	if want := 5.25 - p.Width/2; math.Abs(p.X-want) > 0.01 {
+		t.Fatalf("player at x=%.2f, want stopped against the box at %.2f", p.X, want)
 	}
 	if tg := s.TargetAt(Vec3{4.5, 1.2, 2.5}, Vec3{1, 0, 0}); tg.Obj >= 0 {
 		t.Fatalf("targeted object %d", tg.Obj)

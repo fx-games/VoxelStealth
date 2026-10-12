@@ -117,7 +117,7 @@ func (n *NPC) Alive() bool { return n.alive() }
 func (n *NPC) IsGuard() bool { return n.Kind == "guard" }
 
 // navWorld lets an NPC's pathfinder walk through door cells (it opens
-// them), but not decorations.
+// them), but not decorations' cells.
 type navWorld struct{ s *Sim }
 
 func (w navWorld) Solid(x, y, z int) bool {
@@ -128,11 +128,33 @@ func (w navWorld) Solid(x, y, z int) bool {
 }
 
 // bodyWorld is the character controller's view: closed doors are solid,
-// and so are decorations' cells.
-// ponytail: a decoration blocks its whole cell; per-object boxes if small props must be walked around closely
+// and decorations are boxes (DecorSize).
 type bodyWorld struct{ s *Sim }
 
-func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) || w.s.decor[Cell{x, y, z}] }
+func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) }
+
+func (w bodyWorld) Boxes(area collide.AABB, out []collide.AABB) []collide.AABB {
+	for _, o := range w.s.Objects {
+		if o.Kind != KindDecor {
+			continue
+		}
+		sz, ok := DecorSize[o.Name]
+		if !ok {
+			sz = Vec3{0.5, 1, 0.5} // unknown: the whole cell
+		}
+		b := collide.AABB{MinX: o.Pos.X - sz.X, MinY: o.Pos.Y, MinZ: o.Pos.Z - sz.Z, MaxX: o.Pos.X + sz.X, MaxY: o.Pos.Y + sz.Y, MaxZ: o.Pos.Z + sz.Z}
+		if b.Intersects(area) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// DecorSize is each decoration's collision box by Name: half width (X, Z)
+// and height (Y) from its feet. The game fills it from the models,
+// widest extent on both axes so the box covers any yaw.
+var DecorSize = map[string]Vec3{}
+
 func (w bodyWorld) Liquid(x, y, z int) character.Liquid {
 	if b := w.s.W.Block(x, y, z); b == "minecraft:water" {
 		return character.LiquidWater
@@ -144,7 +166,7 @@ func (w bodyWorld) Liquid(x, y, z int) character.Liquid {
 func (s *Sim) Body() character.World { return bodyWorld{s} }
 
 var _ character.World = bodyWorld{}
-var _ collide.Solids = bodyWorld{}
+var _ collide.Boxer = bodyWorld{}
 
 func (s *Sim) newNav(k int) *nav.Graph {
 	n := s.NPCs[k]

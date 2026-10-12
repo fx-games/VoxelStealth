@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -52,7 +53,7 @@ func (g *game) loadModels(dir string) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range decor {
+	for n, name := range decor {
 		m, err := gltf.LoadFile(filepath.Join(dir, name+".gltf"))
 		if err != nil {
 			return err
@@ -60,6 +61,7 @@ func (g *game) loadModels(dir string) error {
 		if g.props[name], err = g.modelRend.Add(m); err != nil {
 			return err
 		}
+		sim.DecorSize[n] = extent(m)
 	}
 	candles, err := gltf.LoadFile(filepath.Join(dir, "candles.gltf"))
 	if err != nil {
@@ -169,6 +171,19 @@ func (g *game) chestSkin(t float32) []mgl32.Mat4 {
 	hinge := g.chest.BindWorld()[lid]
 	skin[lid] = hinge.Mul4(mgl32.HomogRotate3DX(t * mgl32.DegToRad(80))).Mul4(g.chest.Bones[lid].InvBind)
 	return skin
+}
+
+// extent is a model's collision size for sim.DecorSize: its farthest
+// reach from the vertical axis as the half width, and its top.
+func extent(m *model.Model) sim.Vec3 {
+	var r, h float64
+	for _, me := range m.Meshes {
+		for _, v := range me.Verts {
+			r = max(r, math.Abs(float64(v.Pos[0])), math.Abs(float64(v.Pos[2])))
+			h = max(h, float64(v.Pos[1]))
+		}
+	}
+	return sim.Vec3{X: r, Y: h, Z: r}
 }
 
 // decor maps decoration Names to their models.

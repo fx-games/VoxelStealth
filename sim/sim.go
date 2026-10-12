@@ -23,7 +23,7 @@ const (
 	KindKey       = "key"       // opens doors/chests with the same Key
 	KindAmmo      = "ammo"      // Name = ammo type, Count
 	KindFlammable = "flammable" // rugs, tapestries, hay
-	KindDecor     = "decor"     // decoration: Name picks the model; blocks its cell, never targeted
+	KindDecor     = "decor"     // decoration: Name picks the model; collides (DecorSize), never targeted
 )
 
 // Ammo types.
