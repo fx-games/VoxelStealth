@@ -15,7 +15,7 @@ Voice lines: see TODO-VOICE.md.
 ## Props (replace box models)
 
 - [x] Wall torch: lit (animated flame) and unlit
-- [ ] Standing electric lamp: on (lit shade) and off; also lying knocked over
+- [x] Standing electric lamp: on (lit shade) and off; also lying knocked over — Watoosh lamp post glTF, own texture
 - [ ] Faucet + running water stream (animated)
 - [x] Chest with opening lid — Stripped (Redone) Chests texture; the lid swings open
 - [x] Lantern (torch variant, floor or ceiling) — WaterColourCG glTF, own texture

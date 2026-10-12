@@ -1,8 +1,9 @@
 package main
 
 // Art models under assets/models (see ASSETS.md): the chest as a Bedrock
-// geometry over the Stripped Chests texture, the lantern as a glTF whose
-// texture we paint here (the original's was derived from Minecraft's).
+// geometry over the Stripped Chests texture, the lantern and the electric
+// lamp as glTFs whose textures we paint here (the lantern's original was
+// derived from Minecraft's).
 
 import (
 	"image"
@@ -46,18 +47,42 @@ func (g *game) loadModels(dir string) error {
 		return err
 	}
 	lantern.Transform(mgl32.Translate3D(-0.125, 0, -0.125)) // centre the 6×6 body
-	for name, lit := range map[string]bool{"lantern": false, "lantern_lit": true} {
-		m := *lantern
-		m.Textures = []image.Image{lanternTexture(lit)}
-		m.Meshes = append([]model.Mesh(nil), lantern.Meshes...)
-		for i := range m.Meshes {
-			m.Meshes[i].Texture = 0
+	lamp, err := gltf.LoadFile(filepath.Join(dir, "lamp.gltf"))
+	if err != nil {
+		return err
+	}
+	for _, lit := range []bool{false, true} {
+		sfx := map[bool]string{false: "", true: "_lit"}[lit]
+		if err := g.addRetextured("lantern"+sfx, lantern, lanternTexture(lit)); err != nil {
+			return err
 		}
-		if g.props[name], err = g.modelRend.Add(&m); err != nil {
+		if err := g.addRetextured("lamp"+sfx, lamp, lampTexture(lit)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// addRetextured adds base as prop name with every mesh drawn in tex.
+func (g *game) addRetextured(name string, base *model.Model, tex image.Image) error {
+	m := *base
+	m.Textures = []image.Image{tex}
+	m.Meshes = append([]model.Mesh(nil), base.Meshes...)
+	for i := range m.Meshes {
+		m.Meshes[i].Texture = 0
+	}
+	var err error
+	g.props[name], err = g.modelRend.Add(&m)
+	return err
+}
+
+// lampTexture is the lamp's 2×1 texture: its glTF maps the post to the
+// left texel and the light cube to the right one.
+func lampTexture(lit bool) image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	img.SetNRGBA(0, 0, iron)
+	img.SetNRGBA(1, 0, map[bool]color.NRGBA{false: shadeOf, true: shadeOn}[lit])
+	return img
 }
 
 // lanternTexture paints the lantern's 32×32 texture in the glTF's UV
