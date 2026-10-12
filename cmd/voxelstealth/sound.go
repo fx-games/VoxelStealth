@@ -17,6 +17,7 @@ import (
 type soundState struct {
 	mixer   *audio.Mixer
 	sounds  map[string]*audio.Sound
+	voices  map[string]map[string]*audio.Sound // speaker → line id → recording
 	ambient *audio.Voice
 }
 
@@ -173,7 +174,11 @@ func (g *game) playLocal(name string, gain float32) {
 // rooms: loudness from the room graph, direction from the opening it comes
 // through.
 func (g *game) playWorld(name string, pos sim.Vec3, loud float64) {
-	if g.mixer == nil || g.sounds[name] == nil || g.sim == nil {
+	g.playWorldSound(g.sounds[name], pos, loud)
+}
+
+func (g *game) playWorldSound(snd *audio.Sound, pos sim.Vec3, loud float64) {
+	if g.mixer == nil || snd == nil || g.sim == nil {
 		return
 	}
 	eye := g.eye()
@@ -190,7 +195,7 @@ func (g *game) playWorld(name string, pos sim.Vec3, loud float64) {
 	} else {
 		from = eye
 	}
-	g.mixer.PlayAt(g.sounds[name], from.X, from.Y, from.Z, gain)
+	g.mixer.PlayAt(snd, from.X, from.Y, from.Z, gain)
 }
 
 func (g *game) tickSounds() {
@@ -216,10 +221,14 @@ func (g *game) handleEvents() {
 	for _, e := range s.Events {
 		switch e.Kind {
 		case sim.EvSound:
-			g.playWorld(e.Sound, e.Pos, e.Loud)
+			if v := g.voiceFor(e.NPC, vocalIDs[e.Sound]...); v != nil {
+				g.playWorldSound(v, e.Pos, e.Loud)
+			} else {
+				g.playWorld(e.Sound, e.Pos, e.Loud)
+			}
 		case sim.EvBark:
 			g.caption(e.Text)
-			g.playWorld("voice", e.Pos, 40)
+			g.playBark(e)
 		case sim.EvMessage:
 			g.message(e.Text)
 		case sim.EvHurt:

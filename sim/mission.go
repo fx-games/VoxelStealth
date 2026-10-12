@@ -206,7 +206,7 @@ func LoadMission(dir string) (*Mission, error) {
 		return nil, err
 	}
 	for _, r := range recs {
-		d := &NPCDef{ID: r.get("ID"), Name: r.get("Name"), Kind: r.get("Kind"), Model: r.get("Model"), Yaw: deg(r.get("Yaw"))}
+		d := &NPCDef{ID: r.get("ID"), Name: r.get("Name"), Kind: r.get("Kind"), Model: r.get("Model"), Voice: r.get("Voice"), Yaw: deg(r.get("Yaw"))}
 		if d.Pos, err = parseVec(r.get("Pos")); err != nil {
 			return nil, fmt.Errorf("npc %s Pos: %w", d.ID, err)
 		}
@@ -293,7 +293,7 @@ func (m *Mission) Save(dir string) error {
 			}
 			ps = append(ps, s)
 		}
-		recs = append(recs, record{{"ID", d.ID}, {"Name", d.Name}, {"Kind", d.Kind}, {"Model", d.Model}, {"Pos", fmtVec(d.Pos)},
+		recs = append(recs, record{{"ID", d.ID}, {"Name", d.Name}, {"Kind", d.Kind}, {"Model", d.Model}, {"Voice", d.Voice}, {"Pos", fmtVec(d.Pos)},
 			{"Yaw", fmtDeg(d.Yaw)}, {"Keys", strings.Join(d.Keys, ",")}, {"Patrol", strings.Join(ps, "; ")}})
 	}
 	if err := writeRecords(filepath.Join(dir, "npcs.txt"), "# One record per NPC. Kind: guard | civilian | target. Patrol: 'x,y,z waitSeconds [faceDegrees]; ...'\n", recs); err != nil {

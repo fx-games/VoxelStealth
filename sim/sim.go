@@ -112,7 +112,8 @@ type Event struct {
 	Pos   Vec3
 	Loud  float64
 	Text  string
-	NPC   int
+	Line  string // EvBark: what was said, without the speaker's name
+	NPC   int    // EvBark, and EvSound made by an NPC (else -1)
 }
 
 // Outcome of the mission.
@@ -279,7 +280,7 @@ func (s *Sim) message(text string) { s.event(Event{Kind: EvMessage, Text: text})
 // emit makes a sound: NPCs hear it this tick, the game plays it.
 func (s *Sim) emit(pos Vec3, loud float64, kind string, byNPC int) {
 	s.sounds = append(s.sounds, sound{pos: pos, loud: loud, kind: kind, byNPC: byNPC})
-	s.event(Event{Kind: EvSound, Sound: kind, Pos: pos, Loud: loud})
+	s.event(Event{Kind: EvSound, Sound: kind, Pos: pos, Loud: loud, NPC: byNPC})
 }
 
 // Tick advances the simulation one 50 ms step.
@@ -1204,6 +1205,7 @@ func (s *Sim) killNPC(k int, by, how string) {
 		s.Stats.InnocentsKilled++
 	}
 	s.emit(n.pos(), 26, "body", -1)
+	s.emit(n.eye(), 20, "death", k)
 }
 
 // checkObjectives marks objectives done and ends the mission.

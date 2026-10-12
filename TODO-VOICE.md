@@ -6,10 +6,11 @@ line per speaker.
 
 ## Output
 
-- Format: WAV, mono, 44.1 kHz, 16-bit. Trim silence at both ends (keep at most
-  50 ms). Normalize to about -3 dBFS peak, all files at a consistent loudness.
-- Path: `assets/voice/<speaker-id>/<line-id>.wav`, for example
-  `assets/voice/generic-male-guard-a/spot-player.wav`.
+- Format: Ogg Vorbis, mono, 44.1 kHz, quality ~4 (`oggenc -q 4`). Trim silence at both
+  ends (keep at most 50 ms) and normalize to about -3 dBFS peak before encoding; WAV only
+  as a temp intermediate, never under assets/.
+- Path: `assets/voice/<speaker-id>/<line-id>.ogg`, for example
+  `assets/voice/generic-male-guard-a/spot-player.ogg`.
 - Licensing: the TTS tool's terms must allow commercial use and
   redistribution of the generated audio. Record the tool, its version, the voice
   names used and the license terms in ASSETS.md.
@@ -26,11 +27,10 @@ line per speaker.
 | `unique-male-captain` | Captain Dunstan, the guard captain | Man, 40-50, deep, gravelly, authoritative, veteran soldier |
 | `generic-male-guard-a` | Guard Aldric (and future guards) | Man, 25-35, working-class, bored night watchman |
 | `generic-male-guard-b` | Guard Bertram (and future guards) | Man, 35-45, rougher, lower voice, gruff |
-| `generic-male-guard-c` | Guard Cuthbert (and future guards) | Man, 20-30, younger, a bit nervous |
 | `generic-female-servant` | Maid Edith (and future maids) | Woman, 20-40, working-class, timid |
 | `generic-male-servant` | Butler Fenwick (and future servants) | Man, 50-60, prim, proper, precise diction |
 
-The three guard voices must be clearly distinguishable from each other, so a
+The two guard voices must be clearly distinguishable from each other, so a
 player can tell guards apart by ear.
 
 ## Lines
@@ -55,7 +55,7 @@ shows it as a caption, so do not reword it. `delivery` is direction for the TTS
 | `fire` | Fire! | Alarmed shout, very loud |
 | `knocked-out` | Ugh... | Grunt as they are knocked out, then going limp |
 
-### Guard lines (`unique-male-captain`, `generic-male-guard-a/b/c`)
+### Guard lines (`unique-male-captain`, `generic-male-guard-a/b`)
 
 | line-id | text | delivery |
 |---|---|---|
@@ -84,17 +84,16 @@ vocalizations; otherwise leave them out and list them as missing.
 
 ## Checklist
 
-7 speakers. Everyone gets 11 lines plus 4 sounds; guards add 5 lines,
+6 speakers. Everyone gets 11 lines plus 4 sounds; guards add 5 lines,
 civilians add 1.
 
-- [ ] unique-male-lord (12 lines + 4 sounds)
-- [ ] unique-male-captain (16 lines + 4 sounds)
-- [ ] generic-male-guard-a (16 lines + 4 sounds)
-- [ ] generic-male-guard-b (16 lines + 4 sounds)
-- [ ] generic-male-guard-c (16 lines + 4 sounds)
-- [ ] generic-female-servant (12 lines + 4 sounds)
-- [ ] generic-male-servant (12 lines + 4 sounds)
-- [ ] Tool, voices and license logged in ASSETS.md
+- [x] unique-male-lord (12 lines + 4 sounds)
+- [x] unique-male-captain (16 lines + 4 sounds)
+- [x] generic-male-guard-a (16 lines + 4 sounds)
+- [x] generic-male-guard-b (16 lines + 4 sounds)
+- [x] generic-female-servant (12 lines + 4 sounds)
+- [x] generic-male-servant (12 lines + 4 sounds)
+- [x] Tool, voices and license logged in ASSETS.md
 
 ## For the game side (not the TTS agent)
 
@@ -104,5 +103,5 @@ exist:
 
 - add a `Voice: <speaker-id>` field to NPC records in `missions/*/npcs.txt`;
 - give each bark a line-id;
-- play `assets/voice/<speaker-id>/<line-id>.wav` instead of the synthesized
+- play `assets/voice/<speaker-id>/<line-id>.ogg` instead of the synthesized
   sound.

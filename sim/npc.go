@@ -52,6 +52,7 @@ type Waypoint struct {
 // NPCDef is an NPC as placed in the mission.
 type NPCDef struct {
 	ID, Name, Kind, Model string // Kind: guard | civilian | target
+	Voice                 string // speaker id: assets/voice/<Voice>/
 	Pos                   Vec3
 	Yaw                   float64
 	Patrol                []Waypoint
@@ -61,6 +62,7 @@ type NPCDef struct {
 // NPC is a running NPC.
 type NPC struct {
 	ID, Name, Kind, Model string
+	Voice                 string
 	Body                  character.Character
 	Yaw                   float64
 	State                 NPCState
@@ -91,7 +93,7 @@ type NPC struct {
 }
 
 func newNPC(d *NPCDef) *NPC {
-	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Yaw: d.Yaw, Health: 10, Alertness: 1,
+	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Health: 10, Alertness: 1,
 		Patrol: slices.Clone(d.Patrol), Keys: slices.Clone(d.Keys)}
 	n.Body = *character.New(d.Pos.X, d.Pos.Y, d.Pos.Z)
 	if n.Name == "" {
@@ -155,7 +157,7 @@ func (s *Sim) bark(k int, text string) {
 		return
 	}
 	n.BarkT = 3 * TicksPerSecond
-	s.event(Event{Kind: EvBark, Text: n.Name + ": " + text, Pos: n.eye(), NPC: k})
+	s.event(Event{Kind: EvBark, Text: n.Name + ": " + text, Line: text, Pos: n.eye(), NPC: k})
 }
 
 func (s *Sim) setState(k int, st NPCState) {

@@ -57,6 +57,7 @@ func main() {
 		look       = flag.String("look", "", "debug: start yaw,pitch in degrees")
 		script     = flag.String("script", "", "debug: automated inputs for -shot runs, 'tick:action;...' (see play.go)")
 		mute       = flag.Bool("mute", false, "no sound")
+		voiceDir   = flag.String("voices", "assets/voice", "voice lines, <dir>/<speaker>/<line>.ogg")
 	)
 	flag.Parse()
 
@@ -139,6 +140,7 @@ func main() {
 		} else {
 			defer g.mixer.Close()
 			g.makeSounds()
+			g.loadVoices(*voiceDir)
 		}
 	}
 	// -shot runs are automated: never grab the user's mouse or take any
