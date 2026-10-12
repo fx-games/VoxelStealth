@@ -280,3 +280,19 @@ func TestTorchOnSkipsGlass(t *testing.T) {
 		t.Fatalf("torch hangs on %q, want floor", on)
 	}
 }
+
+func TestWaterArrowPuddle(t *testing.T) {
+	for _, hit := range []Vec3{{4.5, 1.1, 4.5}, {9.6, 2.8, 2.5}} { // floor; wall at x=10, up high
+		w, m := twoRooms()
+		s := New(w, m)
+		s.ArrowHit(AmmoWater, hit, -1, false)
+		if len(s.Puddles) != 9 {
+			t.Fatalf("hit at %v: %d puddle cells, want 9", hit, len(s.Puddles))
+		}
+		for c := range s.Puddles {
+			if c.Y != 1 {
+				t.Fatalf("hit at %v: puddle cell %v off the floor", hit, c)
+			}
+		}
+	}
+}

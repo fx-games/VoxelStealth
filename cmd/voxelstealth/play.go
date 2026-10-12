@@ -361,7 +361,12 @@ func (g *game) tickArrows() {
 		if a.Stuck && a.In == nil && !g.reported[a] {
 			g.reported[a] = true
 			ammo := g.arrowAmmo[a]
-			s.ArrowHit(ammo, vec(a.X, a.Y, a.Z), -1, false)
+			at := vec(a.X, a.Y, a.Z)
+			if ammo == sim.AmmoWater { // splash in the air before the face, not in the block
+				cp := math.Cos(a.Pitch)
+				at = at.Add(vec(-math.Sin(a.Yaw)*cp, -math.Sin(a.Pitch), math.Cos(a.Yaw)*cp).Scale(0.35))
+			}
+			s.ArrowHit(ammo, at, -1, false)
 			if c := vec(a.X, a.Y, a.Z).Cell(); ammo != sim.AmmoBroadhead || !g.world.Solid(c.X, c.Y, c.Z) { // or the glass it hit broke
 				a.Discard()
 			}

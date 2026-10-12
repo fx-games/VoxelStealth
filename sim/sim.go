@@ -1121,7 +1121,6 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 		}
 	case AmmoWater:
 		s.emit(pos, 18, "splash", -1)
-		doused := false
 		for i, o := range s.Objects {
 			if o.Gone {
 				continue
@@ -1133,19 +1132,17 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 				o.Lit = false
 				s.setLight(i, false)
 				s.emit(o.Pos, 12, "hiss", -1)
-				doused = true
 			case o.Burning() && o.Pos.Dist(pos) < 1.8:
 				o.Burn = 0
 				s.setLight(i, false)
 				s.emit(o.Pos, 14, "hiss", -1)
-				doused = true
 			}
 		}
-		if !doused {
-			if g, ok := s.groundBelow(pos.Add(Vec3{0, 0.3, 0}).Cell(), 2); ok {
-				s.spreadWater(g, 5)
-				s.spreadWater(g, 5)
-				s.spreadWater(g, 5)
+		// The water runs down whatever it hit and pools on the floor below:
+		// nine cells, hugging the wall when it struck one.
+		if g, ok := s.groundBelow(pos.Cell(), 8); ok {
+			for range 9 {
+				s.spreadWater(g, 9)
 			}
 		}
 	case AmmoNoise:
