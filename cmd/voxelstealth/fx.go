@@ -62,6 +62,15 @@ func (g *game) tickFX() {
 		if o.Gone || o.Pos.Dist(eye) > 24 {
 			continue
 		}
+		if o.Kind == sim.KindChest { // the lid swings over a third of a second
+			t := g.lids[o.ID]
+			if o.Open {
+				t = min(1, t+0.15)
+			} else {
+				t = max(0, t-0.15)
+			}
+			g.lids[o.ID] = t
+		}
 		switch {
 		case o.Burning():
 			g.burst("flame", o.Pos.Add(sim.Vec3{Y: 0.3}))

@@ -40,6 +40,7 @@ func (g *game) loadModels(dir string) error {
 	if g.props["chest"], err = g.modelRend.Add(ms[0]); err != nil {
 		return err
 	}
+	g.chest, g.lids = ms[0], map[string]float32{}
 	lantern, err := gltf.LoadFile(filepath.Join(dir, "lantern.gltf"))
 	if err != nil {
 		return err
@@ -83,6 +84,33 @@ func lanternTexture(lit bool) image.Image {
 		fill(s[0]+1, s[1]+4, s[0]+5, s[1]+6, pane)
 	}
 	return img
+}
+
+// lanternHeight is the lantern model's height, chain top included.
+const lanternHeight = 0.8125
+
+// lanternMount places a lantern: hanging from the ceiling or standing.
+func (g *game) lanternMount(o *sim.Object) sim.Vec3 {
+	if o.On == "ceiling" {
+		return o.Pos.Add(sim.Vec3{Y: 1 - lanternHeight})
+	}
+	return o.Pos
+}
+
+// chestSkin poses the chest's lid open by t (0 closed, 1 fully open),
+// swung up about its hinge at the back; nil is the bind pose.
+func (g *game) chestSkin(t float32) []mgl32.Mat4 {
+	if t <= 0 {
+		return nil
+	}
+	lid := g.chest.Bone("lid")
+	skin := g.chest.BindWorld()
+	for i := range skin {
+		skin[i] = skin[i].Mul4(g.chest.Bones[i].InvBind)
+	}
+	hinge := g.chest.BindWorld()[lid]
+	skin[lid] = hinge.Mul4(mgl32.HomogRotate3DX(t * mgl32.DegToRad(80))).Mul4(g.chest.Bones[lid].InvBind)
+	return skin
 }
 
 // torchModel is the prop for a torch object: lanterns (Name) have their

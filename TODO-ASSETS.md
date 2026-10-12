@@ -17,8 +17,8 @@ Voice lines: see TODO-VOICE.md.
 - [x] Wall torch: lit (animated flame) and unlit
 - [ ] Standing electric lamp: on (lit shade) and off; also lying knocked over
 - [ ] Faucet + running water stream (animated)
-- [x] Chest with opening lid — Stripped (Redone) Chests texture (lid static; the lid is its own bone for later)
-- [x] Lantern (torch variant, floor or wall) — WaterColourCG glTF, own texture
+- [x] Chest with opening lid — Stripped (Redone) Chests texture; the lid swings open
+- [x] Lantern (torch variant, floor or ceiling) — WaterColourCG glTF, own texture
 - [ ] Rug / tapestry / hay (flammables) and their burnt versions
 - [x] Fire: animated flames (sprite sheet or particles) — particles (fx.go)
 - [ ] Puddle decal, and electrified puddle (arcs)

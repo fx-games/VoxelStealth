@@ -193,6 +193,41 @@ Pos: 28.5,70,39.5
 Lit: yes
 On: floor
 
+ID: l_hall
+Kind: torch
+Name: Lantern
+Pos: 31.5,67,35.5
+Lit: yes
+On: ceiling
+
+ID: l_dining
+Kind: torch
+Name: Lantern
+Pos: 25.5,67,20.5
+Lit: yes
+On: ceiling
+
+ID: l_library
+Kind: torch
+Name: Lantern
+Pos: 43.5,67,20.5
+Lit: yes
+On: ceiling
+
+ID: l_gallery
+Kind: torch
+Name: Lantern
+Pos: 33.5,72,25.5
+Lit: yes
+On: ceiling
+
+ID: l_cellar
+Kind: torch
+Name: Lantern
+Pos: 43.5,62,20.5
+Lit: yes
+On: ceiling
+
 ID: faucet
 Kind: faucet
 Name: Wash basin tap

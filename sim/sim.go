@@ -48,7 +48,8 @@ type Object struct {
 	Fallen         bool
 	// On is what a torch is attached to, like Minecraft: "floor" (the block
 	// below) or the wall in that direction: north (-Z), south, east (+X),
-	// west. Empty is resolved by TorchOn when the sim starts.
+	// west. Lanterns (Name) stand on floors or hang from the "ceiling".
+	// Empty is resolved by TorchOn/LanternOn when the sim starts.
 	On        string
 	Held      bool // torch in the player's hand
 	Running   bool // faucets
@@ -84,6 +85,15 @@ func TorchOn(solid func(x, y, z int) bool, c Cell) string {
 		if solid(c.X+d[0], c.Y, c.Z+d[1]) {
 			return on
 		}
+	}
+	return "floor"
+}
+
+// LanternOn picks what a lantern in cell c hangs from: the ceiling when
+// the block above is solid, else the floor.
+func LanternOn(solid func(x, y, z int) bool, c Cell) string {
+	if solid(c.X, c.Y+1, c.Z) {
+		return "ceiling"
 	}
 	return "floor"
 }
@@ -221,6 +231,9 @@ func New(w World, m *Mission) *Sim {
 	}
 	for _, d := range m.Objects {
 		o := *d
+		if o.Kind == KindTorch && o.Name == "Lantern" && o.On == "" {
+			o.On = LanternOn(w.Solid, o.Pos.Cell())
+		}
 		if o.Kind == KindTorch && o.On == "" {
 			o.On = TorchOn(w.Solid, o.Pos.Cell())
 		}
@@ -947,6 +960,7 @@ func (s *Sim) Frob(t Target, held bool) {
 			n.Hidden, n.CarriedBy = true, false
 			o.Hidden = append(o.Hidden, p.Carrying)
 			p.Carrying = -1
+			o.Open = true
 			s.emit(o.Pos, 16, "body", -1)
 			s.message("Body hidden.")
 			return
@@ -955,7 +969,11 @@ func (s *Sim) Frob(t Target, held bool) {
 			p.Loot += o.Value
 			s.message("Took " + itoa(o.Value) + " in valuables")
 			o.Value = 0
+			o.Open = true
 			s.emit(o.Pos, 8, "loot", -1)
+		} else {
+			o.Open = !o.Open
+			s.emit(o.Pos, 6, "door", -1)
 		}
 	case KindTorch:
 		if s.HeldTorch() < 0 {

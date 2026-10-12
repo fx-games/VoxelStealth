@@ -280,6 +280,11 @@ func writeMission(b *builder, dir string) {
 		o.On = sim.TorchOn(b.solid, o.Pos.Cell())
 		return o
 	}
+	lantern := func(id string, x, y, z float64) *sim.Object { // hangs from the ceiling when there is one
+		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Lantern", Pos: v(x, y, z), Lit: true}
+		o.On = sim.LanternOn(b.solid, o.Pos.Cell())
+		return o
+	}
 	loot := func(id, name string, value int, x, y, z float64) *sim.Object {
 		return &sim.Object{ID: id, Kind: sim.KindLoot, Name: name, Value: value, Pos: v(x, y, z)}
 	}
@@ -302,6 +307,9 @@ func writeMission(b *builder, dir string) {
 		torch("t_library", 42.5, G+1, 28.5), torch("t_cellar", 42.5, C+1, 11.5), torch("t_vault", 35.5, C+1, 18.5),
 		torch("t_bedroom", 18.5, U+1, 24.5), torch("t_gallery_n", 35.5, U+1, 11.5), torch("t_gallery_s", 31.5, U+1, 39.5),
 		torch("t_study", 38.5, U+1, 38.5), torch("t_bath", 28.5, U+1, 39.5),
+		// Lanterns hang from the ceilings of the big rooms.
+		lantern("l_hall", 31.5, G+3, 35.5), lantern("l_dining", 25.5, G+3, 20.5), lantern("l_library", 43.5, G+3, 20.5),
+		lantern("l_gallery", 33.5, U+3, 25.5), lantern("l_cellar", 43.5, C+4, 20.5),
 		// The accident kit.
 		{ID: "faucet", Kind: sim.KindFaucet, Name: "Wash basin tap", Pos: v(22.5, U, 29.5)},
 		{ID: "bath_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(24.5, U, 31.5), Lit: true},

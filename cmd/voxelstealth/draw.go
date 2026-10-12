@@ -59,6 +59,8 @@ type drawState struct {
 	parts     particles.System
 	handParts particles.System // the held torch's flame, drawn over the hand
 	partRend  *render.ParticleRenderer
+	chest     *model.Model       // for posing the lid
+	lids      map[string]float32 // chest lid openness by object ID (fx.go)
 }
 
 // lootSprites picks an item sprite (assets/items, CC0) for a loot name.
@@ -315,7 +317,7 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 			} else {
 				mp, tilt, tiltYaw := g.torchMount(o)
 				if o.Name == "Lantern" {
-					tilt = 0 // hangs straight, beside the wall
+					mp, tilt = g.lanternMount(o), 0
 				}
 				g.propTilted(name, mp, o.Yaw, tilt, tiltYaw)
 			}
@@ -335,7 +337,9 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 				g.prop("stream", p, o.Yaw, 0)
 			}
 		case sim.KindChest:
-			g.prop("chest", p, o.Yaw, 0)
+			sky, blk := g.light(p.X, p.Y+0.3, p.Z)
+			g.insts = append(g.insts, render.ModelInstance{Model: g.props["chest"], X: p.X, Y: p.Y, Z: p.Z, Yaw: o.Yaw,
+				Skin: g.chestSkin(g.lids[o.ID]), Sky: sky, Block: blk})
 		case sim.KindFlammable:
 			switch {
 			case o.Burnt:
