@@ -190,8 +190,8 @@ func main() {
 	b.fill(15, U, 11, 17, U, 11, "dark_oak_planks")
 	b.fill(46, U, 17, 47, U, 24, "dark_oak_planks") // study desk
 	b.fill(48, U, 28, 48, U+3, 40, "bookshelf")
-	b.fill(21, U, 28, 23, U, 28, "calcite")      // wash basin
-	b.fill(15, U, 36, 17, U, 40, "quartz_block") // bath tub (rim)
+	b.fill(21, U, 28, 23, U, 28, "calcite") // wash basin
+	b.fill(15, U, 36, 17, U, 40, "calcite") // bath tub (rim)
 	b.fill(16, U, 37, 16, U, 39, "light_blue_wool")
 
 	b.save(filepath.Join(*out, "world"))
@@ -325,12 +325,12 @@ func writeMission(b *builder, dir string) {
 		// Torches: gate, front door, rooms. Dark corners are left on purpose.
 		torch("t_gate_w", 29.5, G+1, 65.5), torch("t_gate_e", 34.5, G+1, 65.5),
 		torch("t_front_w", 29.5, G+1, 42.5), torch("t_front_e", 33.5, G+1, 42.5),
-		torch("t_hall", 27.5, G+1, 31.5), torch("t_hall2", 35.5, G+1, 39.5),
+		torch("t_hall", 27.5, G+1, 31.5), torch("t_hall2", 35.5, G, 39.5),
 		torch("t_dining_n", 26.5, G+1, 11.5), torch("t_dining_w", 15.5, G+1, 23.5),
-		torch("t_kitchen", 25.5, G+1, 39.5), torch("t_guard", 47.5, G+1, 39.5),
-		torch("t_library", 42.5, G+1, 28.5), torch("t_cellar", 42.5, C+1, 11.5), torch("t_vault", 35.5, C+1, 18.5),
-		torch("t_bedroom", 18.5, U+1, 24.5), torch("t_gallery_n", 35.5, U+1, 11.5), torch("t_gallery_s", 31.5, U+1, 39.5),
-		torch("t_study", 38.5, U+1, 38.5), torch("t_bath", 28.5, U+1, 39.5),
+		torch("t_kitchen", 25.5, G+1, 39.5), torch("t_guard", 47.5, G, 39.5),
+		torch("t_library", 42.5, G, 28.5), torch("t_cellar", 42.5, C+1, 11.5), torch("t_vault", 35.5, C, 18.5),
+		torch("t_bedroom", 18.5, U, 24.5), torch("t_gallery_n", 35.5, U+1, 11.5), torch("t_gallery_s", 31.5, U+1, 39.5),
+		torch("t_study", 38.5, U+1, 38.5), torch("t_bath", 28.5, U, 39.5),
 		// Lanterns hang from the ceilings of the big rooms.
 		lantern("l_hall", 31.5, G+3, 35.5), lantern("l_dining", 25.5, G+3, 20.5), lantern("l_library", 43.5, G+3, 20.5),
 		lantern("l_gallery", 33.5, U+3, 25.5), lantern("l_cellar", 43.5, C+4, 20.5),

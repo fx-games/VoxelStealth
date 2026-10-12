@@ -1,6 +1,9 @@
 package sim
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // Stim is a kind of stimulus, Dark Engine style. Everything that acts on
 // the world emits stimuli with Stimulate, and objects, NPCs, blocks and
@@ -12,7 +15,7 @@ type Stim string
 const (
 	StimWater  Stim = "water"  // douses fire, pools as a puddle
 	StimOil    Stim = "oil"    // pools as a burnable puddle
-	StimFire   Stim = "fire"   // ignites; Amount >= 1 is flames that burn people
+	StimFire   Stim = "fire"   // ignites; Amount > 0 is open flame (catches blocks), >= 1 flames that burn people
 	StimShock  Stim = "shock"  // electricity: live in water, kills
 	StimPierce Stim = "pierce" // broadheads, the blade
 	StimBash   Stim = "bash"   // the blackjack
@@ -26,10 +29,11 @@ type Stimulus struct {
 	Stim   Stim
 	Pos    Vec3
 	Radius float64
-	Amount float64 // liquid: cells poured; pierce: damage; noise: loudness; fire: >= 1 is flames
+	Amount float64 // liquid: cells poured; pierce: damage; noise: loudness; fire: > 0 open flame, >= 1 burns people
 	Kind   string  // noise: the sound; pierce: how it hurts ("shot", "stabbed")
 	Head   bool    // pierce: a head hit
 	Source int     // noise: the NPC making it (it doesn't react to itself), -1 none
+	From   *Cell   // fire: the burning cell it spreads from (see fire.go)
 }
 
 type (
@@ -41,7 +45,7 @@ type (
 
 // Receptrons. Objects by Kind, or by Name for decoration (torch variants
 // such as lanterns and candles are torches); every NPC alike; blocks by
-// material; puddles by liquid.
+// material; puddles by liquid; burning cells alike.
 // ponytail: Go tables; move them to a data file when missions need their own archetypes.
 var (
 	receptrons       map[string]map[Stim]response
@@ -49,6 +53,7 @@ var (
 	playerReceptrons map[Stim]func(s *Sim, st Stimulus) bool
 	blockReceptrons  map[string]map[Stim]cellResponse
 	liquidReceptrons map[Stim]map[Stim]cellResponse
+	fireReceptrons   map[Stim]cellResponse // burning cells
 )
 
 func init() { // in init: responses stimulate in turn
@@ -62,8 +67,12 @@ func init() { // in init: responses stimulate in turn
 		"Oil barrel":  {StimPierce: leak(StimOil), StimBlast: burst(StimOil)},
 	}
 	blockReceptrons = map[string]map[Stim]cellResponse{
-		"glass": {StimPierce: shatter, StimBash: shatter, StimBlast: shatter},
+		"glass":     {StimPierce: shatter, StimBash: shatter, StimBlast: shatter},
+		"flammable": {StimFire: burnBlock},
+		"tnt":       {StimFire: primeTNT, StimBlast: primeTNT},
+		"empty":     {StimFire: catchFire},
 	}
+	fireReceptrons = map[Stim]cellResponse{StimWater: douseFire}
 	liquidReceptrons = map[Stim]map[Stim]cellResponse{
 		StimWater: {StimShock: (*Sim).electrifyAt},
 		StimOil:   {StimFire: (*Sim).igniteOil, StimWater: (*Sim).douseOil},
@@ -145,10 +154,20 @@ func (s *Sim) Stimulate(st Stimulus) bool {
 					continue
 				}
 				mat := ""
-				if IsGlass(s.W.Block(x, y, z)) {
+				switch b := s.W.Block(x, y, z); {
+				case IsGlass(b):
 					mat = "glass"
+				case b == BlockAir || b == BlockLight:
+					mat = "empty"
+				case b == BlockTNT:
+					mat = "tnt"
+				case s.burnable(c):
+					mat = "flammable"
 				}
 				if f := blockReceptrons[mat][st.Stim]; f != nil && f(s, c, st) {
+					reacted = true
+				}
+				if _, ok := s.Fire[c]; ok && fireReceptrons[st.Stim] != nil && fireReceptrons[st.Stim](s, c, st) {
 					reacted = true
 				}
 				for l, rs := range liquidReceptrons {
@@ -159,9 +178,11 @@ func (s *Sim) Stimulate(st Stimulus) bool {
 			}
 		}
 	}
-	if _, ok := liquidBlock[st.Stim]; ok {
-		for range int(st.Amount) {
-			s.pour(st.Stim, st.Pos.Add(Vec3{0, 0.3, 0}).Cell(), 14)
+	if _, ok := liquidBlock[st.Stim]; ok && st.Amount >= 1 {
+		at := st.Pos.Add(Vec3{0, 0.3, 0}).Cell()
+		s.pour(st.Stim, at, 14) // a wet spot at once, the rest spreads (tickSpills)
+		if n := int(st.Amount) - 1; n > 0 {
+			s.Spills = append(s.Spills, spill{Liquid: st.Stim, At: at, Left: n, Next: spillEvery})
 		}
 	}
 	return reacted
@@ -262,11 +283,12 @@ func burst(liquid Stim) response {
 
 // NPC responses.
 
-// wound is a pierce: one hit does it to the unaware or the head.
+// wound is a pierce: a head hit kills, so does a stab in the back of the
+// unaware; anything else does its Amount.
 func (s *Sim) wound(k int, st Stimulus) bool {
 	n := s.NPCs[k]
 	dmg := int(st.Amount)
-	if st.Head || n.State != StateCombat && n.Suspicion < 55 {
+	if st.Head || st.Kind == "stabbed" && n.State != StateCombat && n.Suspicion < 55 {
 		dmg = 99
 	}
 	s.hurtNPC(k, dmg, st.Kind)
@@ -338,10 +360,26 @@ func (s *Sim) douseOil(c Cell, _ Stimulus) bool {
 	return true
 }
 
-func (s *Sim) unlightAbove(c Cell) {
-	if a := c.Add(0, 1, 0); s.W.Block(a.X, a.Y, a.Z) == BlockLight {
-		s.W.SetBlock(a.X, a.Y, a.Z, BlockAir)
+func (s *Sim) unlightAbove(c Cell) { s.unlight(c.Add(0, 1, 0)) }
+
+// spill is liquid still spreading from where it was poured.
+type spill struct {
+	Liquid     Stim
+	At         Cell
+	Left, Next int // cells to come; ticks to the next one
+}
+
+const spillEvery = TicksPerSecond / 3 // a puddle grows a cell at a time
+
+func (s *Sim) tickSpills() {
+	for i := range s.Spills {
+		sp := &s.Spills[i]
+		if sp.Next--; sp.Next <= 0 {
+			s.pour(sp.Liquid, sp.At, 14)
+			sp.Left, sp.Next = sp.Left-1, spillEvery
+		}
 	}
+	s.Spills = slices.DeleteFunc(s.Spills, func(sp spill) bool { return sp.Left <= 0 })
 }
 
 // pour adds one cell of liquid next to the puddle around start (or start

@@ -28,8 +28,9 @@ const (
 type ropeState struct {
 	ropes  []*rope // g.sim.Ropes, simulated
 	onRope *rope
-	ropeD  float64 // rope from the nock to the hands
-	regrab int     // ticks before a rope can be caught again
+	ropeD  float64   // rope from the nock to the hands
+	regrab int       // ticks before a rope can be caught again
+	mantle *sim.Vec3 // where a mantle in progress ends
 }
 
 type rope struct {
@@ -107,10 +108,18 @@ func (g *game) tickRopes(in character.Input) bool {
 	if g.regrab > 0 {
 		g.regrab--
 	}
-	if g.onRope == nil && g.regrab == 0 && !p.OnGround && !p.Flying {
+	if g.mantle == nil && in.Forward > 0 && !p.OnGround && !p.Flying && (in.Jump || g.onRope != nil) {
+		if to, ok := ledge(g.world, p, in.Yaw); ok {
+			g.mantle, g.onRope = &to, nil
+		}
+	}
+	if g.onRope == nil && g.mantle == nil && g.regrab == 0 && !p.OnGround && !p.Flying {
 		g.grabRope()
 	}
-	handled := g.onRope != nil && g.hang(in)
+	handled := g.mantle != nil || g.onRope != nil && g.hang(in)
+	if g.mantle != nil && mantleStep(g.world, p, *g.mantle) {
+		g.mantle = nil
+	}
 	sy, cy := math.Sin(in.Yaw), math.Cos(in.Yaw)
 	// Drawn in the right hand, ahead and below the eye, not through it.
 	hand := vec(p.X+sy*0.3+cy*0.25, p.Y+1.3, p.Z-cy*0.3+sy*0.25)
@@ -205,4 +214,53 @@ func (g *game) drawRopes(alpha float64) {
 				Yaw: yaw, Pitch: pitch, Sky: sky, Block: blk})
 		}
 	}
+}
+
+// Mantling: airborne with Space+W held, or climbing a rope with W, the
+// player pulls up onto a ledge within arm's reach ahead.
+const (
+	mantleReach = 2.2  // highest ledge, above the feet
+	mantleAhead = 0.5  // how far ahead the ledge is looked for
+	mantleSpeed = 0.12 // blocks/tick
+)
+
+// ledge finds the spot ahead (along yaw) a mantle ends on: a box dropped
+// from arm's reach that lands above step height.
+func ledge(w collide.Solids, p *character.Character, yaw float64) (sim.Vec3, bool) {
+	fx, fz := math.Sin(yaw)*mantleAhead, -math.Cos(yaw)*mantleAhead
+	box := p.Box().Offset(fx, mantleReach, fz)
+	drop := mantleReach - 0.6 // above stepHeight
+	if !collide.Fits(w, box) {
+		return sim.Vec3{}, false
+	}
+	_, dy, _ := collide.Move(w, box, 0, -drop, 0)
+	if dy <= -drop {
+		return sim.Vec3{}, false
+	}
+	top := p.Y + mantleReach + dy
+	if !collide.Fits(w, collide.Box(p.X, top, p.Z, p.Width, p.Height)) { // room to rise
+		return sim.Vec3{}, false
+	}
+	return vec(p.X+fx, top, p.Z+fz), true
+}
+
+// mantleStep moves p up to the ledge, then onto it; true when done.
+func mantleStep(w collide.Solids, p *character.Character, to sim.Vec3) bool {
+	p.PrevX, p.PrevY, p.PrevZ = p.X, p.Y, p.Z
+	p.VX, p.VY, p.VZ = 0, 0, 0
+	var d sim.Vec3
+	if p.Y < to.Y {
+		d.Y = min(mantleSpeed, to.Y-p.Y)
+	} else {
+		d = vec(to.X-p.X, 0, to.Z-p.Z)
+		if l := d.Len(); l > mantleSpeed {
+			d = d.Scale(mantleSpeed / l)
+		}
+	}
+	mx, my, mz := collide.Move(w, p.Box(), d.X, d.Y, d.Z)
+	p.X, p.Y, p.Z = p.X+mx, p.Y+my, p.Z+mz
+	moved := math.Abs(mx)+math.Abs(my)+math.Abs(mz) > 1e-6
+	done := !moved || (p.Y >= to.Y && math.Hypot(to.X-p.X, to.Z-p.Z) < 1e-6)
+	p.OnGround = done
+	return done
 }

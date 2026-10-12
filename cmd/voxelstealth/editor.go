@@ -18,6 +18,8 @@ import (
 var palette = []string{
 	"stone_bricks", "bricks", "cobblestone", "stone", "oak_planks", "spruce_planks", "dark_oak_planks",
 	"red_wool", "blue_wool", "white_wool", "glass", "gravel", "grass_block[snowy=false]", "bookshelf", "calcite",
+	"voxelstealth:corrupted_grass", "voxelstealth:corrupted_dirt", "voxelstealth:corrupted_dirt_block_with_grass",
+	"voxelstealth:dark_trunk_log", "voxelstealth:red_leaves",
 }
 
 // placeable objects, cycled with O.
@@ -25,6 +27,8 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindTorch, Name: "Torch", Lit: true},
 	{Kind: sim.KindTorch, Name: "Lantern", Lit: true},
 	{Kind: sim.KindTorch, Name: "Candles", Lit: true},
+	{Kind: sim.KindTorch, Name: "Candle", Lit: true},
+	{Kind: sim.KindTorch, Name: "Candlestick", Lit: true},
 	{Kind: sim.KindDoor, Name: "Door"},
 	{Kind: sim.KindDoor, Name: "Locked door", Locked: true, Key: "key1"},
 	{Kind: sim.KindLoot, Name: "Silver plate", Value: 50},
@@ -42,6 +46,11 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindDecor, Name: "Crate of bottles"},
 	{Kind: sim.KindDecor, Name: "Barrel"},
 	{Kind: sim.KindDecor, Name: "Oil barrel"},
+	{Kind: sim.KindDecor, Name: "Bone"}, {Kind: sim.KindDecor, Name: "Skull"}, {Kind: sim.KindDecor, Name: "Ritual book"},
+	{Kind: sim.KindDecor, Name: "Dead flower"}, {Kind: sim.KindDecor, Name: "Dead grass"}, {Kind: sim.KindDecor, Name: "Iron fence"},
+	{Kind: sim.KindDecor, Name: "Iron gate"}, {Kind: sim.KindDecor, Name: "Iron pillar"}, {Kind: sim.KindDecor, Name: "Stone chair"},
+	{Kind: sim.KindDecor, Name: "Stone table"}, {Kind: sim.KindDecor, Name: "Tomb"}, {Kind: sim.KindDecor, Name: "Grave"},
+	{Kind: sim.KindDecor, Name: "Grave slab"},
 }
 
 var npcKinds = []sim.NPCDef{
@@ -261,7 +270,7 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 			switch o.Name {
 			case "Lantern":
 				o.On = lanternFaceOn[face]
-			case "Candles":
+			case "Candles", "Candle", "Candlestick":
 				o.On = map[voxel.Face]string{voxel.FaceUp: "floor"}[face]
 			}
 			if o.On == "" {

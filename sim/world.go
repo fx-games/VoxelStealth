@@ -14,6 +14,7 @@ import (
 // voxelstealth ones with the engine.
 const (
 	BlockAir   = "minecraft:air"
+	BlockTNT   = "minecraft:tnt"
 	BlockLight = "voxelstealth:light" // invisible light source (torches, lamps, fire)
 	// BlockPuddle shows a wet cell: Minecraft's shallowest flowing water,
 	// meshed as a film on the floor. Block names carry their properties, so
@@ -62,11 +63,11 @@ func Material(block string) float64 {
 // Surface is the footstep surface of a block: rug, grass, wood, gravel,
 // metal, water or stone.
 func Surface(block string) string {
-	b := strings.TrimPrefix(block, "minecraft:")
+	b := block[strings.IndexByte(block, ':')+1:] // any namespace
 	switch {
 	case strings.HasSuffix(b, "wool"), strings.HasSuffix(b, "carpet"):
 		return "rug" // carpet: Thief's best friend
-	case strings.Contains(b, "grass"), b == "dirt", b == "coarse_dirt", b == "podzol", b == "moss_block", b == "hay_block":
+	case strings.Contains(b, "grass"), strings.HasSuffix(b, "dirt"), b == "podzol", b == "moss_block", b == "hay_block":
 		return "grass"
 	case strings.Contains(b, "planks"), strings.Contains(b, "log"), b == "bookshelf":
 		return "wood"

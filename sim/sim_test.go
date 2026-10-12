@@ -68,6 +68,13 @@ func twoRooms() (*fakeWorld, *Mission) {
 	return w, m
 }
 
+// spread lets every spill finish pouring.
+func spread(s *Sim) {
+	for len(s.Spills) > 0 {
+		s.tickSpills()
+	}
+}
+
 func run(s *Sim, ticks int) {
 	for i := 0; i < ticks; i++ {
 		s.Tick()
@@ -178,6 +185,13 @@ func TestTorchOnRugFire(t *testing.T) {
 	s.ThrowTorch(s.Player.Eye(), Vec3{-1, 0, 0}, 3) // onto the rug
 	s.Player.Pos = Vec3{18.5, 1, 9.5}
 	run(s, 2)
+	if o := s.Objects[1]; o.Flight == 0 || s.Objects[2].Burning() {
+		t.Fatalf("torch landed at once: flight %d", o.Flight)
+	}
+	run(s, TicksPerSecond)
+	if o := s.Objects[1]; o.Flight != 0 || o.Pos.Y != 1 || o.LightCell != o.Pos.Cell() {
+		t.Fatalf("torch at %v flight %d light %v; want lying lit on the floor", o.Pos, o.Flight, o.LightCell)
+	}
 	if !s.Objects[2].Burning() {
 		t.Fatal("rug not burning")
 	}
@@ -309,8 +323,9 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 	s := New(w, m)
 	torch := s.Objects[len(s.Objects)-1]
 	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false)
-	if n := len(s.Puddles); n != 9 {
-		t.Fatalf("water arrow: %d puddle cells, want its own 9", n)
+	spread(s)
+	if n := len(s.Puddles); n != 5 {
+		t.Fatalf("water arrow: %d puddle cells, want its own 5", n)
 	}
 	torch.Lit = true
 	clear(s.Puddles)
@@ -320,6 +335,7 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 		t.Fatalf("blackjack leaked %d cells", len(s.Puddles))
 	}
 	s.Melee("blade")
+	spread(s)
 	if len(s.Puddles) < 2 {
 		t.Fatalf("stabbed: puddle of %d cells, want a few", len(s.Puddles))
 	}
@@ -328,6 +344,7 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 	}
 	clear(s.Puddles)
 	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	spread(s)
 	if len(s.Puddles) < 2 {
 		t.Fatalf("shot: puddle of %d cells, want a few", len(s.Puddles))
 	}
@@ -361,6 +378,7 @@ func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
 	m.Objects = append(m.Objects, &Object{ID: "oil", Kind: KindDecor, Name: "Oil barrel", Pos: Vec3{5.5, 1, 2.5}})
 	s := New(w, m)
 	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	spread(s)
 	if len(s.Oil) < 3 || len(s.Puddles) != 0 {
 		t.Fatalf("oil %d cells, water %d", len(s.Oil), len(s.Puddles))
 	}
@@ -412,8 +430,16 @@ func TestWaterArrowPuddle(t *testing.T) {
 		w, m := twoRooms()
 		s := New(w, m)
 		s.ArrowHit(AmmoWater, hit, -1, false)
-		if len(s.Puddles) != 9 {
-			t.Fatalf("hit at %v: %d puddle cells, want 9", hit, len(s.Puddles))
+		if len(s.Puddles) != 1 {
+			t.Fatalf("hit at %v: %d puddle cells at once, want 1", hit, len(s.Puddles))
+		}
+		run(s, 2*spillEvery)
+		if len(s.Puddles) != 3 {
+			t.Fatalf("hit at %v: %d puddle cells after 2 steps, want 3", hit, len(s.Puddles))
+		}
+		spread(s)
+		if len(s.Puddles) != 5 {
+			t.Fatalf("hit at %v: %d puddle cells, want 5", hit, len(s.Puddles))
 		}
 		for c := range s.Puddles {
 			if c.Y != 1 {
@@ -436,5 +462,186 @@ func TestRopeArrowHangsToFloor(t *testing.T) {
 	}
 	if s.AddRope(Vec3{4.5, 0.75, 4.5}, 0, -math.Pi/2) { // straight down into the floor
 		t.Fatal("rope from an arrow in the floor")
+	}
+}
+
+// A torch lying on a rug it set alight keeps its light when the rug burns out.
+func TestLyingTorchOutlastsRug(t *testing.T) {
+	w, m := twoRooms()
+	m.Objects = append(m.Objects,
+		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 1, 3.5}, Lit: true, Fallen: true},
+		&Object{ID: "rug", Kind: KindFlammable, Pos: Vec3{3.5, 1, 3.5}, Burn: 30 * TicksPerSecond})
+	s := New(w, m)
+	s.setLight(len(s.Objects)-1, true)
+	run(s, 2)
+	if !s.Objects[len(s.Objects)-1].Burnt {
+		t.Fatal("rug didn't burn out")
+	}
+	if b := w.Block(3, 1, 3); b != BlockLight {
+		t.Fatalf("torch's cell is %s, want its light", b)
+	}
+}
+
+// Broadheads kill with a head shot; in the body they take a quarter of
+// full health, so four do it.
+func TestBroadheadDamage(t *testing.T) {
+	w, m := twoRooms()
+	m.NPCs = []*NPCDef{guard(Vec3{3.5, 1, 9.5}, 0), guard(Vec3{5.5, 1, 9.5}, 0)}
+	s := New(w, m)
+	s.ArrowHit(AmmoBroadhead, Vec3{3.5, 2.7, 9.5}, 0, true)
+	if s.NPCs[0].State != StateDead {
+		t.Fatal("head shot didn't kill")
+	}
+	for i := 1; i <= 4; i++ {
+		s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 9.5}, 1, false)
+		if dead := s.NPCs[1].State == StateDead; dead != (i == 4) {
+			t.Fatalf("body shot %d: dead %v, health %d", i, dead, s.NPCs[1].Health)
+		}
+	}
+}
+
+// Fire spreads over a plank floor, eats it and dies out; on bare stone it
+// dies out by itself; water puts it out.
+func TestFireSpreads(t *testing.T) {
+	w, m := twoRooms()
+	for x := 0; x <= 9; x++ {
+		for z := 0; z <= 10; z++ {
+			w.b[Cell{x, 0, z}] = "minecraft:oak_planks"
+		}
+	}
+	s := New(w, m)
+	s.Player.Pos = Vec3{18.5, 1, 9.5}
+	s.ignite(Cell{4, 1, 4}, 0)
+	s.ignite(Cell{15, 1, 4}, 0) // on stone
+	most := 0
+	for range 3 * 60 * TicksPerSecond {
+		s.Tick()
+		most = max(most, len(s.Fire))
+	}
+	planks := 0
+	for _, b := range w.b {
+		if b == "minecraft:oak_planks" {
+			planks++
+		}
+	}
+	t.Logf("at most %d cells burning, %d of 110 planks left", most, planks)
+	if most < 5 || planks > 100 || len(s.Fire) > 0 {
+		t.Fatalf("at most %d cells burning, %d of 110 planks left, %d still burning", most, planks, len(s.Fire))
+	}
+	if w.Block(15, 0, 4) != "minecraft:stone" || w.Block(10, 1, 4) != "minecraft:stone_bricks" {
+		t.Fatal("fire ate stone")
+	}
+	if b := w.Block(4, 1, 4); b != BlockAir {
+		t.Fatalf("burnt-out cell is %s", b)
+	}
+
+	s.ignite(Cell{15, 1, 4}, 0)
+	s.Stimulate(Stimulus{Stim: StimWater, Pos: Vec3{15.5, 1.2, 4.5}, Radius: 0.9})
+	if len(s.Fire) != 0 {
+		t.Fatal("water didn't put the fire out")
+	}
+}
+
+// A floor torch placed in mid-air stands on the floor below it.
+func TestFloatingTorchSettles(t *testing.T) {
+	w, m := twoRooms()
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 2, 4.5}, On: "floor"})
+	if s := New(w, m); s.Objects[len(s.Objects)-1].Pos.Y != 1 {
+		t.Fatalf("torch at y %v, want on the floor at 1", s.Objects[len(s.Objects)-1].Pos.Y)
+	}
+}
+
+// A lit torch landing on a wooden floor can set it alight; one on stone
+// can't.
+func TestTorchStartsBlockFire(t *testing.T) {
+	caught := 0
+	for seed := range 200 {
+		w, m := twoRooms()
+		for x := 0; x <= 9; x++ {
+			for z := 0; z <= 10; z++ {
+				w.b[Cell{x, 0, z}] = "minecraft:oak_planks"
+			}
+		}
+		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, Lit: true, Held: true})
+		s := New(w, m)
+		s.rng.Seed(int64(seed))
+		s.Player.Pos = Vec3{4.5, 1, 4.5}
+		s.ThrowTorch(Vec3{4.5, 2.6, 4.5}, Vec3{0, 0, 1}, 0)
+		run(s, TicksPerSecond)
+		if len(s.Fire) > 0 {
+			caught++
+		}
+	}
+	if caught == 0 || caught == 200 {
+		t.Fatalf("%d of 200 torches started a fire; want some", caught)
+	}
+	t.Logf("%d of 200 torches started a fire", caught)
+	w, m := twoRooms()
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, Lit: true, Held: true})
+	s := New(w, m)
+	s.ThrowTorch(Vec3{4.5, 2.6, 4.5}, Vec3{0, 0, 1}, 0)
+	run(s, TicksPerSecond)
+	if len(s.Fire) > 0 {
+		t.Fatal("a torch set stone alight")
+	}
+}
+
+// Fire primes the TNT it burns; the blast primes TNT nearby, which goes
+// off in turn.
+func TestBurningTNTExplodes(t *testing.T) {
+	w, m := twoRooms()
+	w.b[Cell{4, 1, 4}] = BlockTNT
+	w.b[Cell{7, 1, 4}] = BlockTNT // out of the first blast's reach, not its stimulus
+	s := New(w, m)
+	s.Player.Pos = Vec3{18.5, 1, 9.5}
+	s.ignite(Cell{5, 1, 4}, 0)
+	run(s, 30*TicksPerSecond)
+	if w.Block(4, 1, 4) == BlockTNT || w.Block(7, 1, 4) == BlockTNT || len(s.Bombs) > 0 {
+		t.Fatalf("TNT left: %s, %s; %d primed", w.Block(4, 1, 4), w.Block(7, 1, 4), len(s.Bombs))
+	}
+	if w.Block(7, 0, 4) != BlockAir {
+		t.Fatal("the second TNT didn't go off")
+	}
+}
+
+// NPCs' footsteps are sounds, but only the player's make a guard wonder.
+func TestNPCFootstepsDontSpook(t *testing.T) {
+	w, m := twoRooms()
+	walker := &NPCDef{ID: "w", Kind: "servant", Pos: Vec3{2.5, 1, 2.5},
+		Patrol: []Waypoint{{Pos: Vec3{2.5, 1, 2.5}}, {Pos: Vec3{8.5, 1, 2.5}}}}
+	m.NPCs = []*NPCDef{walker, guard(Vec3{5.5, 1, 4.5}, math.Pi)}
+	s := New(w, m)
+	s.Player.Pos = Vec3{18.5, 1, 9.5}
+	steps := 0
+	for range 10 * TicksPerSecond {
+		s.Tick()
+		for _, e := range s.Events {
+			if e.Kind == EvSound && e.Sound == "footstep" && e.NPC == 0 {
+				steps++
+			}
+		}
+		s.Events = s.Events[:0]
+	}
+	if steps < 5 || s.NPCs[1].Suspicion > 0 {
+		t.Fatalf("%d NPC footsteps, guard suspicion %.1f", steps, s.NPCs[1].Suspicion)
+	}
+	s.emit(Vec3{4.5, 1, 4.5}, 40, "footstep", -1)
+	s.Tick()
+	if s.NPCs[1].Suspicion == 0 {
+		t.Fatal("the guard didn't hear the player's step")
+	}
+}
+
+func TestOwnBlocksBurnAndSound(t *testing.T) {
+	if i, _ := flammability("voxelstealth:red_leaves"); i == 0 {
+		t.Error("red leaves don't burn")
+	}
+	if i, _ := flammability("voxelstealth:dark_trunk_log"); i == 0 {
+		t.Error("the dark trunk doesn't burn")
+	}
+	for b, want := range map[string]string{"voxelstealth:corrupted_dirt": "grass", "voxelstealth:corrupted_grass": "grass", "stone": "stone", "minecraft:oak_planks": "wood"} {
+		if got := Surface(b); got != want {
+			t.Errorf("Surface(%q) = %q, want %q", b, got, want)
+		}
 	}
 }

@@ -94,8 +94,11 @@ type NPC struct {
 	walk                  float64 // distance since the last footstep
 }
 
+// npcHealth is every NPC's full health.
+const npcHealth = 10
+
 func newNPC(d *NPCDef) *NPC {
-	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Health: 10, Alertness: 1,
+	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Health: npcHealth, Alertness: 1,
 		Patrol: slices.Clone(d.Patrol), Keys: slices.Clone(d.Keys)}
 	n.Body = *character.New(d.Pos.X, d.Pos.Y, d.Pos.Z)
 	if n.Name == "" {
@@ -253,6 +256,9 @@ func (s *Sim) tickNPC(k int) {
 // the NPC's attention.
 func (s *Sim) hearNoise(k int, snd Stimulus) bool {
 	n := s.NPCs[k]
+	if snd.Kind == "footstep" && snd.Source >= 0 { // the household's own steps: only the player's are suspicious
+		return false
+	}
 	thr := 8.0
 	if n.Kind != "guard" {
 		thr = 11
@@ -535,8 +541,8 @@ func (s *Sim) act(k int) {
 	n.Body.Tick(bodyWorld{s}, in)
 	n.Moving = math.Hypot(n.Body.X-n.Body.PrevX, n.Body.Z-n.Body.PrevZ) > 0.01
 	n.Running = n.Moving && in.Forward > 0.6
-	// Footsteps are for the player's ears only: not a sim sound, or NPCs
-	// would spook each other.
+	// Footsteps are a sim sound like the player's; NPCs ignore each other's
+	// (hearNoise).
 	if n.Moving && n.Body.OnGround {
 		n.walk += n.pos().DistXZ(n.prevPos)
 		if n.walk >= 1.7 {
@@ -545,7 +551,7 @@ func (s *Sim) act(k int) {
 			if n.Running {
 				loud *= 1.35
 			}
-			s.event(Event{Kind: EvSound, Sound: "footstep", Pos: n.pos(), Loud: loud, NPC: k})
+			s.emit(n.pos(), loud, "footstep", k)
 		}
 	}
 }

@@ -54,6 +54,8 @@ type Object struct {
 	// Empty is resolved by TorchOn/LanternOn when the sim starts.
 	On        string
 	Held      bool // torch in the player's hand
+	Vel, Prev Vec3 // a thrown torch in flight: blocks/tick, last tick's Pos
+	Flight    int  // ticks in the air; 0 at rest
 	Running   bool // faucets
 	Gone      bool // taken or destroyed
 	Burn      int  // ticks burning; 0 = not burning
@@ -192,8 +194,10 @@ type State struct {
 	Player      Player
 	NPCs        []*NPC
 	Objects     []*Object
-	Puddles     map[Cell]int // wet floor cells (feet cells); value = ticks of electricity left
-	Oil         map[Cell]int // oily floor cells; value = ticks of fire left
+	Puddles     map[Cell]int  // wet floor cells (feet cells); value = ticks of electricity left
+	Oil         map[Cell]int  // oily floor cells; value = ticks of fire left
+	Fire        map[Cell]fire // burning cells (fire.go)
+	Spills      []spill
 	Bombs       []bomb
 	Noisemakers []noisemaker
 	Ropes       []Rope
@@ -218,6 +222,7 @@ type Sim struct {
 	sounds []Stimulus // noise emitted this tick, for NPCs to hear
 	navs   []*nav.Graph
 	rng    *rand.Rand
+	reroom bool // blocks burnt away: rebuild the rooms
 }
 
 // New starts a mission in a world. The world must already hold the
@@ -225,7 +230,7 @@ type Sim struct {
 func New(w World, m *Mission) *Sim {
 	s := &Sim{W: w, Mission: m, rng: rand.New(rand.NewSource(1))}
 	s.Time = m.StartTime
-	s.Puddles, s.Oil = map[Cell]int{}, map[Cell]int{}
+	s.Puddles, s.Oil, s.Fire = map[Cell]int{}, map[Cell]int{}, map[Cell]fire{}
 	s.Done = map[int]bool{}
 	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Health: 20, Carrying: -1, Ammo: map[string]int{}}
 	for k, v := range m.Ammo {
@@ -238,6 +243,11 @@ func New(w World, m *Mission) *Sim {
 		}
 		if o.Kind == KindTorch && o.On == "" {
 			o.On = TorchOn(TorchWall(w), o.Pos.Cell())
+		}
+		if c := o.Pos.Cell(); o.Kind == KindTorch && o.On == "floor" && !w.Solid(c.X, c.Y-1, c.Z) {
+			if g, ok := s.groundBelow(c, 16); ok { // nothing under it: it stands on the floor below
+				o.Pos.Y = float64(g.Y)
+			}
 		}
 		s.Objects = append(s.Objects, &o)
 	}
@@ -288,6 +298,9 @@ func (s *Sim) Restore(st State) {
 	}
 	if s.Oil == nil {
 		s.Oil = map[Cell]int{}
+	}
+	if s.Fire == nil {
+		s.Fire = map[Cell]fire{}
 	}
 	if s.Done == nil {
 		s.Done = map[int]bool{}
@@ -341,7 +354,9 @@ func (s *Sim) Tick() {
 	s.Time += s.Mission.TimeScale / TicksPerSecond
 	s.tickPlayer()
 	s.tickObjects()
+	s.tickSpills()
 	s.tickPuddles()
+	s.tickFire()
 	s.tickBombs()
 	for i := range s.NPCs {
 		s.tickNPC(i)
@@ -450,11 +465,8 @@ func (s *Sim) fail(reason string) {
 func (s *Sim) setLight(i int, on bool) {
 	o := s.Objects[i]
 	if o.HasLight {
-		c := o.LightCell
-		if s.W.Block(c.X, c.Y, c.Z) == BlockLight {
-			s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
-		}
 		o.HasLight = false
+		s.unlight(o.LightCell)
 	}
 	if !on {
 		return
@@ -466,6 +478,22 @@ func (s *Sim) setLight(i int, on bool) {
 	if b := s.W.Block(c.X, c.Y, c.Z); b == BlockAir || b == BlockLight {
 		s.W.SetBlock(c.X, c.Y, c.Z, BlockLight)
 		o.LightCell, o.HasLight = c, true
+	}
+}
+
+// unlight clears the light block at c unless another light still burns
+// there (a torch lying on the rug it set alight, oil fire).
+func (s *Sim) unlight(c Cell) {
+	for _, o := range s.Objects {
+		if o.HasLight && o.LightCell == c && !o.Gone {
+			return
+		}
+	}
+	if _, burning := s.Fire[c]; burning || s.Oil[c.Add(0, -1, 0)] > 0 {
+		return
+	}
+	if s.W.Block(c.X, c.Y, c.Z) == BlockLight {
+		s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
 	}
 }
 
@@ -494,6 +522,10 @@ func (s *Sim) DoorAt(c Cell) int {
 func (s *Sim) tickObjects() {
 	for i, o := range s.Objects {
 		if o.Gone {
+			continue
+		}
+		if o.Flight > 0 {
+			s.flyTorch(i)
 			continue
 		}
 		if o.Burning() {
@@ -629,7 +661,7 @@ func (s *Sim) Explode(pos Vec3) {
 					continue
 				}
 				name := s.W.Block(b.X, b.Y, b.Z)
-				if name == BlockAir || name == "minecraft:bedrock" || name == "minecraft:obsidian" || IsGlass(name) { // glass: the blast stim shatters it
+				if name == BlockAir || name == "minecraft:bedrock" || name == "minecraft:obsidian" || IsGlass(name) || name == BlockTNT { // glass, TNT: the blast stim shatters, primes them
 					continue
 				}
 				if _, door := s.doors[b]; door {
@@ -638,6 +670,7 @@ func (s *Sim) Explode(pos Vec3) {
 				s.W.SetBlock(b.X, b.Y, b.Z, BlockAir)
 				delete(s.Puddles, b)
 				delete(s.Oil, b)
+				delete(s.Fire, b)
 			}
 		}
 	}
@@ -914,7 +947,7 @@ func (s *Sim) Frob(t Target, held bool) {
 		}
 	case KindTorch:
 		if s.HeldTorch() < 0 {
-			o.Held, o.Fallen = true, false
+			o.Held, o.Fallen, o.Flight = true, false, 0
 			s.emit(o.Pos, 6, "swish", -1)
 		}
 	case KindLamp:
@@ -952,21 +985,61 @@ func (s *Sim) HeldTorch() int {
 	return -1
 }
 
-// ThrowTorch lobs the held torch up to dist blocks along the view (0 drops
-// it at the player's feet). It clatters where it lands, which draws guards
-// over, and sets flammables there alight.
+// ThrowTorch lobs the held torch along the view about dist blocks
+// (0 drops it). It tumbles through the air (flyTorch) and, where it lands,
+// clatters, which draws guards over, and sets flammables alight.
 func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64) {
 	i := s.HeldTorch()
 	if i < 0 {
 		return
 	}
 	o := s.Objects[i]
-	o.Held, o.Fallen = false, true
-	o.Pos = s.landing(eye, dir, dist)
+	o.Held, o.Fallen, o.Flight = false, true, 1
+	o.Pos, o.Yaw = eye, math.Atan2(dir.X, -dir.Z)
+	if c := eye.Add(dir.Scale(0.4)).Cell(); !s.W.Solid(c.X, c.Y, c.Z) {
+		o.Pos = eye.Add(dir.Scale(0.4))
+	}
+	o.Prev, o.Vel = o.Pos, dir.Scale(dist/12).Add(Vec3{Y: 0.1 * min(dist, 1)})
 	s.setLight(i, o.Lit)
-	s.emit(o.Pos, 22, "clatter", -1)
-	if o.Lit {
-		s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2})
+}
+
+// torchGravity matches the arrows' (projectile.Gravity), blocks/tick².
+const torchGravity = 0.05
+
+// flyTorch moves a thrown torch one tick: it glances off walls and
+// ceilings and comes to rest on the first floor it falls onto.
+func (s *Sim) flyTorch(i int) {
+	o := s.Objects[i]
+	o.Prev = o.Pos
+	o.Flight++
+	o.Vel = o.Vel.Add(Vec3{Y: -torchGravity}).Scale(0.99)
+	solid := func(p Vec3) bool { c := p.Cell(); return s.W.Solid(c.X, c.Y, c.Z) }
+	if n := o.Pos.Add(Vec3{X: o.Vel.X}); solid(n) {
+		o.Vel.X *= -0.3
+	} else {
+		o.Pos = n
+	}
+	if n := o.Pos.Add(Vec3{Z: o.Vel.Z}); solid(n) {
+		o.Vel.Z *= -0.3
+	} else {
+		o.Pos = n
+	}
+	n := o.Pos.Add(Vec3{Y: o.Vel.Y})
+	switch {
+	case !solid(n):
+		o.Pos = n
+	case o.Vel.Y > 0: // ceiling
+		o.Vel.Y = 0
+	default: // landed: rest on the block's top
+		o.Pos.Y = math.Floor(n.Y) + 1
+		o.Vel, o.Flight = Vec3{}, 0
+		s.emit(o.Pos, 22, "clatter", -1)
+		if o.Lit { // a small flame: catches rugs and fuel, doesn't burn people
+			s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2, Amount: 0.5})
+		}
+	}
+	if o.Lit && (!o.HasLight || o.LightCell != o.Pos.Cell()) {
+		s.setLight(i, true)
 	}
 }
 
@@ -1023,7 +1096,7 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 	switch ammo {
 	case AmmoBroadhead:
 		if npc >= 0 {
-			s.stimNPC(npc, Stimulus{Stim: StimPierce, Pos: pos, Amount: 6, Kind: "shot", Head: head})
+			s.stimNPC(npc, Stimulus{Stim: StimPierce, Pos: pos, Amount: math.Ceil(npcHealth / 4.0), Kind: "shot", Head: head})
 			return
 		}
 		if !s.Stimulate(Stimulus{Stim: StimPierce, Pos: pos, Radius: 0.01}) {
@@ -1033,7 +1106,7 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 		s.emit(pos, 18, "splash", -1)
 		// The water runs down whatever it hit and pools on the floor below:
 		// nine cells, hugging the wall when it struck one.
-		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 9})
+		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 5})
 	case AmmoNoise:
 		s.Noisemakers = append(s.Noisemakers, noisemaker{Pos: pos})
 	case AmmoRope:

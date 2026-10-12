@@ -81,7 +81,8 @@ func (g *game) tickFX() {
 		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen && ownModel[o.Name] == "":
 			g.burst("flame", g.torchTip(o))
 		case o.Kind == sim.KindTorch && o.Lit && o.Fallen && ownModel[o.Name] == "":
-			g.burst("flame", o.Pos.Add(sim.Vec3{Y: 0.15}))
+			_, _, tip := lyingTorch(o, 1)
+			g.burst("flame", tip)
 		}
 	}
 	// The held torch: its tip in view space (see drawHand) mapped through
@@ -108,6 +109,15 @@ func (g *game) tickFX() {
 			g.burst("flame", f.Add(sim.Vec3{Y: 0.15}))
 			if s.Now%4 == 0 {
 				g.burst("wisp", f.Add(sim.Vec3{Y: 0.8}))
+			}
+		}
+	}
+	for c := range s.Fire {
+		if f := c.Floor(); f.Dist(eye) < 24 {
+			g.burst("flame", f.Add(sim.Vec3{Y: 0.2}))
+			g.burst("flame", f.Add(sim.Vec3{Y: 0.5}))
+			if s.Now%3 == 0 {
+				g.burst("wisp", f.Add(sim.Vec3{Y: 1}))
 			}
 		}
 	}

@@ -49,7 +49,7 @@ Voice lines: see TODO-VOICE.md.
 
 ## UI
 
-- [ ] Light gem artwork (now drawn per pixel)
+- [x] Light gem artwork — DKZeuss Gemstones emerald, dimmed by visibility
 - [ ] Font, period style but readable (OFL); now Go's 7x13 bitmap font
 - [ ] Main menu, loading/briefing screen, end screen artwork
 - [ ] Health bar and ammo icons

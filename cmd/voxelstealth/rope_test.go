@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"github.com/memmaker/voxellib/character"
@@ -26,5 +27,27 @@ func TestPendulumSwings(t *testing.T) {
 	}
 	if !(maxX > 1.5 && minX < -1 && maxY-3.5 > 0.3) {
 		t.Fatalf("swing x %.2f..%.2f, rose %.2f", minX, maxX, maxY-3.5)
+	}
+}
+
+// Jumping at a 3-high wall finds its top and pulls up onto it.
+func TestMantle(t *testing.T) {
+	w := collide.SolidsFunc(func(x, y, z int) bool { return y < 0 || x >= 1 && y < 3 })
+	p := character.New(0.5, 1, 0.5)
+	yaw := math.Pi / 2 // facing +X
+	to, ok := ledge(w, p, yaw)
+	if !ok || to.Y != 3 {
+		t.Fatalf("ledge %v %v", to, ok)
+	}
+	for i := 0; !mantleStep(w, p, to); i++ {
+		if i > 100 {
+			t.Fatal("stuck")
+		}
+	}
+	if p.Y != 3 || p.X < 1 {
+		t.Fatalf("ended at %.2f %.2f", p.X, p.Y)
+	}
+	if _, ok := ledge(w, character.New(0.5, 0, 0.5), yaw); ok {
+		t.Fatal("3 blocks up from the floor is out of reach")
 	}
 }

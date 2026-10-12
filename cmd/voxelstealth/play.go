@@ -71,7 +71,7 @@ func (g *game) resetPlay() {
 	}
 	g.arrows.Hit = g.arrowHit
 	g.npcAnims = nil
-	g.ropes, g.onRope = nil, nil
+	g.ropes, g.onRope, g.mantle = nil, nil, nil
 	g.player.EyeHeight = character.PlayerEyeHeight
 }
 

@@ -53,6 +53,7 @@ type drawState struct {
 	props     map[string]int // prop box models
 	bowModel  int
 	itemRend  *render.ItemRenderer
+	lightGem  image.Image // HUD light gem sprite
 	insts     []render.ModelInstance
 	items     []render.ItemInstance
 	lastAnim  time.Time
@@ -87,7 +88,7 @@ func spriteFor(o *sim.Object) string {
 	return "valuable_04"
 }
 
-func (g *game) loadAssets(dir string) error {
+func (g *game) loadAssets(dir, texDir string) error {
 	var err error
 	if g.modelRend, err = render.NewModelRenderer(g.eng.Renderer); err != nil {
 		return err
@@ -143,7 +144,7 @@ func (g *game) loadAssets(dir string) error {
 			continue
 		}
 		seen[l.sprite] = true
-		f, err := os.Open(filepath.Join(dir, "items", l.sprite+".png"))
+		f, err := os.Open(filepath.Join(texDir, "items", l.sprite+".png"))
 		if err != nil {
 			return err
 		}
@@ -154,7 +155,7 @@ func (g *game) loadAssets(dir string) error {
 		}
 		names, imgs = append(names, l.sprite), append(imgs, img)
 	}
-	names, imgs = append(names, "valuable_04"), append(imgs, mustPNG(filepath.Join(dir, "items", "valuable_04.png")))
+	names, imgs = append(names, "valuable_04"), append(imgs, mustPNG(filepath.Join(texDir, "items", "valuable_04.png")))
 	g.itemRend, err = render.NewItemRenderer(g.eng.Renderer, names, imgs)
 	return err
 }
@@ -202,7 +203,7 @@ func (g *game) drawWorld(alpha float64) {
 	g.insts, g.items = g.insts[:0], g.items[:0]
 	if g.sim != nil {
 		g.drawNPCs(alpha, dt)
-		g.drawObjects(g.sim.Objects)
+		g.drawObjects(g.sim.Objects, alpha)
 		for _, b := range g.sim.Bombs {
 			g.prop("bomb", b.Pos, 0, 0)
 		}
@@ -213,7 +214,7 @@ func (g *game) drawWorld(alpha float64) {
 		g.drawRopes(alpha)
 	} else {
 		g.drawEditorMarks()
-		g.drawObjects(g.mission.Objects)
+		g.drawObjects(g.mission.Objects, alpha)
 	}
 	g.modelRend.Draw(&g.cam, g.insts)
 	g.itemRend.DrawWorld(&g.cam, g.items)
@@ -234,6 +235,28 @@ func (g *game) propTilted(name string, p sim.Vec3, yaw, tilt, tiltYaw float64) {
 	sky, blk := g.light(p.X, p.Y+0.3, p.Z)
 	g.insts = append(g.insts, render.ModelInstance{Model: g.props[name], X: p.X, Y: p.Y, Z: p.Z, Yaw: yaw, Tilt: tilt, TiltYaw: tiltYaw, Sky: sky, Block: blk})
 }
+
+// lyingTorch places a fallen torch: tumbling end over end about its middle
+// while thrown (sim.Object.Flight), else lying on its side, resting on the
+// floor. Returns the model origin, its tilt toward o.Yaw and the flame.
+func lyingTorch(o *sim.Object, alpha float64) (origin sim.Vec3, tilt float64, tip sim.Vec3) {
+	const mid, length = 0.45, 0.75 // along the stick, from the origin
+	fx, fz := math.Sin(o.Yaw), -math.Cos(o.Yaw)
+	axis := func(t float64) sim.Vec3 { return sim.Vec3{X: fx * math.Sin(t), Y: math.Cos(t), Z: fz * math.Sin(t)} }
+	if o.Flight > 0 {
+		c := o.Prev.Add(o.Pos.Sub(o.Prev).Scale(alpha))
+		tilt = (float64(o.Flight-1) + alpha) * 0.7 // radians/tick
+		origin = c.Sub(axis(tilt).Scale(mid))
+		return origin, tilt, origin.Add(axis(tilt).Scale(length))
+	}
+	origin = o.Pos.Add(sim.Vec3{Y: lieLift[torchModel(o)]})
+	return origin, math.Pi / 2, origin.Add(axis(math.Pi / 2).Scale(length))
+}
+
+// lieLift raises a lying torch model by its half thickness, so it rests on
+// the floor instead of sinking into it.
+var lieLift = map[string]float64{"torch": 0.07, "torch_lit": 0.07, "lantern": 0.13, "lantern_lit": 0.13, "candles": 0.1, "candles_lit": 0.1,
+	"candle": 0.13, "candle_lit": 0.13, "candlestick": 0.19, "candlestick_lit": 0.19}
 
 // torchTilt is a wall torch's lean away from the wall (Minecraft's 22.5°).
 const torchTilt = math.Pi / 8
@@ -304,7 +327,7 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 }
 
 // drawObjects draws props as box models and loot as item sprites.
-func (g *game) drawObjects(objs []*sim.Object) {
+func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 	for _, o := range objs {
 		if o.Gone || o.Held {
 			continue
@@ -314,7 +337,8 @@ func (g *game) drawObjects(objs []*sim.Object) {
 		case sim.KindTorch:
 			name := torchModel(o)
 			if o.Fallen {
-				g.prop(name, p, o.Yaw, math.Pi/2)
+				mp, tilt, _ := lyingTorch(o, alpha)
+				g.prop(name, mp, o.Yaw, tilt)
 			} else {
 				mp, tilt, tiltYaw := g.torchMount(o)
 				if o.Name == "Lantern" {

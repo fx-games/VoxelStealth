@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"math"
 	"strings"
 
 	"github.com/memmaker/voxellib/voxel/render"
@@ -58,6 +57,7 @@ var helpText = []string{
 	"",
 	"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
 	"Rope arrows hang a rope: jump at it to grab it, W/S climb, A/D (or Ctrl+W/S) swing, Space lets go.",
+	"Ledges: hold Space+W against one in reach (or climb a rope up to it) to pull yourself up.",
 	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
 	"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
@@ -210,21 +210,18 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 	clock := fmt.Sprintf("%02d:%02d  %s", hh, mm, s.Rooms.Name(s.Rooms.RoomAt(p.Pos.Cell())))
 	c.text(clock, w-c.width(clock)-10, 18, grey)
 
-	// Light gem, bottom left: dark when hidden, bright when lit.
-	v := s.Visibility
-	cx, cy, r := 30, h-34, 16
-	for dy := -r; dy <= r; dy++ {
-		for dx := -r; dx <= r; dx++ {
-			d := math.Hypot(float64(dx), float64(dy)/1.3)
-			if d > float64(r) {
+	// Light gem, bottom left: the emerald, dark when hidden, bright when lit.
+	k := 0.12 + 0.88*s.Visibility
+	gb := g.lightGem.Bounds()
+	x0, y0 := 14-gb.Min.X, h-6-gb.Max.Y
+	for y := gb.Min.Y; y < gb.Max.Y; y++ {
+		for x := gb.Min.X; x < gb.Max.X; x++ {
+			col := color.NRGBAModel.Convert(g.lightGem.At(x, y)).(color.NRGBA)
+			if col.A == 0 {
 				continue
 			}
-			k := 0.35 + 0.65*(1-d/float64(r))
-			col := color.NRGBA{uint8(20 + 230*v*k), uint8(30 + 200*v*k), uint8(15 + 60*v*k), 255}
-			if d > float64(r)-1.5 {
-				col = color.NRGBA{120, 100, 60, 255}
-			}
-			c.img.Set(cx+dx, cy+dy, col)
+			col.R, col.G, col.B = uint8(float64(col.R)*k), uint8(float64(col.G)*k), uint8(float64(col.B)*k)
+			c.img.SetNRGBA(x0+x, y0+y, col)
 		}
 	}
 	// Health and loot next to it.

@@ -50,7 +50,8 @@ const tickDur = time.Second / sim.TicksPerSecond
 func main() {
 	var (
 		missionDir = flag.String("mission", "missions/manor", "mission directory")
-		assets     = flag.String("assets", "../VoxelLib/assets", "VoxelLib asset directory (rpg16pack, cleannrooster, items)")
+		assets     = flag.String("assets", "../VoxelLib/assets", "VoxelLib asset directory (cleannrooster)")
+		texDir     = flag.String("textures", "assets", "texture pack and item icons (rpg16pack, items)")
 		edit       = flag.Bool("edit", false, "open the mission in the editor (saves to the mission directory)")
 		shot       = flag.String("shot", "", "save a screenshot PNG at tick -shot-at and quit (never grabs input)")
 		shotAt     = flag.Int("shot-at", 100, "tick for -shot, counted from when the mission starts")
@@ -60,6 +61,7 @@ func main() {
 		mute       = flag.Bool("mute", false, "no sound")
 		voiceDir   = flag.String("voices", "assets/voice", "voice lines, <dir>/<speaker>/<line>.ogg")
 		sfxDir     = flag.String("sfx", "assets/sfx", "recorded sounds, <dir>/<name>-<n>.ogg")
+		blockDir   = flag.String("blocks", "assets/blocks", "the game's own block textures, <dir>/<name>.png")
 		modelDir   = flag.String("models", "assets/models", "prop models (chest, lantern, lamp, candles, decorations)")
 	)
 	flag.Parse()
@@ -88,7 +90,7 @@ func main() {
 	win.MakeContextCurrent()
 	glfw.SwapInterval(1)
 
-	pack, err := mcres.Open(filepath.Join(*assets, "rpg16pack"))
+	pack, err := mcres.Open(filepath.Join(*texDir, "rpg16pack"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,7 +109,7 @@ func main() {
 		RenderDistance: renderDistance,
 		WorldDir:       filepath.Join(*missionDir, "world"),
 		ReadOnly:       !*edit, // play never changes the mission on disk
-		Textures:       pack,
+		Textures:       ownTextures{pack, *blockDir},
 		RenderOptions:  render.Options{Missing: mcres.MissingTexture, IsGreyscale: mcres.IsGreyscale},
 	})
 	if err != nil {
@@ -141,12 +143,13 @@ func main() {
 		g.script = append(g.script, scriptStep{1, "yaw", yd}, scriptStep{1, "pitch", pd})
 	}
 	t0 := time.Now()
-	if err := g.loadAssets(*assets); err != nil {
+	if err := g.loadAssets(*assets, *texDir); err != nil {
 		log.Fatal(err)
 	}
 	if err := g.loadModels(*modelDir); err != nil {
 		log.Fatal(err)
 	}
+	g.lightGem = mustPNG(filepath.Join(filepath.Dir(*modelDir), "hud", "light_gem.png"))
 	log.Printf("assets loaded in %v", time.Since(t0))
 	if !*mute && *shot == "" {
 		if g.mixer, err = audio.New(); err != nil {
@@ -379,4 +382,25 @@ func saveShot(path string, w, h int) {
 	}
 	defer f.Close()
 	png.Encode(f, img)
+}
+
+// ownTextures serves the "voxelstealth:<name>" block textures from dir and
+// the rest from the pack.
+type ownTextures struct {
+	*mcres.Pack
+	dir string
+}
+
+func (t ownTextures) TextureFrames(name string) ([]image.Image, int, error) {
+	n, ok := strings.CutPrefix(name, "voxelstealth:")
+	if !ok {
+		return t.Pack.TextureFrames(name)
+	}
+	f, err := os.Open(filepath.Join(t.dir, n+".png"))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	return []image.Image{img}, 0, err
 }

@@ -1,7 +1,8 @@
 package main
 
 // Art models under assets/models (see ASSETS.md): the chest as a Bedrock
-// geometry over the Stripped Chests texture, the lantern, the candles and
+// geometry over the Stripped Chests texture, the lantern, the candles (the
+// graveyard pack's lit with a box flame on the wick) and
 // the electric lamp as glTFs whose textures we paint here (the lantern's original was
 // derived from Minecraft's).
 
@@ -58,10 +59,32 @@ func (g *game) loadModels(dir string) error {
 		if err != nil {
 			return err
 		}
+		if boxes[name] { // the packs' boxes are toy-sized: a full block across at least
+			var lo, hi mgl32.Vec3
+			for _, me := range m.Meshes {
+				for _, v := range me.Verts {
+					lo, hi = mgl32.Vec3{min(lo[0], v.Pos[0]), 0, min(lo[2], v.Pos[2])}, mgl32.Vec3{max(hi[0], v.Pos[0]), 0, max(hi[2], v.Pos[2])}
+				}
+			}
+			k := 1 / min(hi[0]-lo[0], hi[2]-lo[2])
+			m.Transform(mgl32.Scale3D(k, k, k))
+		}
 		if g.props[name], err = g.modelRend.Add(m); err != nil {
 			return err
 		}
 		sim.DecorSize[n] = extent(m)
+	}
+	for _, name := range []string{"candle", "candlestick"} {
+		m, err := gltf.LoadFile(filepath.Join(dir, "graveyard", name+".gltf"))
+		if err != nil {
+			return err
+		}
+		if g.props[name], err = g.modelRend.Add(m); err != nil {
+			return err
+		}
+		if g.props[name+"_lit"], err = g.modelRend.Add(withFlame(m)); err != nil {
+			return err
+		}
 	}
 	candles, err := gltf.LoadFile(filepath.Join(dir, "candles.gltf"))
 	if err != nil {
@@ -146,6 +169,29 @@ func candleTexture(tex image.Image, lit bool) image.Image {
 	return img
 }
 
+// withFlame is m with a flame on its highest point, the wick.
+func withFlame(m *model.Model) *model.Model {
+	var top mgl32.Vec3
+	n := float32(0)
+	for _, me := range m.Meshes {
+		for _, v := range me.Verts {
+			switch {
+			case v.Pos[1] > top[1]+1e-4:
+				top, n = v.Pos, 1
+			case v.Pos[1] > top[1]-1e-4:
+				top, n = top.Add(mgl32.Vec3{v.Pos[0], 0, v.Pos[2]}), n+1
+			}
+		}
+	}
+	x, y, z := top[0]/n, top[1], top[2]/n
+	f := boxModel("flame", []part{tipped(bx(x-0.03, y, z-0.03, x+0.03, y+0.12, z+0.03, flame2), flame)})
+	l := *m
+	l.Textures = append(m.Textures[:len(m.Textures):len(m.Textures)], f.Textures[0])
+	f.Meshes[0].Texture = len(m.Textures)
+	l.Meshes = append(m.Meshes[:len(m.Meshes):len(m.Meshes)], f.Meshes[0])
+	return &l
+}
+
 // lanternHeight is the lantern model's height, chain top included.
 const lanternHeight = 0.8125
 
@@ -187,11 +233,18 @@ func extent(m *model.Model) sim.Vec3 {
 }
 
 // decor maps decoration Names to their models.
-var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_box", "Crate of bottles": "bottle_crate", "Barrel": "barrel", "Oil barrel": "oil_barrel"}
+var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_box", "Crate of bottles": "bottle_crate", "Barrel": "barrel", "Oil barrel": "oil_barrel",
+	"Bone": "graveyard/bone", "Skull": "graveyard/skull", "Ritual book": "graveyard/ritual_book", "Dead flower": "graveyard/dead_flower",
+	"Dead grass": "graveyard/dead_grass", "Iron fence": "graveyard/iron_fence", "Iron gate": "graveyard/iron_gate",
+	"Iron pillar": "graveyard/iron_pillar", "Stone chair": "graveyard/stone_chair", "Stone table": "graveyard/stone_table",
+	"Tomb": "graveyard/tomb_01", "Grave": "graveyard/tomb_02", "Grave slab": "graveyard/tomb_03"}
+
+// boxes are the decor models scaled up to a block wide.
+var boxes = map[string]bool{"apple_box": true, "small_box": true, "bottle_crate": true}
 
 // ownModel maps torch Names that have their own model, flame included
 // (no particles), to it.
-var ownModel = map[string]string{"Lantern": "lantern", "Candles": "candles"}
+var ownModel = map[string]string{"Lantern": "lantern", "Candles": "candles", "Candle": "candle", "Candlestick": "candlestick"}
 
 // torchModel is the prop for a torch object.
 func torchModel(o *sim.Object) string {
