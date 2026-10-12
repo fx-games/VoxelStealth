@@ -185,15 +185,20 @@ func (t *npcTarget) fall(yaw float64) {
 	}
 }
 
-// tickFall advances the fall; NPCs that went down without an arrow (blade,
-// blackjack, fire) fall backwards.
+// tickFall advances the fall; NPCs that went down without an arrow topple
+// away from the player who struck them (blade, blackjack), or backwards
+// when nobody is near (fire).
 func (t *npcTarget) tickFall() {
 	n := t.g.sim.NPCs[t.k]
 	switch {
 	case n.Alive():
 		t.dying = 0
 	case t.dying == 0:
-		t.fall(n.Yaw + math.Pi)
+		yaw := n.Yaw + math.Pi
+		if d := n.Pos().Sub(t.g.sim.Player.Pos); d.X*d.X+d.Z*d.Z < 9 {
+			yaw = math.Atan2(d.X, -d.Z) // yaw convention: 0 faces -Z
+		}
+		t.fall(yaw)
 	case t.dying <= deathTicks:
 		t.dying++
 	}
