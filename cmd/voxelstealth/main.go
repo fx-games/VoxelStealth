@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-gl/gl/v3.3-core/gl"
@@ -130,6 +131,14 @@ func main() {
 		var yd, pd float64
 		fmt.Sscanf(*look, "%f,%f", &yd, &pd)
 		g.cam.Yaw, g.cam.Pitch = yd*math.Pi/180, pd*math.Pi/180
+	}
+	// startSim puts the player at the mission start: redo the debug pose
+	// on the first play tick.
+	if *startPos != "" {
+		g.script = append(g.script, scriptStep{1, "tp", *startPos})
+	}
+	if yd, pd, ok := strings.Cut(*look, ","); ok {
+		g.script = append(g.script, scriptStep{1, "yaw", yd}, scriptStep{1, "pitch", pd})
 	}
 	t0 := time.Now()
 	if err := g.loadAssets(*assets); err != nil {
