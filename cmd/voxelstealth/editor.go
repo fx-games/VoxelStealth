@@ -36,6 +36,7 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindFlammable, Name: "Rug"},
 	{Kind: sim.KindAmmo, Name: sim.AmmoWater, Count: 2},
 	{Kind: sim.KindAmmo, Name: sim.AmmoBroadhead, Count: 3},
+	{Kind: sim.KindAmmo, Name: sim.AmmoRope, Count: 1},
 	{Kind: sim.KindDecor, Name: "Box of apples"},
 	{Kind: sim.KindDecor, Name: "Small box"},
 	{Kind: sim.KindDecor, Name: "Crate of bottles"},

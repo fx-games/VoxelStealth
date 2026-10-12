@@ -25,7 +25,7 @@ const (
 var weaponNames = [numWeapons]string{"Crossbow", "Blackjack", "Blade", "Flash bomb"}
 
 // arrowTypes cycle with X.
-var arrowTypes = []string{sim.AmmoBroadhead, sim.AmmoWater, sim.AmmoNoise}
+var arrowTypes = []string{sim.AmmoBroadhead, sim.AmmoWater, sim.AmmoNoise, sim.AmmoRope}
 
 const (
 	reloadTicks = 24 // a hand-spanned crossbow, not the explorer's repeater
@@ -51,6 +51,7 @@ type weapons struct {
 	vkeys      map[glfw.Key]bool // keys held by a -script
 	vmouse     bool
 	shotReq    bool
+	ropeState
 }
 
 // resetPlay clears per-run glue state (new mission, quickload).
@@ -70,6 +71,7 @@ func (g *game) resetPlay() {
 	}
 	g.arrows.Hit = g.arrowHit
 	g.npcAnims = nil
+	g.ropes, g.onRope = nil, nil
 	g.player.EyeHeight = character.PlayerEyeHeight
 }
 
@@ -227,7 +229,9 @@ func (g *game) tickPlay() {
 	if running {
 		in = g.movementInput()
 	}
-	p.Tick(s.Body(), in)
+	if !g.tickRopes(in) {
+		p.Tick(s.Body(), in)
+	}
 	g.prevWalk = g.walkDist
 	if p.OnGround {
 		g.walkDist += math.Hypot(p.X-p.PrevX, p.Z-p.PrevZ)
@@ -367,7 +371,18 @@ func (g *game) tickArrows() {
 		if a.Stuck && a.In == nil && !g.reported[a] {
 			g.reported[a] = true
 			ammo := g.arrowAmmo[a]
-			s.ArrowHit(ammo, vec(a.X, a.Y, a.Z), -1, false)
+			at := vec(a.X, a.Y, a.Z)
+			if ammo == sim.AmmoWater { // splash in the air before the face, not in the block
+				cp := math.Cos(a.Pitch)
+				at = at.Add(vec(-math.Sin(a.Yaw)*cp, -math.Sin(a.Pitch), math.Cos(a.Yaw)*cp).Scale(0.35))
+			}
+			s.ArrowHit(ammo, at, -1, false)
+			if ammo == sim.AmmoRope {
+				if s.AddRope(vec(a.X, a.Y, a.Z), a.Yaw, a.Pitch) {
+					a.Discard() // drawRopes draws it from now on
+				}
+				continue
+			}
 			if c := vec(a.X, a.Y, a.Z).Cell(); ammo != sim.AmmoBroadhead || !g.world.Solid(c.X, c.Y, c.Z) { // or the glass it hit broke
 				a.Discard()
 			}

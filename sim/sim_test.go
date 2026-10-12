@@ -309,8 +309,8 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 	s := New(w, m)
 	torch := s.Objects[len(s.Objects)-1]
 	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false)
-	if n := len(s.Puddles); n != 3 {
-		t.Fatalf("water arrow: %d puddle cells, want its own 3", n)
+	if n := len(s.Puddles); n != 9 {
+		t.Fatalf("water arrow: %d puddle cells, want its own 9", n)
 	}
 	torch.Lit = true
 	clear(s.Puddles)
@@ -400,5 +400,37 @@ func TestBombBurstsOilBarrelIntoFire(t *testing.T) {
 	}
 	if !s.Objects[len(s.Objects)-1].Gone || burning == 0 {
 		t.Fatalf("barrel gone %v, %d of %d oil cells burning", s.Objects[len(s.Objects)-1].Gone, burning, len(s.Oil))
+	}
+}
+
+func TestWaterArrowPuddle(t *testing.T) {
+	for _, hit := range []Vec3{{4.5, 1.1, 4.5}, {9.6, 2.8, 2.5}} { // floor; wall at x=10, up high
+		w, m := twoRooms()
+		s := New(w, m)
+		s.ArrowHit(AmmoWater, hit, -1, false)
+		if len(s.Puddles) != 9 {
+			t.Fatalf("hit at %v: %d puddle cells, want 9", hit, len(s.Puddles))
+		}
+		for c := range s.Puddles {
+			if c.Y != 1 {
+				t.Fatalf("hit at %v: puddle cell %v off the floor", hit, c)
+			}
+		}
+	}
+}
+
+func TestRopeArrowHangsToFloor(t *testing.T) {
+	w, m := twoRooms()
+	s := New(w, m)
+	// Shot level along +X into the wall at x=10, 3 blocks up.
+	if !s.AddRope(Vec3{10.25, 3.5, 2.5}, math.Pi/2, 0) {
+		t.Fatal("no rope")
+	}
+	r := s.Ropes[0]
+	if math.Abs(r.Top.X-9.47) > 0.01 || math.Abs(r.Len-(3.5-1-0.3)) > 0.01 {
+		t.Fatalf("rope top %v len %.2f", r.Top, r.Len)
+	}
+	if s.AddRope(Vec3{4.5, 0.75, 4.5}, 0, -math.Pi/2) { // straight down into the floor
+		t.Fatal("rope from an arrow in the floor")
 	}
 }

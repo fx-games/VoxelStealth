@@ -334,6 +334,9 @@ func (g *game) printStatus() {
 		p := n.Pos()
 		fmt.Printf("  %-16s %-11s susp %5.1f at %.1f %.1f %.1f\n", n.Name, n.State, n.Suspicion, p.X, p.Y, p.Z)
 	}
+	for i, r := range s.Ropes {
+		fmt.Printf("  rope %d top %.2f %.2f %.2f len %.2f held %v\n", i, r.Top.X, r.Top.Y, r.Top.Z, r.Len, g.onRope != nil && g.onRope == g.ropes[i])
+	}
 	count := func(m map[sim.Cell]int) (n, active int) {
 		for _, t := range m {
 			if n++; t > 0 {

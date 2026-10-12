@@ -31,6 +31,7 @@ const (
 	AmmoBroadhead = "broadhead"
 	AmmoWater     = "water"
 	AmmoNoise     = "noisemaker"
+	AmmoRope      = "rope"
 	AmmoExplosive = "explosive"
 )
 
@@ -195,6 +196,7 @@ type State struct {
 	Oil         map[Cell]int // oily floor cells; value = ticks of fire left
 	Bombs       []bomb
 	Noisemakers []noisemaker
+	Ropes       []Rope
 	Outcome     Outcome
 	FailReason  string
 	Stats       Stats
@@ -1038,10 +1040,47 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 		}
 	case AmmoWater:
 		s.emit(pos, 18, "splash", -1)
-		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 3})
+		// The water runs down whatever it hit and pools on the floor below:
+		// nine cells, hugging the wall when it struck one.
+		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 9})
 	case AmmoNoise:
 		s.Noisemakers = append(s.Noisemakers, noisemaker{Pos: pos})
+	case AmmoRope:
+		if npc < 0 {
+			s.emit(pos, 26, "arrow", -1)
+		}
 	}
+}
+
+// Rope hangs from a rope arrow stuck in the terrain.
+type Rope struct {
+	Tip        Vec3    // the arrow's tip, in the block
+	Yaw, Pitch float64 // the arrow's flight
+	Top        Vec3    // the nock, where the rope is tied
+	Len        float64
+}
+
+// AddRope ties a rope to the nock of a rope arrow stuck at tip and lets it
+// down to a little above the floor. False when there is no room for one
+// (the arrow is in the floor, or its nock in a block).
+func (s *Sim) AddRope(tip Vec3, yaw, pitch float64) bool {
+	fx, fz := forward(yaw)
+	cp := math.Cos(pitch)
+	top := tip.Sub(Vec3{fx * cp, math.Sin(pitch), fz * cp}.Scale(0.78)) // arrow length, nock included
+	c := top.Cell()
+	if s.W.Solid(c.X, c.Y, c.Z) {
+		return false
+	}
+	for y := c.Y - 1; y > c.Y-40; y-- {
+		if s.W.Solid(c.X, y, c.Z) {
+			if l := top.Y - float64(y+1) - 0.3; l >= 1 {
+				s.Ropes = append(s.Ropes, Rope{Tip: tip, Yaw: yaw, Pitch: pitch, Top: top, Len: l})
+				return true
+			}
+			return false
+		}
+	}
+	return false
 }
 
 // Throw lobs an explosive along the view; it goes off after 3 seconds.
