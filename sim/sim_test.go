@@ -269,3 +269,14 @@ func TestGuardSeesThroughGlassAndHearsItBreak(t *testing.T) {
 		t.Fatalf("guard didn't react to breaking glass (suspicion %.1f)", g.Suspicion)
 	}
 }
+
+func TestTorchOnSkipsGlass(t *testing.T) {
+	w := &fakeWorld{b: map[Cell]string{{-1, 0, 0}: "minecraft:glass", {1, 0, 0}: "minecraft:stone"}}
+	if on := TorchOn(TorchWall(w), Cell{}); on != "east" {
+		t.Fatalf("torch hangs on %q, want east (glass is west)", on)
+	}
+	w.b[Cell{1, 0, 0}] = "minecraft:glass"
+	if on := TorchOn(TorchWall(w), Cell{}); on != "floor" {
+		t.Fatalf("torch hangs on %q, want floor", on)
+	}
+}

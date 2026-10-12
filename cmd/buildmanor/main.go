@@ -53,6 +53,9 @@ func (b *builder) fill(x0, y0, z0, x1, y1, z1 int, name string) {
 }
 
 func (b *builder) solid(x, y, z int) bool { return b.reg.Info(b.w.Block(x, y, z)).Collides }
+func (b *builder) wall(x, y, z int) bool {
+	return b.solid(x, y, z) && !sim.IsGlass(b.reg.Info(b.w.Block(x, y, z)).Name)
+}
 
 func (b *builder) air(x0, y0, z0, x1, y1, z1 int) { b.fill(x0, y0, z0, x1, y1, z1, "air") }
 
@@ -277,7 +280,7 @@ func writeMission(b *builder, dir string) {
 	}
 	torch := func(id string, x, y, z float64) *sim.Object {
 		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Torch", Pos: v(x, y, z), Lit: true}
-		o.On = sim.TorchOn(b.solid, o.Pos.Cell())
+		o.On = sim.TorchOn(b.wall, o.Pos.Cell())
 		return o
 	}
 	lantern := func(id string, x, y, z float64) *sim.Object { // hangs from the ceiling when there is one
@@ -302,7 +305,7 @@ func writeMission(b *builder, dir string) {
 		torch("t_gate_w", 29.5, G+1, 65.5), torch("t_gate_e", 34.5, G+1, 65.5),
 		torch("t_front_w", 29.5, G+1, 42.5), torch("t_front_e", 33.5, G+1, 42.5),
 		torch("t_hall", 27.5, G+1, 31.5), torch("t_hall2", 35.5, G+1, 39.5),
-		torch("t_dining_n", 25.5, G+1, 11.5), torch("t_dining_w", 15.5, G+1, 22.5),
+		torch("t_dining_n", 26.5, G+1, 11.5), torch("t_dining_w", 15.5, G+1, 23.5),
 		torch("t_kitchen", 25.5, G+1, 39.5), torch("t_guard", 47.5, G+1, 39.5),
 		torch("t_library", 42.5, G+1, 28.5), torch("t_cellar", 42.5, C+1, 11.5), torch("t_vault", 35.5, C+1, 18.5),
 		torch("t_bedroom", 18.5, U+1, 24.5), torch("t_gallery_n", 35.5, U+1, 11.5), torch("t_gallery_s", 31.5, U+1, 39.5),

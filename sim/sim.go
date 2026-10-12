@@ -77,12 +77,18 @@ func (o *Object) WallDir() (dx, dz int) {
 	return d[0], d[1]
 }
 
+// TorchWall reports whether a torch can hang on the block at x,y,z: solid
+// and not glass (glass holds torches on top, not on its sides).
+func TorchWall(w World) func(x, y, z int) bool {
+	return func(x, y, z int) bool { return w.Solid(x, y, z) && !IsGlass(w.Block(x, y, z)) }
+}
+
 // TorchOn picks what a torch in cell c is attached to: a solid side wall,
 // else the floor. Missions without On get this at start.
-func TorchOn(solid func(x, y, z int) bool, c Cell) string {
+func TorchOn(wall func(x, y, z int) bool, c Cell) string {
 	for _, on := range []string{"north", "south", "east", "west"} {
 		d := wallDirs[on]
-		if solid(c.X+d[0], c.Y, c.Z+d[1]) {
+		if wall(c.X+d[0], c.Y, c.Z+d[1]) {
 			return on
 		}
 	}
@@ -235,7 +241,7 @@ func New(w World, m *Mission) *Sim {
 			o.On = LanternOn(w.Solid, o.Pos.Cell())
 		}
 		if o.Kind == KindTorch && o.On == "" {
-			o.On = TorchOn(w.Solid, o.Pos.Cell())
+			o.On = TorchOn(TorchWall(w), o.Pos.Cell())
 		}
 		s.Objects = append(s.Objects, &o)
 	}

@@ -112,14 +112,14 @@ On: floor
 ID: t_dining_n
 Kind: torch
 Name: Torch
-Pos: 25.5,65,11.5
+Pos: 26.5,65,11.5
 Lit: yes
 On: north
 
 ID: t_dining_w
 Kind: torch
 Name: Torch
-Pos: 15.5,65,22.5
+Pos: 15.5,65,23.5
 Lit: yes
 On: west
 

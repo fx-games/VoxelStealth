@@ -258,6 +258,10 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 				g.message("Torches stand on floors or hang on walls; lanterns stand on floors or hang from ceilings.")
 				return
 			}
+			if n := face.Normal(); n.Y == 0 && sim.IsGlass(g.world.Block(at.X-n.X, at.Y-n.Y, at.Z-n.Z)) {
+				g.message("Torches don't hang on glass.")
+				return
+			}
 		}
 		ed.serial++
 		o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
