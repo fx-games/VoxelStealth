@@ -316,6 +316,9 @@ func (g *game) printStatus() {
 		p := n.Pos()
 		fmt.Printf("  %-16s %-11s susp %5.1f at %.1f %.1f %.1f\n", n.Name, n.State, n.Suspicion, p.X, p.Y, p.Z)
 	}
+	for _, a := range g.arrows.Arrows {
+		fmt.Printf("  arrow %s at %.2f %.2f %.2f stuck %v in %T\n", g.arrowAmmo[a], a.X, a.Y, a.Z, a.Stuck, a.In)
+	}
 	for _, l := range g.log {
 		fmt.Println("  >", l)
 	}

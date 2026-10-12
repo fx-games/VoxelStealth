@@ -116,6 +116,13 @@ func (g *game) loadAssets(dir string) error {
 		}
 		g.props[name] = h
 	}
+	for ammo, head := range map[string]color.NRGBA{"broadhead": steel, "water": water, "noisemaker": brass} {
+		h, err := g.modelRend.Add(arrowModel(head))
+		if err != nil {
+			return err
+		}
+		g.props["arrow_"+ammo] = h
+	}
 	// Item sprites: the loot table plus a generated arrow bundle.
 	names, imgs := []string{"arrow"}, []image.Image{arrowSprite()}
 	seen := map[string]bool{}
@@ -399,35 +406,25 @@ var (
 
 // propParts are the props, built from boxes until real models exist.
 var propParts = map[string][]part{
-	"torch":            {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.07, 0.6, -0.07, 0.07, 0.7, 0.07, cold)},
-	"torch_lit":        {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.08, 0.6, -0.08, 0.08, 0.78, 0.08, flame2), bx(-0.05, 0.75, -0.05, 0.05, 0.9, 0.05, flame)},
-	"lamp":             {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOf)},
-	"lamp_lit":         {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
-	"faucet":           {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
-	"stream":           {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
-	"chest":            {bx(-0.45, 0, -0.32, 0.45, 0.6, 0.32, wood), bx(-0.46, 0.45, -0.33, 0.46, 0.5, 0.33, iron), bx(-0.06, 0.32, -0.34, 0.06, 0.45, -0.32, brass)},
-	"rug":              {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
-	"ash":              {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
-	"flames":           {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},
-	"puddle":           {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, water)},
-	"puddle_live":      {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, spark)},
-	"bomb":             {bx(-0.12, 0, -0.12, 0.12, 0.24, 0.12, iron), bx(-0.02, 0.24, -0.02, 0.02, 0.32, 0.02, flame)},
-	"noisemaker":       {bx(-0.08, 0, -0.08, 0.08, 0.16, 0.08, brass)},
-	"blackjack":        {bx(-0.03, -0.03, -0.1, 0.03, 0.03, 0.15, leather), bx(-0.06, -0.06, -0.35, 0.06, 0.06, -0.1, leather)},
-	"blade":            {bx(-0.03, -0.03, 0, 0.03, 0.03, 0.14, leather), bx(-0.08, -0.02, -0.02, 0.08, 0.02, 0.02, brass), bx(-0.015, -0.035, -0.45, 0.015, 0.035, -0.02, steel)},
-	"marker":           {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
-	"waypoint":         {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
-	"npc_mark":         {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
-	"arrow_broadhead":  arrowParts(steel),
-	"arrow_water":      arrowParts(water),
-	"arrow_noisemaker": arrowParts(brass),
-}
-
-// arrowParts is an arrow along +Z with its tip at the origin.
-func arrowParts(head color.NRGBA) []part {
-	const s = 1.0 / 32
-	return []part{bx(-s, -s, -0.75, s, s, -0.2, wood), bx(-2*s, -2*s, -0.22, 2*s, 2*s, 0, head),
-		bx(-0.002, -4*s, -0.72, 0.002, 4*s, -0.55, color.NRGBA{235, 235, 235, 255})}
+	"torch":       {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.07, 0.6, -0.07, 0.07, 0.7, 0.07, cold)},
+	"torch_lit":   {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.08, 0.6, -0.08, 0.08, 0.78, 0.08, flame2), bx(-0.05, 0.75, -0.05, 0.05, 0.9, 0.05, flame)},
+	"lamp":        {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOf)},
+	"lamp_lit":    {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
+	"faucet":      {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
+	"stream":      {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
+	"chest":       {bx(-0.45, 0, -0.32, 0.45, 0.6, 0.32, wood), bx(-0.46, 0.45, -0.33, 0.46, 0.5, 0.33, iron), bx(-0.06, 0.32, -0.34, 0.06, 0.45, -0.32, brass)},
+	"rug":         {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
+	"ash":         {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
+	"flames":      {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},
+	"puddle":      {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, water)},
+	"puddle_live": {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, spark)},
+	"bomb":        {bx(-0.12, 0, -0.12, 0.12, 0.24, 0.12, iron), bx(-0.02, 0.24, -0.02, 0.02, 0.32, 0.02, flame)},
+	"noisemaker":  {bx(-0.08, 0, -0.08, 0.08, 0.16, 0.08, brass)},
+	"blackjack":   {bx(-0.03, -0.03, -0.1, 0.03, 0.03, 0.15, leather), bx(-0.06, -0.06, -0.35, 0.06, 0.06, -0.1, leather)},
+	"blade":       {bx(-0.03, -0.03, 0, 0.03, 0.03, 0.14, leather), bx(-0.08, -0.02, -0.02, 0.08, 0.02, 0.02, brass), bx(-0.015, -0.035, -0.45, 0.015, 0.035, -0.02, steel)},
+	"marker":      {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
+	"waypoint":    {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
+	"npc_mark":    {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
 }
 
 // boxModel builds a static model from coloured boxes, one texel per colour.
