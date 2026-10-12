@@ -20,6 +20,8 @@ const (
 	// it is not "minecraft:water" and nobody swims in it.
 	BlockPuddle = "minecraft:water[level=7]"
 	BlockDoor   = "voxelstealth:door" // closed door; an open door is air
+	// BlockOil is an oily cell: a black film like BlockPuddle.
+	BlockOil = "voxelstealth:oil[level=7]"
 )
 
 // World is what the simulation needs from the voxel world.

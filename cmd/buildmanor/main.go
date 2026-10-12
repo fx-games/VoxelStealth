@@ -80,9 +80,10 @@ func main() {
 	level.RegisterBlocks(reg)
 	b := &builder{w: voxel.NewWorld(reg, -64, 384), reg: reg}
 
-	// Land: a grassy plateau (area: everything the level occupies) with dirt under it.
-	b.fill(-24, 56, -24, 87, 56, 87, "bedrock")
-	b.fill(-24, 57, -24, 87, 62, 87, "dirt")
+	// Land: a grassy plateau (area: everything the level occupies) with dirt
+	// under it, down to bedrock 10 below the cellar so no blast reaches the void.
+	b.fill(-24, C-10, -24, 87, C-10, 87, "bedrock")
+	b.fill(-24, C-9, -24, 87, 62, 87, "dirt")
 	b.fill(-24, 63, -24, 87, 63, 87, "grass_block[snowy=false]")
 
 	// Outer wall with a gate in the south, gravel drive to the front door.
@@ -347,6 +348,7 @@ func writeMission(b *builder, dir string) {
 		{ID: "cellar_box", Kind: sim.KindDecor, Name: "Small box", Pos: v(47.5, C, 15.5), Yaw: 1.8},
 		{ID: "cellar_barrel1", Kind: sim.KindDecor, Name: "Barrel", Pos: v(45.5, C, 14.5), Yaw: 0.4},
 		{ID: "cellar_barrel2", Kind: sim.KindDecor, Name: "Barrel", Pos: v(45.5, C, 15.5), Yaw: 1.1},
+		{ID: "cellar_oil", Kind: sim.KindDecor, Name: "Oil barrel", Pos: v(45.5, C, 16.5), Yaw: 0.7},
 	}
 	m.Rooms = []*sim.Room{
 		{ID: 1, Name: "Entrance hall", Boxes: []sim.Box{box(27, G, 31, 36, G+3, 40)}},

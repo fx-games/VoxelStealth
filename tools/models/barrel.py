@@ -1,10 +1,10 @@
 # Our barrel as a .bbmodel, for bbmodel2gltf.py:
-#   python3 tools/models/barrel.py <rpg16pack textures/block dir> barrel.bbmodel
+#   python3 tools/models/barrel.py <rpg16pack textures/block dir> barrel.bbmodel [stave texture, default spruce_log]
 #   python3 tools/models/bbmodel2gltf.py barrel.bbmodel assets/models/barrel.gltf
 import base64, json, sys
 T = sys.argv[1]
 texs = [{'source': 'data:image/png;base64,' + base64.b64encode(open(f'{T}/{n}.png', 'rb').read()).decode(), 'uv_width': 16, 'uv_height': 16}
-        for n in ('spruce_log', 'spruce_planks', 'iron_block')]
+        for n in (sys.argv[3] if len(sys.argv) > 3 else 'spruce_log', 'spruce_planks', 'iron_block')]
 els = []
 def cube(r, y0, y1, side, ends=None):
     f = {d: {'uv': [8 - r, 16 - y1, 8 + r, 16 - y0], 'texture': side} for d in ('north', 'south', 'east', 'west')}

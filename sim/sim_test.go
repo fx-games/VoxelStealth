@@ -20,7 +20,7 @@ func (w *fakeWorld) Block(x, y, z int) string {
 }
 func (w *fakeWorld) Solid(x, y, z int) bool {
 	n := w.Block(x, y, z)
-	return n != BlockAir && n != BlockLight && n != BlockPuddle
+	return n != BlockAir && n != BlockLight && n != BlockPuddle && n != BlockOil
 }
 func (w *fakeWorld) SetBlock(x, y, z int, n string) {
 	if n == BlockAir {
@@ -330,5 +330,75 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
 	if len(s.Puddles) < 2 {
 		t.Fatalf("shot: puddle of %d cells, want a few", len(s.Puddles))
+	}
+}
+
+func TestGlassBreaksOnPierceBashBlast(t *testing.T) {
+	w, m := twoRooms()
+	s := New(w, m)
+	for _, c := range []Cell{{6, 2, 2}, {6, 2, 6}, {12, 2, 8}} {
+		w.SetBlock(c.X, c.Y, c.Z, "minecraft:glass")
+	}
+	s.ArrowHit(AmmoBroadhead, Vec3{6.2, 2.5, 2.5}, -1, false)
+	s.Player.Pos, s.Player.Yaw, s.Player.Pitch = Vec3{5.5, 1, 6.5}, math.Pi/2, 0 // facing the pane at eye height
+	s.Melee("blackjack")
+	s.Explode(Vec3{12.5, 1.5, 6.5})
+	for _, c := range []Cell{{6, 2, 2}, {6, 2, 6}, {12, 2, 8}} {
+		if b := w.Block(c.X, c.Y, c.Z); b != BlockAir {
+			t.Errorf("%v is still %s", c, b)
+		}
+	}
+	w.SetBlock(6, 2, 2, "minecraft:glass")
+	s.ArrowHit(AmmoWater, Vec3{6.2, 2.5, 2.5}, -1, false)
+	if w.Block(6, 2, 2) == BlockAir {
+		t.Error("a water arrow broke glass")
+	}
+}
+
+func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
+	w, m := twoRooms()
+	m.NPCs = []*NPCDef{guard(Vec3{5.5, 1, 3.5}, 0)}
+	m.Objects = append(m.Objects, &Object{ID: "oil", Kind: KindDecor, Name: "Oil barrel", Pos: Vec3{5.5, 1, 2.5}})
+	s := New(w, m)
+	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	if len(s.Oil) < 3 || len(s.Puddles) != 0 {
+		t.Fatalf("oil %d cells, water %d", len(s.Oil), len(s.Puddles))
+	}
+	s.NPCs[0].Body.Teleport(5.5, 1, 2.5)                                         // standing in it
+	s.Stimulate(Stimulus{Stim: StimFire, Pos: Vec3{5.5, 1.1, 2.5}, Radius: 0.3}) // a spark
+	run(s, 2*TicksPerSecond)
+	if s.NPCs[0].State != StateDead || s.NPCs[0].Death != "accident" {
+		t.Fatalf("guard %v (%s), want burned", s.NPCs[0].State, s.NPCs[0].Death)
+	}
+	burning := 0
+	for _, f := range s.Oil {
+		if f > 0 {
+			burning++
+		}
+	}
+	if burning < 3 {
+		t.Fatalf("fire spread to %d of %d oil cells", burning, len(s.Oil))
+	}
+	s.Stimulate(Stimulus{Stim: StimWater, Pos: Vec3{5.5, 1.1, 2.5}, Radius: 3})
+	for c, f := range s.Oil {
+		if f > 0 {
+			t.Fatalf("%v still burning after water", c)
+		}
+	}
+}
+
+func TestBombBurstsOilBarrelIntoFire(t *testing.T) {
+	w, m := twoRooms()
+	m.Objects = append(m.Objects, &Object{ID: "oil", Kind: KindDecor, Name: "Oil barrel", Pos: Vec3{8.5, 1, 2.5}})
+	s := New(w, m)
+	s.Explode(Vec3{5.5, 1.2, 2.5})
+	burning := 0
+	for _, f := range s.Oil {
+		if f > 0 {
+			burning++
+		}
+	}
+	if !s.Objects[len(s.Objects)-1].Gone || burning == 0 {
+		t.Fatalf("barrel gone %v, %d of %d oil cells burning", s.Objects[len(s.Objects)-1].Gone, burning, len(s.Oil))
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/nav"
 )
 
@@ -175,15 +174,6 @@ type Stats struct {
 	InnocentsKilled                                               int
 }
 
-// sound is a sound emitted this tick, for NPCs to hear.
-type sound struct {
-	pos    Vec3
-	loud   float64
-	kind   string
-	byNPC  int // -1 = player/world
-	player bool
-}
-
 type bomb struct {
 	Pos  Vec3
 	Fuse int
@@ -202,6 +192,7 @@ type State struct {
 	NPCs        []*NPC
 	Objects     []*Object
 	Puddles     map[Cell]int // wet floor cells (feet cells); value = ticks of electricity left
+	Oil         map[Cell]int // oily floor cells; value = ticks of fire left
 	Bombs       []bomb
 	Noisemakers []noisemaker
 	Outcome     Outcome
@@ -222,7 +213,7 @@ type Sim struct {
 
 	doors  map[Cell]int // door cell → object index
 	decor  map[Cell]bool
-	sounds []sound
+	sounds []Stimulus // noise emitted this tick, for NPCs to hear
 	navs   []*nav.Graph
 	rng    *rand.Rand
 }
@@ -232,8 +223,7 @@ type Sim struct {
 func New(w World, m *Mission) *Sim {
 	s := &Sim{W: w, Mission: m, rng: rand.New(rand.NewSource(1))}
 	s.Time = m.StartTime
-	s.Puddles = map[Cell]int{}
-	s.decor = map[Cell]bool{}
+	s.Puddles, s.Oil = map[Cell]int{}, map[Cell]int{}
 	s.Done = map[int]bool{}
 	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Health: 20, Carrying: -1, Ammo: map[string]int{}}
 	for k, v := range m.Ammo {
@@ -246,9 +236,6 @@ func New(w World, m *Mission) *Sim {
 		}
 		if o.Kind == KindTorch && o.On == "" {
 			o.On = TorchOn(TorchWall(w), o.Pos.Cell())
-		}
-		if o.Kind == KindDecor {
-			s.decor[o.Pos.Cell()] = true
 		}
 		s.Objects = append(s.Objects, &o)
 	}
@@ -269,12 +256,15 @@ func New(w World, m *Mission) *Sim {
 
 // init builds the derived, unsaved structures.
 func (s *Sim) init() {
-	s.doors = map[Cell]int{}
+	s.doors, s.decor = map[Cell]int{}, map[Cell]bool{}
 	for i, o := range s.Objects {
 		if o.Kind == KindDoor && !o.Gone {
 			for _, c := range o.doorCells() {
 				s.doors[c] = i
 			}
+		}
+		if o.Kind == KindDecor && !o.Gone {
+			s.decor[o.Pos.Cell()] = true
 		}
 	}
 	s.Rooms = BuildRooms(s.W, s.Mission.Rooms, s.doors)
@@ -293,6 +283,9 @@ func (s *Sim) Restore(st State) {
 	s.State = st
 	if s.Puddles == nil {
 		s.Puddles = map[Cell]int{}
+	}
+	if s.Oil == nil {
+		s.Oil = map[Cell]int{}
 	}
 	if s.Done == nil {
 		s.Done = map[int]bool{}
@@ -333,8 +326,7 @@ func (s *Sim) message(text string) { s.event(Event{Kind: EvMessage, Text: text})
 
 // emit makes a sound: NPCs hear it this tick, the game plays it.
 func (s *Sim) emit(pos Vec3, loud float64, kind string, byNPC int) {
-	s.sounds = append(s.sounds, sound{pos: pos, loud: loud, kind: kind, byNPC: byNPC})
-	s.event(Event{Kind: EvSound, Sound: kind, Pos: pos, Loud: loud, NPC: byNPC})
+	s.Stimulate(Stimulus{Stim: StimNoise, Pos: pos, Amount: loud, Kind: kind, Source: byNPC})
 }
 
 // Tick advances the simulation one 50 ms step.
@@ -358,7 +350,7 @@ func (s *Sim) Tick() {
 
 // FloorSurface is the footstep surface under someone standing at pos.
 func (s *Sim) FloorSurface(pos Vec3) string {
-	if _, wet := s.Puddles[pos.Cell()]; wet {
+	if s.liquidAt(pos.Cell()) != "" {
 		return "water"
 	}
 	c := pos.Cell().Add(0, -1, 0)
@@ -405,6 +397,9 @@ func (s *Sim) tickPlayer() {
 	}
 	if c := p.Pos.Cell(); s.Puddles[c] > 0 && !p.Dead {
 		s.HurtPlayer(20, "Electrocuted.")
+	}
+	if c := p.Pos.Cell(); s.Oil[c] > 0 && !p.Dead && s.Now%10 == 0 {
+		s.HurtPlayer(10, "You're burning!")
 	}
 }
 
@@ -510,13 +505,11 @@ func (s *Sim) tickObjects() {
 			if o.Burn%30 == 1 {
 				s.emit(o.Pos, 30, "fire", -1)
 			}
-			if o.Burn == 60 { // spreads
-				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 2.2})
+			if o.Burn%10 == 0 { // flames: burn what stands in them
+				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 0.6, Amount: 1})
 			}
-			for k, n := range s.NPCs {
-				if n.alive() && n.pos().DistXZ(o.Pos) < 1.1 && math.Abs(n.pos().Y-o.Pos.Y) < 1.5 {
-					s.killNPC(k, "accident", "burned")
-				}
+			if o.Burn == 60 { // heat spreads further
+				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 2.2})
 			}
 			if o.Burn > 30*TicksPerSecond {
 				o.Burn, o.Burnt = 0, true
@@ -529,12 +522,8 @@ func (s *Sim) tickObjects() {
 				s.emit(o.Pos, 14, "water", -1)
 			}
 		}
-		if o.Kind == KindLamp && o.Fallen && o.Lit {
-			if _, wet := s.Puddles[o.Pos.Cell()]; wet {
-				s.electrify(o.Pos.Cell())
-				o.Lit = false
-				s.setLight(i, false)
-			}
+		if _, wet := s.Puddles[o.Pos.Cell()]; wet && !o.Held { // lying in water
+			s.Stimulate(Stimulus{Stim: StimWater, Pos: o.Pos})
 		}
 	}
 	for i := 0; i < len(s.Noisemakers); i++ {
@@ -551,53 +540,6 @@ func (s *Sim) tickObjects() {
 func (s *Sim) walkable(c Cell) bool {
 	_, door := s.doors[c]
 	return !door && !s.W.Solid(c.X, c.Y, c.Z) && s.W.Solid(c.X, c.Y-1, c.Z)
-}
-
-// spreadWater adds one wet cell next to the puddle around start (or start
-// itself), up to max cells in the puddle.
-func (s *Sim) spreadWater(start Cell, maxCells int) {
-	if !s.walkable(start) {
-		if g, ok := s.groundBelow(start, 3); ok {
-			start = g
-		} else {
-			return
-		}
-	}
-	if _, ok := s.Puddles[start]; !ok {
-		s.wet(start)
-		return
-	}
-	seen := map[Cell]bool{start: true}
-	queue := []Cell{start}
-	n := 0
-	for len(queue) > 0 {
-		c := queue[0]
-		queue = queue[1:]
-		if _, wet := s.Puddles[c]; !wet {
-			s.wet(c)
-			return
-		}
-		if n++; n >= maxCells {
-			return
-		}
-		dirs := []Cell{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}
-		s.rng.Shuffle(len(dirs), func(i, j int) { dirs[i], dirs[j] = dirs[j], dirs[i] })
-		for _, d := range dirs {
-			nc := c.Add(d.X, 0, d.Z)
-			if !seen[nc] && s.walkable(nc) {
-				seen[nc] = true
-				queue = append(queue, nc)
-			}
-		}
-	}
-}
-
-// wet makes c a puddle cell and shows the water.
-func (s *Sim) wet(c Cell) {
-	s.Puddles[c] = 0
-	if s.W.Block(c.X, c.Y, c.Z) == BlockAir {
-		s.W.SetBlock(c.X, c.Y, c.Z, BlockPuddle)
-	}
 }
 
 // groundBelow finds the walkable cell at or below c.
@@ -634,17 +576,33 @@ func (s *Sim) electrify(c Cell) {
 	s.event(Event{Kind: EvSpark, Pos: c.Floor()})
 }
 
-// tickPuddles runs electricity down and kills whoever stands in it.
+// tickPuddles runs electricity down in water, which shocks whoever stands
+// in it, and burns oil.
 func (s *Sim) tickPuddles() {
 	for c, t := range s.Puddles {
+		if t > 0 {
+			s.Puddles[c] = t - 1
+			s.Stimulate(Stimulus{Stim: StimShock, Pos: c.Floor(), Radius: 0.2})
+		}
+	}
+	for c, t := range s.Oil {
 		if t <= 0 {
 			continue
 		}
-		s.Puddles[c] = t - 1
-		for k, n := range s.NPCs {
-			if n.alive() && n.pos().Cell() == c {
-				s.killNPC(k, "accident", "electrocuted")
-			}
+		if t%10 == 0 { // flames: burn what stands in them, catch the next cell
+			s.Stimulate(Stimulus{Stim: StimFire, Pos: c.Floor().Add(Vec3{0, 0.1, 0}), Radius: 0.6, Amount: 1})
+		}
+		if t%30 == 0 {
+			s.emit(c.Floor(), 30, "fire", -1)
+		}
+		if t > 1 {
+			s.Oil[c] = t - 1
+			continue
+		}
+		delete(s.Oil, c) // burnt away
+		s.unlightAbove(c)
+		if s.W.Block(c.X, c.Y, c.Z) == BlockOil {
+			s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
 		}
 	}
 }
@@ -675,26 +633,20 @@ func (s *Sim) Explode(pos Vec3) {
 					continue
 				}
 				name := s.W.Block(b.X, b.Y, b.Z)
-				if name == BlockAir || name == "minecraft:bedrock" || name == "minecraft:obsidian" {
+				if name == BlockAir || name == "minecraft:bedrock" || name == "minecraft:obsidian" || IsGlass(name) { // glass: the blast stim shatters it
 					continue
 				}
 				if _, door := s.doors[b]; door {
 					continue // handled with the objects
 				}
 				s.W.SetBlock(b.X, b.Y, b.Z, BlockAir)
+				delete(s.Puddles, b)
+				delete(s.Oil, b)
 			}
 		}
 	}
-	s.Stimulate(Stimulus{Stim: StimBlast, Pos: pos, Radius: r})
+	s.Stimulate(Stimulus{Stim: StimBlast, Pos: pos, Radius: 3})
 	s.Stimulate(Stimulus{Stim: StimFire, Pos: pos, Radius: 4.5})
-	for k, n := range s.NPCs {
-		if !n.alive() {
-			continue
-		}
-		if d := n.pos().Dist(pos); d < 3.5 {
-			s.killNPC(k, "player", "blown up")
-		}
-	}
 	if d := s.Player.Pos.Dist(pos); d < 3.5 {
 		s.HurtPlayer(int(24-d*5), "Caught in the blast.")
 	}
@@ -1078,18 +1030,10 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 	switch ammo {
 	case AmmoBroadhead:
 		if npc >= 0 {
-			n := s.NPCs[npc]
-			if !n.alive() {
-				return
-			}
-			dmg := 6
-			if head || n.State != StateCombat && n.Suspicion < 55 {
-				dmg = 99 // unaware or head shot: one arrow does it
-			}
-			s.hurtNPC(npc, dmg, "shot")
+			s.stimNPC(npc, Stimulus{Stim: StimPierce, Pos: pos, Amount: 6, Kind: "shot", Head: head})
 			return
 		}
-		if !s.Shatter(pos.Cell()) && !s.Stimulate(Stimulus{Stim: StimPierce, Pos: pos, Radius: 0.05}) {
+		if !s.Stimulate(Stimulus{Stim: StimPierce, Pos: pos, Radius: 0.01}) {
 			s.emit(pos, 26, "arrow", -1)
 		}
 	case AmmoWater:
@@ -1134,6 +1078,10 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 // player, else at decoration or a window. It reports whether it hit.
 func (s *Sim) Melee(tool string) bool {
 	p := &s.Player
+	st := Stimulus{Stim: StimBash}
+	if tool == "blade" {
+		st = Stimulus{Stim: StimPierce, Amount: 4, Kind: "stabbed"}
+	}
 	best, bestD := -1, 2.4
 	for k, n := range s.NPCs {
 		if !n.alive() {
@@ -1144,55 +1092,34 @@ func (s *Sim) Melee(tool string) bool {
 			best, bestD = k, d
 		}
 	}
-	if best < 0 {
-		s.emit(p.Pos, 6, "swish", -1)
-		// A swing at a window within reach breaks it.
-		eye := p.Eye()
-		fx, fz := forward(p.Yaw)
-		cp := math.Cos(p.Pitch)
-		dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
-		for t := 0.2; t < 2.2; t += 0.1 {
-			pt := eye.Add(dir.Scale(t))
-			for i, o := range s.Objects {
-				if o.Kind == KindDecor && s.DecorBox(i).Intersects(collide.AABB{MinX: pt.X, MinY: pt.Y, MinZ: pt.Z, MaxX: pt.X, MaxY: pt.Y, MaxZ: pt.Z}) {
-					st := StimBash
-					if tool == "blade" {
-						st = StimPierce
-					}
-					s.Stimulate(Stimulus{Stim: st, Pos: pt})
-					return true
-				}
-			}
-			c := pt.Cell()
-			if s.W.Solid(c.X, c.Y, c.Z) {
-				return s.Shatter(c)
-			}
+	if best >= 0 {
+		n := s.NPCs[best]
+		if tool == "blade" {
+			s.emit(n.pos(), 24, "stab", -1)
 		}
-		return false
+		st.Pos = n.pos()
+		return s.stimNPC(best, st)
 	}
-	n := s.NPCs[best]
-	aware := n.State == StateCombat
-	switch tool {
-	case "blackjack":
-		if aware {
-			s.emit(n.pos(), 20, "thud", -1)
-			s.alertNPC(best, p.Pos)
-			return true
+	s.emit(p.Pos, 6, "swish", -1)
+	// Else the swing hits the first decoration or block within reach.
+	eye := p.Eye()
+	fx, fz := forward(p.Yaw)
+	cp := math.Cos(p.Pitch)
+	dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
+	for t := 0.2; t < 2.2; t += 0.1 {
+		st.Pos = eye.Add(dir.Scale(t))
+		c := st.Pos.Cell()
+		hit := s.W.Solid(c.X, c.Y, c.Z)
+		for i, o := range s.Objects {
+			if lo, hi := s.ObjectBox(i); o.Kind == KindDecor && boxDist(st.Pos, lo, hi) == 0 {
+				hit = true
+			}
 		}
-		n.State = StateUnconscious
-		n.Path = nil
-		s.Stats.Knockouts++
-		s.emit(n.pos(), 18, "body", -1)
-		s.bark(best, "Ugh...")
-	case "blade":
-		dmg := 99
-		if aware {
-			dmg = 4
+		if hit {
+			return s.Stimulate(st)
 		}
-		s.emit(n.pos(), 24, "stab", -1)
-		s.hurtNPC(best, dmg, "stabbed")
 	}
-	return true
+	return false
 }
 
 // hurtNPC damages an NPC and makes it fight back or run.

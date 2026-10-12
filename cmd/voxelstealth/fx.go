@@ -103,5 +103,13 @@ func (g *game) tickFX() {
 				Col0: fx["sparks"].Col0, Col1: fx["sparks"].Col1, Additive: true})
 		}
 	}
+	for c, fire := range s.Oil {
+		if f := c.Floor(); fire > 0 && f.Dist(eye) < 24 {
+			g.burst("flame", f.Add(sim.Vec3{Y: 0.15}))
+			if s.Now%4 == 0 {
+				g.burst("wisp", f.Add(sim.Vec3{Y: 0.8}))
+			}
+		}
+	}
 	g.parts.Tick(tickDur.Seconds(), g.world.Solid)
 }

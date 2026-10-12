@@ -187,7 +187,7 @@ func extent(m *model.Model) sim.Vec3 {
 }
 
 // decor maps decoration Names to their models.
-var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_box", "Crate of bottles": "bottle_crate", "Barrel": "barrel"}
+var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_box", "Crate of bottles": "bottle_crate", "Barrel": "barrel", "Oil barrel": "oil_barrel"}
 
 // ownModel maps torch Names that have their own model, flame included
 // (no particles), to it.

@@ -135,7 +135,7 @@ func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) }
 
 func (w bodyWorld) Boxes(area collide.AABB, out []collide.AABB) []collide.AABB {
 	for i, o := range w.s.Objects {
-		if o.Kind != KindDecor {
+		if o.Kind != KindDecor || o.Gone {
 			continue
 		}
 		if b := w.s.DecorBox(i); b.Intersects(area) {
@@ -247,6 +247,51 @@ func (s *Sim) tickNPC(k int) {
 	s.act(k)
 }
 
+// hearNoise is the noise receptron: a sound loud enough where the NPC
+// stands raises its suspicion by what it was. It reports whether it caught
+// the NPC's attention.
+func (s *Sim) hearNoise(k int, snd Stimulus) bool {
+	n := s.NPCs[k]
+	thr := 8.0
+	if n.Kind != "guard" {
+		thr = 11
+	}
+	f := s.Rooms.spread(snd.Pos, s.doorClosed)
+	rcv, _ := s.Rooms.heard(f, snd.Amount, n.eye())
+	if rcv <= thr {
+		return false
+	}
+	over := rcv - thr
+	switch snd.Kind {
+	case "alarm", "explosion", "pain":
+		if n.State == StateCombat {
+			return false
+		}
+		n.Suspicion = math.Max(n.Suspicion, 80)
+		n.LKP = snd.Pos
+		if n.IsGuard() {
+			s.setState(k, StateSearch)
+			s.bark(k, "What's going on?!")
+		} else {
+			s.setState(k, StateFlee)
+		}
+		return true
+	case "footstep", "lockpick":
+		n.Suspicion += over * 0.9
+	case "door", "squeak", "loot", "unlock":
+		n.Suspicion += over * 1.2
+	case "noisemaker", "crash", "clatter", "arrow", "zap", "stab", "thud":
+		n.Suspicion += over * 2.5
+	case "body", "fire", "ignite", "splash", "hiss":
+		n.Suspicion += over * 1.8
+	default:
+		n.Suspicion += over * 0.5
+	}
+	n.Suspicion = math.Min(n.Suspicion, AlertAt-1) // sound alone never confirms
+	n.LKP = snd.Pos
+	return true
+}
+
 // perceive updates suspicion from sight and sound; it reports whether
 // anything new caught the NPC's attention this tick.
 func (s *Sim) perceive(k int) bool {
@@ -264,48 +309,10 @@ func (s *Sim) perceive(k int) bool {
 		n.LastSeen++
 	}
 	// Sounds.
-	thr := 8.0
-	if n.Kind != "guard" {
-		thr = 11
-	}
 	for _, snd := range s.sounds {
-		if snd.byNPC == k {
-			continue
+		if snd.Source != k && s.stimNPC(k, snd) {
+			got = true
 		}
-		f := s.Rooms.spread(snd.pos, s.doorClosed)
-		rcv, _ := s.Rooms.heard(f, snd.loud, n.eye())
-		if rcv <= thr {
-			continue
-		}
-		over := rcv - thr
-		switch snd.kind {
-		case "alarm", "explosion", "pain":
-			if n.State != StateCombat {
-				n.Suspicion = math.Max(n.Suspicion, 80)
-				n.LKP = snd.pos
-				got = true
-				if n.IsGuard() {
-					s.setState(k, StateSearch)
-					s.bark(k, "What's going on?!")
-				} else {
-					s.setState(k, StateFlee)
-				}
-			}
-			continue
-		case "footstep", "lockpick":
-			n.Suspicion += over * 0.9
-		case "door", "squeak", "loot", "unlock":
-			n.Suspicion += over * 1.2
-		case "noisemaker", "crash", "clatter", "arrow", "zap", "stab", "thud":
-			n.Suspicion += over * 2.5
-		case "body", "fire", "ignite", "splash", "hiss":
-			n.Suspicion += over * 1.8
-		default:
-			n.Suspicion += over * 0.5
-		}
-		n.Suspicion = math.Min(n.Suspicion, AlertAt-1) // sound alone never confirms
-		n.LKP = snd.pos
-		got = true
 	}
 	// Bodies and fires.
 	for j, o := range s.NPCs {

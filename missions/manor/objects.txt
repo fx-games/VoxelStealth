@@ -434,3 +434,9 @@ Kind: decor
 Name: Barrel
 Pos: 45.5,58,15.5
 Yaw: 63.03
+
+ID: cellar_oil
+Kind: decor
+Name: Oil barrel
+Pos: 45.5,58,16.5
+Yaw: 40.11
