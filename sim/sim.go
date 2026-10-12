@@ -302,6 +302,18 @@ func (s *Sim) Tick() {
 	s.checkObjectives()
 }
 
+// FloorSurface is the footstep surface under someone standing at pos.
+func (s *Sim) FloorSurface(pos Vec3) string {
+	if _, wet := s.Puddles[pos.Cell()]; wet {
+		return "water"
+	}
+	c := pos.Cell().Add(0, -1, 0)
+	if pos.Y-math.Floor(pos.Y) > 0.3 { // standing on a slab-like top
+		c = pos.Cell()
+	}
+	return Surface(s.W.Block(c.X, c.Y, c.Z))
+}
+
 // tickPlayer: footsteps, the light gem, carried bodies.
 func (s *Sim) tickPlayer() {
 	p := &s.Player
@@ -315,14 +327,7 @@ func (s *Sim) tickPlayer() {
 		const stride = 1.7
 		if p.walk >= stride {
 			p.walk -= stride
-			floorCell := p.Pos.Cell().Add(0, -1, 0)
-			if p.Pos.Y-math.Floor(p.Pos.Y) > 0.3 { // standing on a slab-like top
-				floorCell = p.Pos.Cell()
-			}
-			loud := Material(s.W.Block(floorCell.X, floorCell.Y, floorCell.Z))
-			if _, wet := s.Puddles[p.Pos.Cell()]; wet {
-				loud = Material("water")
-			}
+			loud := Material(s.FloorSurface(p.Pos))
 			switch {
 			case p.Crouch:
 				loud *= 0.45

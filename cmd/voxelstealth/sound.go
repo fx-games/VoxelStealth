@@ -1,7 +1,7 @@
 package main
 
-// Sounds are synthesized at startup (no sound files, so nothing to
-// license). Like Thief, the player hears world sounds through the room
+// Sounds are synthesized at startup; recordings in assets/sfx (see
+// ASSETS.md) replace them where present. Like Thief, the player hears world sounds through the room
 // graph the guards use: loudness falls off along the path through openings,
 // closed doors muffle, and a sound in another room seems to come from the
 // opening it arrives through (sim.Hear).
@@ -9,6 +9,8 @@ package main
 import (
 	"math"
 	"math/rand"
+	"path/filepath"
+	"strings"
 
 	"github.com/memmaker/voxellib/audio"
 	"github.com/memmaker/voxelstealth/sim"
@@ -17,9 +19,11 @@ import (
 type soundState struct {
 	mixer    *audio.Mixer
 	sounds   map[string]*audio.Sound
+	sfx      map[string][]*audio.Sound          // recorded variants (assets/sfx), preferred over sounds
 	voices   map[string]map[string]*audio.Sound // speaker → line id → recording
 	lineLoud map[string]float64                 // line id → bark loudness
 	ambient  *audio.Voice
+	crickets *audio.Voice // outdoors at night (assets/sfx/crickets-1.ogg)
 }
 
 const sr = audio.SampleRate
@@ -69,9 +73,6 @@ func (g *game) makeSounds() {
 	}
 	g.sounds = map[string]*audio.Sound{}
 	add := func(name string, s *audio.Sound) { g.sounds[name] = s }
-	step := n(0.25)
-	// TODO: Need nice foot step audio samples. Footsteps are silent until then (guards still hear them).
-	_ = step
 	thud := n(0.06)
 	add("body", synth(0.5, func(t float64) float64 { return 3 * env(t, 0.005, 0.09) * thud() }))
 	add("thud", synth(0.3, func(t float64) float64 { return 3 * env(t, 0.003, 0.05) * thud() }))
@@ -163,19 +164,44 @@ func b(v bool) float64 {
 	return 0
 }
 
+// loadSFX reads recorded sounds: dir/<name>-<n>.ogg are variants of
+// <name>, which then replace the synthesized one.
+func (g *game) loadSFX(dir string) {
+	g.sfx = map[string][]*audio.Sound{}
+	paths, _ := filepath.Glob(filepath.Join(dir, "*.ogg"))
+	for _, p := range paths {
+		s, err := loadOgg(p)
+		if err != nil {
+			continue
+		}
+		name := strings.TrimSuffix(filepath.Base(p), ".ogg")
+		if i := strings.LastIndex(name, "-"); i > 0 {
+			name = name[:i]
+		}
+		g.sfx[name] = append(g.sfx[name], s)
+	}
+}
+
+// sound picks a recording of name (a random variant), else the synth.
+func (g *game) sound(name string) *audio.Sound {
+	if v := g.sfx[name]; len(v) > 0 {
+		return v[rand.Intn(len(v))]
+	}
+	return g.sounds[name]
+}
+
 // playLocal plays a sound at the player (their own crossbow and such).
 func (g *game) playLocal(name string, gain float32) {
-	if g.mixer == nil || g.sounds[name] == nil {
-		return
+	if s := g.sound(name); g.mixer != nil && s != nil {
+		g.mixer.Play(s, gain)
 	}
-	g.mixer.Play(g.sounds[name], gain)
 }
 
 // playWorld plays a simulation sound as the player hears it through the
 // rooms: loudness from the room graph, direction from the opening it comes
 // through.
 func (g *game) playWorld(name string, pos sim.Vec3, loud float64) {
-	g.playWorldSound(g.sounds[name], pos, loud)
+	g.playWorldSound(g.sound(name), pos, loud)
 }
 
 func (g *game) playWorldSound(snd *audio.Sound, pos sim.Vec3, loud float64) {
@@ -206,13 +232,19 @@ func (g *game) tickSounds() {
 	e := g.eye()
 	g.mixer.SetListener(e.X, e.Y, e.Z, g.cam.Yaw)
 	if g.ambient == nil {
-		g.ambient = g.mixer.Loop(g.sounds["ambient"], e.X, e.Y, e.Z, 0.15)
+		g.ambient = g.mixer.Loop(g.sound("ambient"), e.X, e.Y, e.Z, 0.15)
 	}
-	gain := float32(0.15)
+	if g.crickets == nil && g.sfx["crickets"] != nil {
+		g.crickets = g.mixer.Loop(g.sound("crickets"), e.X, e.Y, e.Z, 0)
+	}
+	gain, bugs := float32(0.15), float32(0.1)
 	if g.sim != nil && g.sim.Rooms.RoomAt(e.Cell()) != 0 {
-		gain = 0.05 // indoors: the wind is muffled
+		gain, bugs = 0.05, 0.01 // indoors: the wind is muffled
 	}
 	g.ambient.Set(e.X, e.Y+2, e.Z, gain)
+	if g.crickets != nil {
+		g.crickets.Set(e.X, e.Y, e.Z, bugs)
+	}
 }
 
 // handleEvents turns the simulation's events into sound, captions and
@@ -222,6 +254,14 @@ func (g *game) handleEvents() {
 	for _, e := range s.Events {
 		switch e.Kind {
 		case sim.EvSound:
+			if e.Sound == "footstep" {
+				name := "step-" + s.FloorSurface(e.Pos)
+				if g.sfx[name] == nil {
+					name = "step-stone"
+				}
+				g.playWorld(name, e.Pos, e.Loud)
+				continue
+			}
 			for _, f := range soundFX[e.Sound] {
 				p := e.Pos
 				if e.Sound == "stab" {

@@ -90,6 +90,7 @@ type NPC struct {
 	Running               bool
 	Attacking             bool
 	prevPos               Vec3
+	walk                  float64 // distance since the last footstep
 }
 
 func newNPC(d *NPCDef) *NPC {
@@ -493,6 +494,19 @@ func (s *Sim) act(k int) {
 	n.Body.Tick(bodyWorld{s}, in)
 	n.Moving = math.Hypot(n.Body.X-n.Body.PrevX, n.Body.Z-n.Body.PrevZ) > 0.01
 	n.Running = n.Moving && in.Forward > 0.6
+	// Footsteps are for the player's ears only: not a sim sound, or NPCs
+	// would spook each other.
+	if n.Moving && n.Body.OnGround {
+		n.walk += n.pos().DistXZ(n.prevPos)
+		if n.walk >= 1.7 {
+			n.walk -= 1.7
+			loud := Material(s.FloorSurface(n.pos()))
+			if n.Running {
+				loud *= 1.35
+			}
+			s.event(Event{Kind: EvSound, Sound: "footstep", Pos: n.pos(), Loud: loud, NPC: k})
+		}
+	}
 }
 
 // fight chases and strikes the player.

@@ -50,22 +50,28 @@ type Cell struct{ X, Y, Z int }
 
 // Material is how loud a floor is to walk on (sound units at the source).
 func Material(block string) float64 {
+	return map[string]float64{"rug": 12, "grass": 20, "wood": 32, "gravel": 46, "metal": 48, "water": 44, "stone": 40}[Surface(block)]
+}
+
+// Surface is the footstep surface of a block: rug, grass, wood, gravel,
+// metal, water or stone.
+func Surface(block string) string {
 	b := strings.TrimPrefix(block, "minecraft:")
 	switch {
 	case strings.HasSuffix(b, "wool"), strings.HasSuffix(b, "carpet"):
-		return 12 // carpet: Thief's best friend
+		return "rug" // carpet: Thief's best friend
 	case strings.Contains(b, "grass"), b == "dirt", b == "coarse_dirt", b == "podzol", b == "moss_block", b == "hay_block":
-		return 20
+		return "grass"
 	case strings.Contains(b, "planks"), strings.Contains(b, "log"), b == "bookshelf":
-		return 32
+		return "wood"
 	case b == "gravel":
-		return 46
+		return "gravel"
 	case strings.Contains(b, "iron"), strings.Contains(b, "gold_block"):
-		return 48
+		return "metal"
 	case strings.Contains(b, "water"):
-		return 44
+		return "water"
 	}
-	return 40 // stone, bricks, tiles
+	return "stone" // bricks, tiles
 }
 
 // BlockBrightness is the renderer's block-light boost; detection uses the

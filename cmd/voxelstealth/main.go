@@ -58,6 +58,7 @@ func main() {
 		script     = flag.String("script", "", "debug: automated inputs for -shot runs, 'tick:action;...' (see play.go)")
 		mute       = flag.Bool("mute", false, "no sound")
 		voiceDir   = flag.String("voices", "assets/voice", "voice lines, <dir>/<speaker>/<line>.ogg")
+		sfxDir     = flag.String("sfx", "assets/sfx", "recorded sounds, <dir>/<name>-<n>.ogg")
 	)
 	flag.Parse()
 
@@ -141,6 +142,7 @@ func main() {
 			defer g.mixer.Close()
 			g.makeSounds()
 			g.loadVoices(*voiceDir)
+			g.loadSFX(*sfxDir)
 		}
 	}
 	// -shot runs are automated: never grab the user's mouse or take any

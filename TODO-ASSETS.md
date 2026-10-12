@@ -58,26 +58,26 @@ Voice lines: see TODO-VOICE.md.
 Mono WAV or OGG, 44.1 kHz. Several variations each where noted, so repeats
 don't grate.
 
-- [ ] Footsteps, 4+ variations per surface: stone, wood, carpet, grass,
-      water/puddle; walking, running, crouching (footsteps are muted now)
-- [ ] Crossbow: shot (twang), reload
-- [ ] Bolt impacts: stone, wood, flesh (3 variations each)
-- [ ] Blackjack: swing, hit (head knock)
-- [ ] Blade: swing, stab
-- [ ] Body: falling to the floor, dropped, hidden in a chest
-- [ ] Door: open creak, close thud (wood)
-- [ ] Lock: lockpicking clicks (loopable), unlock
-- [ ] Loot pickup: coins, metal objects, gems
-- [ ] Clatter: thrown torch / dropped object
-- [ ] Lamp crashing over
-- [ ] Glass shattering (very loud; window)
-- [ ] Water arrow splash; torch doused hiss
+- [x] Footsteps, 4+ variations per surface: stone, wood, carpet, grass,
+      water/puddle; walking, running, crouching — Dynamic Surroundings (9–11 each; run/crouch differ only in loudness)
+- [x] Crossbow: shot (twang) — Dynamic Surroundings; [ ] reload
+- [x] Bolt impacts: stone (2, Angband), flesh (2, Angband); [ ] wood
+- [x] Blackjack: swing (sword swing, Dynamic Surroundings), hit (Angband)
+- [x] Blade: swing (Dynamic Surroundings), stab (Angband)
+- [x] Body: falling to the floor, dropped (Angband); hidden in a chest uses the same
+- [x] Door: open creak (4, Angband); close uses the same (one sim sound)
+- [x] Lock: lockpicking clicks, unlock (Angband)
+- [x] Loot pickup: coins (3, Angband)
+- [x] Clatter: thrown torch / dropped object (Angband)
+- [x] Lamp crashing over (Angband ceramic breaks)
+- [x] Glass shattering (4, Angband)
+- [x] Water arrow splash (Dynamic Surroundings); torch doused hiss (Angband spray — check it)
 - [ ] Faucet running (loop); squeaky tap handle
 - [ ] Fire: crackle loop, ignition whoosh
-- [ ] Electric zap
-- [ ] Flash bomb: fuse hiss, blast
+- [x] Electric zap (Angband)
+- [x] Flash bomb: blast (Dynamic Surroundings); [ ] fuse hiss
 - [ ] Noisemaker arrow: repeating chirp/rattle
-- [ ] Ambience: outdoor night wind/crickets loop, indoor room tone loop
+- [x] Ambience: outdoor night wind + crickets loops (Dynamic Surroundings); [ ] indoor room tone loop
 
 ## Music
 
