@@ -121,6 +121,7 @@ func main() {
 	}
 	g.player = character.New(x, y, z)
 	eng.Renderer.Opt.Daylight = float32(sim.DaylightAt(m.StartTime)) // no daylight flash while loading
+	eng.Renderer.Opt.BlockBrightness = 0.7 // torches reach further than the plain Minecraft curve
 	g.cam.Yaw = m.StartYaw
 	if *look != "" {
 		var yd, pd float64
