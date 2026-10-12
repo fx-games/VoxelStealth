@@ -21,7 +21,7 @@ Voice lines: see TODO-VOICE.md.
 - [x] Lantern (torch variant, floor or ceiling) — WaterColourCG glTF, own texture
 - [ ] Rug / tapestry / hay (flammables) and their burnt versions
 - [x] Fire: animated flames (sprite sheet or particles) — particles (fx.go)
-- [ ] Puddle decal, and electrified puddle (arcs)
+- [x] ~~Puddle decal~~ — puddles are `water[level=7]` blocks, meshed with Minecraft's sloped corner heights (VoxelLib); live puddles spark (particles)
 - [ ] Flash bomb (thrown item and in hand)
 - [ ] Noisemaker arrow head
 - [ ] Blackjack (first person)

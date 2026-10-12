@@ -15,7 +15,11 @@ import (
 const (
 	BlockAir   = "minecraft:air"
 	BlockLight = "voxelstealth:light" // invisible light source (torches, lamps, fire)
-	BlockDoor  = "voxelstealth:door"  // closed door; an open door is air
+	// BlockPuddle shows a wet cell: Minecraft's shallowest flowing water,
+	// meshed as a film on the floor. Block names carry their properties, so
+	// it is not "minecraft:water" and nobody swims in it.
+	BlockPuddle = "minecraft:water[level=7]"
+	BlockDoor   = "voxelstealth:door" // closed door; an open door is air
 )
 
 // World is what the simulation needs from the voxel world.

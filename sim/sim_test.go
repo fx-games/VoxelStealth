@@ -18,7 +18,7 @@ func (w *fakeWorld) Block(x, y, z int) string {
 }
 func (w *fakeWorld) Solid(x, y, z int) bool {
 	n := w.Block(x, y, z)
-	return n != BlockAir && n != BlockLight
+	return n != BlockAir && n != BlockLight && n != BlockPuddle
 }
 func (w *fakeWorld) SetBlock(x, y, z int, n string) {
 	if n == BlockAir {

@@ -566,7 +566,7 @@ func (s *Sim) spreadWater(start Cell, maxCells int) {
 		}
 	}
 	if _, ok := s.Puddles[start]; !ok {
-		s.Puddles[start] = 0
+		s.wet(start)
 		return
 	}
 	seen := map[Cell]bool{start: true}
@@ -576,7 +576,7 @@ func (s *Sim) spreadWater(start Cell, maxCells int) {
 		c := queue[0]
 		queue = queue[1:]
 		if _, wet := s.Puddles[c]; !wet {
-			s.Puddles[c] = 0
+			s.wet(c)
 			return
 		}
 		if n++; n >= maxCells {
@@ -591,6 +591,14 @@ func (s *Sim) spreadWater(start Cell, maxCells int) {
 				queue = append(queue, nc)
 			}
 		}
+	}
+}
+
+// wet makes c a puddle cell and shows the water.
+func (s *Sim) wet(c Cell) {
+	s.Puddles[c] = 0
+	if s.W.Block(c.X, c.Y, c.Z) == BlockAir {
+		s.W.SetBlock(c.X, c.Y, c.Z, BlockPuddle)
 	}
 }
 

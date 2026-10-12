@@ -202,7 +202,7 @@ func (g *game) drawWorld(alpha float64) {
 	g.insts, g.items = g.insts[:0], g.items[:0]
 	if g.sim != nil {
 		g.drawNPCs(alpha, dt)
-		g.drawObjects(g.sim.Objects, g.sim.Puddles)
+		g.drawObjects(g.sim.Objects)
 		for _, b := range g.sim.Bombs {
 			g.prop("bomb", b.Pos, 0, 0)
 		}
@@ -212,7 +212,7 @@ func (g *game) drawWorld(alpha float64) {
 		g.drawArrows(alpha)
 	} else {
 		g.drawEditorMarks()
-		g.drawObjects(g.mission.Objects, nil)
+		g.drawObjects(g.mission.Objects)
 	}
 	g.modelRend.Draw(&g.cam, g.insts)
 	g.itemRend.DrawWorld(&g.cam, g.items)
@@ -303,7 +303,7 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 }
 
 // drawObjects draws props as box models and loot as item sprites.
-func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
+func (g *game) drawObjects(objs []*sim.Object) {
 	for _, o := range objs {
 		if o.Gone || o.Held {
 			continue
@@ -357,13 +357,6 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 			g.items = append(g.items, render.ItemInstance{Item: spriteFor(o), X: p.X, Y: p.Y + 0.25, Z: p.Z,
 				Yaw: float64(g.tick) * 0.05, Scale: 0.45, Sky: sky, Block: blk})
 		}
-	}
-	for c, live := range puddles {
-		name := "puddle"
-		if live > 0 {
-			name = "puddle_live"
-		}
-		g.prop(name, c.Floor(), 0, 0)
 	}
 }
 
@@ -479,24 +472,22 @@ var (
 
 // propParts are the props, built from boxes until real models exist.
 var propParts = map[string][]part{
-	"torch":       {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), cold)},
-	"torch_lit":   {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), flame)}, // the fire is particles (fx.go)
-	"lamp":        {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOf)},
-	"lamp_lit":    {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
-	"faucet":      {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
-	"stream":      {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
-	"rug":         {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
-	"ash":         {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
-	"flames":      {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},
-	"puddle":      {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, water)},
-	"puddle_live": {bx(-0.5, 0.01, -0.5, 0.5, 0.03, 0.5, spark)},
-	"bomb":        {bx(-0.12, 0, -0.12, 0.12, 0.24, 0.12, iron), bx(-0.02, 0.24, -0.02, 0.02, 0.32, 0.02, flame)},
-	"noisemaker":  {bx(-0.08, 0, -0.08, 0.08, 0.16, 0.08, brass)},
-	"blackjack":   {bx(-0.03, -0.03, -0.1, 0.03, 0.03, 0.15, leather), bx(-0.06, -0.06, -0.35, 0.06, 0.06, -0.1, leather)},
-	"blade":       {bx(-0.03, -0.03, 0, 0.03, 0.03, 0.14, leather), bx(-0.08, -0.02, -0.02, 0.08, 0.02, 0.02, brass), bx(-0.015, -0.035, -0.45, 0.015, 0.035, -0.02, steel)},
-	"marker":      {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
-	"waypoint":    {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
-	"npc_mark":    {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
+	"torch":      {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), cold)},
+	"torch_lit":  {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), flame)}, // the fire is particles (fx.go)
+	"lamp":       {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOf)},
+	"lamp_lit":   {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
+	"faucet":     {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
+	"stream":     {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
+	"rug":        {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
+	"ash":        {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
+	"flames":     {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},
+	"bomb":       {bx(-0.12, 0, -0.12, 0.12, 0.24, 0.12, iron), bx(-0.02, 0.24, -0.02, 0.02, 0.32, 0.02, flame)},
+	"noisemaker": {bx(-0.08, 0, -0.08, 0.08, 0.16, 0.08, brass)},
+	"blackjack":  {bx(-0.03, -0.03, -0.1, 0.03, 0.03, 0.15, leather), bx(-0.06, -0.06, -0.35, 0.06, 0.06, -0.1, leather)},
+	"blade":      {bx(-0.03, -0.03, 0, 0.03, 0.03, 0.14, leather), bx(-0.08, -0.02, -0.02, 0.08, 0.02, 0.02, brass), bx(-0.015, -0.035, -0.45, 0.015, 0.035, -0.02, steel)},
+	"marker":     {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
+	"waypoint":   {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
+	"npc_mark":   {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
 }
 
 // boxModel builds a static model from coloured boxes: one texture column

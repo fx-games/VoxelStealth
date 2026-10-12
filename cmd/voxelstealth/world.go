@@ -19,7 +19,11 @@ type simWorld struct {
 }
 
 func (w *simWorld) Block(x, y, z int) string {
-	return w.g.reg.Info(w.g.eng.World.Block(x, y, z)).Name
+	info := w.g.reg.Info(w.g.eng.World.Block(x, y, z))
+	if info.Props != "" {
+		return info.Name + "[" + info.Props + "]"
+	}
+	return info.Name
 }
 
 func (w *simWorld) Solid(x, y, z int) bool {
