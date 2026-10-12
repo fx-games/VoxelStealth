@@ -357,7 +357,6 @@ func (s *Sim) visibility() float64 {
 	for _, dy := range []float64{0.2, 1.0} {
 		l = math.Max(l, lightAt(s.W, p.Pos.Add(Vec3{0, dy, 0}).Cell(), day))
 	}
-	l = l * l // perceived brightness: dim light hides well
 	v := l
 	switch {
 	case p.Crouch:

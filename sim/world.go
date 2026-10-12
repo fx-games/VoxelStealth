@@ -68,11 +68,19 @@ func Material(block string) float64 {
 	return 40 // stone, bricks, tiles
 }
 
-// lightAt is the brightness (0..1) a cell shows: the brighter of sky light
-// scaled by daylight and block light.
+// BlockBrightness is the renderer's block-light boost; detection uses the
+// same curves so what looks lit on screen is lit for the guards.
+const BlockBrightness = 0.4
+
+// lightAt is the brightness (0..1) a cell shows on screen, as the
+// renderer's shaders compute it (voxel/render curve and blockCurve) without
+// their ambient floor.
 func lightAt(w World, c Cell, daylight float64) float64 {
 	sky, blk := w.Light(c.X, c.Y, c.Z)
-	return math.Max(float64(sky)*daylight, float64(blk)) / 15
+	curve := func(l float64) float64 { return l / (4 - 3*l) }
+	b := float64(blk) / 15
+	bl := curve(b) + (1-math.Pow(1-b, 4)-curve(b))*BlockBrightness
+	return math.Max(curve(float64(sky)/15)*daylight, bl)
 }
 
 // lineOfSight walks the voxels between a and b (DDA) and reports whether
