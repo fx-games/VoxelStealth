@@ -675,7 +675,7 @@ func (s *Sim) Shatter(c Cell) bool {
 	}
 	s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
 	s.emit(c.Center(), 95, "shatter", -1) // as loud as a bomb
-	s.init() // the window is an opening now: rebuild the room graph
+	s.init()                              // the window is an opening now: rebuild the room graph
 	return true
 }
 
