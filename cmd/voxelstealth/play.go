@@ -58,7 +58,7 @@ func (g *game) resetPlay() {
 	g.arrows = projectile.World{}
 	g.arrowAmmo, g.reported = map[*projectile.Arrow]string{}, map[*projectile.Arrow]bool{}
 	g.npcTargets = nil
-	g.parts.P = g.parts.P[:0]
+	g.parts.P, g.handParts.P = g.parts.P[:0], g.handParts.P[:0]
 	for k := range g.sim.NPCs {
 		t := &npcTarget{g: g, k: k}
 		if n := g.sim.NPCs[k]; !n.Alive() { // already down (quickload)

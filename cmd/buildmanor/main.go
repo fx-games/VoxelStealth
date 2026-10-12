@@ -52,6 +52,8 @@ func (b *builder) fill(x0, y0, z0, x1, y1, z1 int, name string) {
 	}
 }
 
+func (b *builder) solid(x, y, z int) bool { return b.reg.Info(b.w.Block(x, y, z)).Collides }
+
 func (b *builder) air(x0, y0, z0, x1, y1, z1 int) { b.fill(x0, y0, z0, x1, y1, z1, "air") }
 
 func (b *builder) tree(x, z int) {
@@ -176,7 +178,7 @@ func main() {
 	b.fill(16, U, 37, 16, U, 39, "light_blue_wool")
 
 	b.save(filepath.Join(*out, "world"))
-	writeMission(*out)
+	writeMission(b, *out)
 }
 
 func (b *builder) save(dir string) {
@@ -239,7 +241,7 @@ func box(x0, y0, z0, x1, y1, z1 int) sim.Box {
 	return sim.Box{Min: sim.Cell{X: x0, Y: y0, Z: z0}, Max: sim.Cell{X: x1, Y: y1, Z: z1}}
 }
 
-func writeMission(dir string) {
+func writeMission(b *builder, dir string) {
 	m := &sim.Mission{
 		Title: "Ashworth Manor",
 		Briefing: "Lord Ashworth has grown fat on other people's misery. Tonight he dies, and his famous chalice " +
@@ -274,7 +276,9 @@ func writeMission(dir string) {
 			wp(44.5, U, 22.5, 30, 90), wp(22.5, U, 30.5, 20, 0), wp(20.5, U, 16.5, 25, 270), wp(25.5, G, 13.5, 20, 0), wp(39.5, G, 16.5, 1)}},
 	}
 	torch := func(id string, x, y, z float64) *sim.Object {
-		return &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Torch", Pos: v(x, y, z), Lit: true}
+		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Torch", Pos: v(x, y, z), Lit: true}
+		o.On = sim.TorchOn(b.solid, o.Pos.Cell())
+		return o
 	}
 	loot := func(id, name string, value int, x, y, z float64) *sim.Object {
 		return &sim.Object{ID: id, Kind: sim.KindLoot, Name: name, Value: value, Pos: v(x, y, z)}

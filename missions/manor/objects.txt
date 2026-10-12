@@ -72,108 +72,126 @@ Kind: torch
 Name: Torch
 Pos: 29.5,65,65.5
 Lit: yes
+On: north
 
 ID: t_gate_e
 Kind: torch
 Name: Torch
 Pos: 34.5,65,65.5
 Lit: yes
+On: north
 
 ID: t_front_w
 Kind: torch
 Name: Torch
 Pos: 29.5,65,42.5
 Lit: yes
+On: north
 
 ID: t_front_e
 Kind: torch
 Name: Torch
 Pos: 33.5,65,42.5
 Lit: yes
+On: north
 
 ID: t_hall
 Kind: torch
 Name: Torch
 Pos: 27.5,65,31.5
 Lit: yes
+On: north
 
 ID: t_hall2
 Kind: torch
 Name: Torch
 Pos: 35.5,65,39.5
 Lit: yes
+On: floor
 
 ID: t_dining_n
 Kind: torch
 Name: Torch
 Pos: 25.5,65,11.5
 Lit: yes
+On: north
 
 ID: t_dining_w
 Kind: torch
 Name: Torch
 Pos: 15.5,65,22.5
 Lit: yes
+On: west
 
 ID: t_kitchen
 Kind: torch
 Name: Torch
 Pos: 25.5,65,39.5
 Lit: yes
+On: east
 
 ID: t_guard
 Kind: torch
 Name: Torch
 Pos: 47.5,65,39.5
 Lit: yes
+On: floor
 
 ID: t_library
 Kind: torch
 Name: Torch
 Pos: 42.5,65,28.5
 Lit: yes
+On: floor
 
 ID: t_cellar
 Kind: torch
 Name: Torch
 Pos: 42.5,59,11.5
 Lit: yes
+On: north
 
 ID: t_vault
 Kind: torch
 Name: Torch
 Pos: 35.5,59,18.5
 Lit: yes
+On: floor
 
 ID: t_bedroom
 Kind: torch
 Name: Torch
 Pos: 18.5,70,24.5
 Lit: yes
+On: floor
 
 ID: t_gallery_n
 Kind: torch
 Name: Torch
 Pos: 35.5,70,11.5
 Lit: yes
+On: north
 
 ID: t_gallery_s
 Kind: torch
 Name: Torch
 Pos: 31.5,70,39.5
 Lit: yes
+On: west
 
 ID: t_study
 Kind: torch
 Name: Torch
 Pos: 38.5,70,38.5
 Lit: yes
+On: west
 
 ID: t_bath
 Kind: torch
 Name: Torch
 Pos: 28.5,70,39.5
 Lit: yes
+On: floor
 
 ID: faucet
 Kind: faucet

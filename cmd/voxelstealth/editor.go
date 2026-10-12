@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/memmaker/voxellib/voxel"
 	"math"
 	"strings"
 
@@ -50,7 +51,7 @@ var editorHelp = []string{
 	"F / Shift+F         fill marked box with the block / with air",
 	"C / V               copy marked box / paste it at the crosshair",
 	"Z                   undo (50 steps)",
-	"O / P               choose object / place it at the crosshair",
+	"O / P               choose object / place it at the crosshair (torches: on that floor or wall)",
 	"N / Shift+N         choose NPC kind / place it (faces your way)",
 	"K / Shift+K         add a patrol point for the last NPC / clear its patrol",
 	"Backspace           delete the object or NPC at the crosshair",
@@ -91,13 +92,24 @@ func (g *game) edTarget() (physics.Hit, bool) {
 
 // edPlaceCell is the empty cell in front of the targeted face.
 func (g *game) edPlaceCell() (sim.Cell, bool) {
+	c, _, ok := g.edPlace()
+	return c, ok
+}
+
+// edPlace is edPlaceCell plus the targeted face.
+func (g *game) edPlace() (sim.Cell, voxel.Face, bool) {
 	h, ok := g.edTarget()
 	if !ok {
-		return sim.Cell{}, false
+		return sim.Cell{}, 0, false
 	}
 	p := h.Block.Offset(h.Face)
-	return sim.Cell{X: p.X, Y: p.Y, Z: p.Z}, true
+	return sim.Cell{X: p.X, Y: p.Y, Z: p.Z}, h.Face, true
 }
+
+// torchFaceOn is what a torch placed on a block face hangs on, as
+// Minecraft: the block's top makes a floor torch, a side makes a wall
+// torch (the wall is back toward the block), the bottom is refused.
+var torchFaceOn = map[voxel.Face]string{voxel.FaceUp: "floor", voxel.FaceNorth: "south", voxel.FaceSouth: "north", voxel.FaceEast: "west", voxel.FaceWest: "east"}
 
 func (g *game) setBlocks(cs []change) {
 	for i := range cs {
@@ -229,11 +241,17 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 	case k == glfw.KeyO:
 		ed.obj = (ed.obj + 1) % len(objectKinds)
 	case k == glfw.KeyP:
-		at, ok := g.edPlaceCell()
+		at, face, ok := g.edPlace()
 		if !ok {
 			return
 		}
 		o := objectKinds[ed.obj]
+		if o.Kind == sim.KindTorch {
+			if o.On = torchFaceOn[face]; o.On == "" {
+				g.message("Torches stand on floors or hang on walls, not ceilings.")
+				return
+			}
+		}
 		ed.serial++
 		o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
 		o.Pos = at.Floor()

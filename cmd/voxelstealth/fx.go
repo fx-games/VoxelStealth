@@ -5,6 +5,7 @@ package main
 // shape of go-fps's particle presets, retuned to block units.
 
 import (
+	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxellib/particles"
 	"github.com/memmaker/voxelstealth/sim"
 )
@@ -68,10 +69,24 @@ func (g *game) tickFX() {
 			if s.Now%3 == 0 {
 				g.burst("wisp", o.Pos.Add(sim.Vec3{Y: 1}))
 			}
-		case o.Kind == sim.KindTorch && o.Lit && !o.Held:
-			g.burst("flame", o.Pos.Add(sim.Vec3{Y: 0.6}))
+		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen:
+			g.burst("flame", g.torchTip(o))
+		case o.Kind == sim.KindTorch && o.Lit && o.Fallen:
+			g.burst("flame", o.Pos.Add(sim.Vec3{Y: 0.15}))
 		}
 	}
+	// The held torch: its tip in view space (see drawHand) mapped through
+	// the camera basis; the hand's walk bob is ignored.
+	if i := s.HeldTorch(); i >= 0 && s.Objects[i].Lit {
+		fwd := g.cam.Forward()
+		right := fwd.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+		up := right.Cross(fwd)
+		p := right.Mul(-0.35).Add(up.Mul(-0.14)).Add(fwd.Mul(0.73))
+		small := fx["flame"] // so close to the eye, half size
+		small.Size0, small.Size1, small.Vel = 0.08, 0.02, [3]float64{0, 0.4, 0}
+		g.handParts.Emit(eye.X+float64(p[0]), eye.Y+float64(p[1]), eye.Z+float64(p[2]), small)
+	}
+	g.handParts.Tick(tickDur.Seconds(), nil)
 	for c, live := range s.Puddles {
 		if live > 0 && s.Now%2 == 0 && c.Floor().Dist(eye) < 24 {
 			g.parts.Emit(float64(c.X)+0.5, float64(c.Y)+0.05, float64(c.Z)+0.5, particles.Props{Count: 1, Spread: 0.4,

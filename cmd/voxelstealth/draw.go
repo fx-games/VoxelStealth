@@ -57,6 +57,7 @@ type drawState struct {
 	items     []render.ItemInstance
 	lastAnim  time.Time
 	parts     particles.System
+	handParts particles.System // the held torch's flame, drawn over the hand
 	partRend  *render.ParticleRenderer
 }
 
@@ -218,12 +219,39 @@ func (g *game) drawWorld(alpha float64) {
 	}
 	if g.sim != nil && !g.sim.Player.Dead {
 		g.drawHand(alpha)
+		g.partRend.Draw(&g.cam, g.handParts.P, alpha, nil) // after the hand's depth clear
 	}
 }
 
 func (g *game) prop(name string, p sim.Vec3, yaw, tilt float64) {
+	g.propTilted(name, p, yaw, tilt, yaw)
+}
+
+func (g *game) propTilted(name string, p sim.Vec3, yaw, tilt, tiltYaw float64) {
 	sky, blk := g.light(p.X, p.Y+0.3, p.Z)
-	g.insts = append(g.insts, render.ModelInstance{Model: g.props[name], X: p.X, Y: p.Y, Z: p.Z, Yaw: yaw, Tilt: tilt, TiltYaw: yaw, Sky: sky, Block: blk})
+	g.insts = append(g.insts, render.ModelInstance{Model: g.props[name], X: p.X, Y: p.Y, Z: p.Z, Yaw: yaw, Tilt: tilt, TiltYaw: tiltYaw, Sky: sky, Block: blk})
+}
+
+// torchTilt is a wall torch's lean away from the wall (Minecraft's 22.5°).
+const torchTilt = math.Pi / 8
+
+// torchMount places a standing torch like Minecraft: a wall torch (On)
+// hangs base against the wall, leaning out; a floor torch stands up.
+// Returns the model origin and tilt.
+func (g *game) torchMount(o *sim.Object) (pos sim.Vec3, tilt, tiltYaw float64) {
+	dx, dz := o.WallDir()
+	if dx == 0 && dz == 0 {
+		return o.Pos, 0, 0
+	}
+	return o.Pos.Add(sim.Vec3{X: 0.5 * float64(dx), Y: 0.15, Z: 0.5 * float64(dz)}),
+		torchTilt, math.Atan2(-float64(dx), float64(dz))
+}
+
+// torchTip is where a standing torch's flame burns.
+func (g *game) torchTip(o *sim.Object) sim.Vec3 {
+	p, tilt, yaw := g.torchMount(o)
+	const h = 0.75
+	return p.Add(sim.Vec3{X: math.Sin(yaw) * h * math.Sin(tilt), Y: h * math.Cos(tilt), Z: -math.Cos(yaw) * h * math.Sin(tilt)})
 }
 
 func (g *game) drawNPCs(alpha float64, dt float32) {
@@ -288,7 +316,8 @@ func (g *game) drawObjects(objs []*sim.Object, puddles map[sim.Cell]int) {
 			if o.Fallen {
 				g.prop(name, p, o.Yaw, math.Pi/2)
 			} else {
-				g.prop(name, p, o.Yaw, 0)
+				mp, tilt, tiltYaw := g.torchMount(o)
+				g.propTilted(name, mp, o.Yaw, tilt, tiltYaw)
 			}
 		case sim.KindLamp:
 			name := "lamp"
@@ -417,10 +446,13 @@ var bowHold = mgl32.HomogRotate3DY(mgl32.DegToRad(-90)).
 type part struct {
 	lo, hi mgl32.Vec3
 	c      color.NRGBA
+	tip    color.NRGBA // if set, the top quarter of the box (torch heads)
 }
 
+func tipped(p part, tip color.NRGBA) part { p.tip = tip; return p }
+
 func bx(x0, y0, z0, x1, y1, z1 float32, c color.NRGBA) part {
-	return part{mgl32.Vec3{x0, y0, z0}, mgl32.Vec3{x1, y1, z1}, c}
+	return part{lo: mgl32.Vec3{x0, y0, z0}, hi: mgl32.Vec3{x1, y1, z1}, c: c}
 }
 
 var (
@@ -443,8 +475,8 @@ var (
 
 // propParts are the props, built from boxes until real models exist.
 var propParts = map[string][]part{
-	"torch":       {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.07, 0.6, -0.07, 0.07, 0.7, 0.07, cold)},
-	"torch_lit":   {bx(-0.05, 0.1, -0.05, 0.05, 0.6, 0.05, wood), bx(-0.08, 0.6, -0.08, 0.08, 0.78, 0.08, flame2), bx(-0.05, 0.75, -0.05, 0.05, 0.9, 0.05, flame)},
+	"torch":       {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), cold)},
+	"torch_lit":   {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), flame)}, // the fire is particles (fx.go)
 	"lamp":        {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOf)},
 	"lamp_lit":    {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
 	"faucet":      {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
@@ -464,26 +496,36 @@ var propParts = map[string][]part{
 	"npc_mark":    {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
 }
 
-// boxModel builds a static model from coloured boxes, one texel per colour.
+// boxModel builds a static model from coloured boxes: one texture column
+// per colour (and tip colour), 8 texels tall so a tipped box shades its top
+// quarter differently; v runs down each box.
 func boxModel(name string, parts []part) *model.Model {
-	var cols []color.NRGBA
-	idx := map[color.NRGBA]int{}
+	type key struct{ c, tip color.NRGBA }
+	var cols []key
+	idx := map[key]int{}
 	for _, p := range parts {
-		if _, ok := idx[p.c]; !ok {
-			idx[p.c] = len(cols)
-			cols = append(cols, p.c)
+		k := key{p.c, p.tip}
+		if _, ok := idx[k]; !ok {
+			idx[k] = len(cols)
+			cols = append(cols, k)
 		}
 	}
-	tex := image.NewNRGBA(image.Rect(0, 0, len(cols), 1))
-	for i, c := range cols {
-		tex.Set(i, 0, c)
+	tex := image.NewNRGBA(image.Rect(0, 0, len(cols), 8))
+	for i, k := range cols {
+		for y := 0; y < 8; y++ {
+			c := k.c
+			if y < 2 && k.tip != (color.NRGBA{}) {
+				c = k.tip
+			}
+			tex.Set(i, y, c)
+		}
 	}
 	m := &model.Model{Name: name, Textures: []image.Image{tex}, Clips: map[string]*model.Clip{}, Tags: map[string]bool{},
 		Bones: []model.Bone{{Name: name, Parent: -1, R: mgl32.QuatIdent(), S: mgl32.Vec3{1, 1, 1}, InvBind: mgl32.Ident4()}}}
 	var me model.Mesh
 	for _, p := range parts {
 		lo, hi := p.lo, p.hi
-		u := (float32(idx[p.c]) + 0.5) / float32(len(cols))
+		u := (float32(idx[key{p.c, p.tip}]) + 0.5) / float32(len(cols))
 		for _, f := range [6]struct {
 			n mgl32.Vec3
 			c [4]mgl32.Vec3
@@ -497,7 +539,8 @@ func boxModel(name string, parts []part) *model.Model {
 		} {
 			base := uint32(len(me.Verts))
 			for _, c := range f.c {
-				me.Verts = append(me.Verts, model.Vertex{Pos: c, Normal: f.n, UV: mgl32.Vec2{u, 0.5}, Weights: [4]float32{1}})
+				v := 1 - (c[1]-lo[1])/max(hi[1]-lo[1], 1e-6)
+				me.Verts = append(me.Verts, model.Vertex{Pos: c, Normal: f.n, UV: mgl32.Vec2{u, v}, Weights: [4]float32{1}})
 			}
 			me.Indices = append(me.Indices, base, base+1, base+2, base, base+2, base+3)
 		}

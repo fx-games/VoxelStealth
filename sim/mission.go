@@ -239,7 +239,7 @@ func LoadMission(dir string) (*Mission, error) {
 	for _, r := range recs {
 		o := &Object{ID: r.get("ID"), Kind: r.get("Kind"), Name: r.get("Name"), Yaw: deg(r.get("Yaw")),
 			Value: atoi(r.get("Value")), Key: r.get("Key"), Count: atoi(r.get("Count")),
-			Locked: yes(r.get("Locked")), Open: yes(r.get("Open")), Lit: yes(r.get("Lit")), Running: yes(r.get("Running"))}
+			Locked: yes(r.get("Locked")), Open: yes(r.get("Open")), Lit: yes(r.get("Lit")), Running: yes(r.get("Running")), On: r.get("On")}
 		if o.Pos, err = parseVec(r.get("Pos")); err != nil {
 			return nil, fmt.Errorf("object %s Pos: %w", o.ID, err)
 		}
@@ -311,7 +311,7 @@ func (m *Mission) Save(dir string) error {
 		if o.Count != 0 {
 			r = append(r, kv{"Count", strconv.Itoa(o.Count)})
 		}
-		r = append(r, kv{"Key", o.Key}, kv{"Locked", yesNo(o.Locked)}, kv{"Open", yesNo(o.Open)}, kv{"Lit", yesNo(o.Lit)}, kv{"Running", yesNo(o.Running)})
+		r = append(r, kv{"Key", o.Key}, kv{"Locked", yesNo(o.Locked)}, kv{"Open", yesNo(o.Open)}, kv{"Lit", yesNo(o.Lit)}, kv{"Running", yesNo(o.Running)}, kv{"On", o.On})
 		recs = append(recs, r)
 	}
 	if err := writeRecords(filepath.Join(dir, "objects.txt"), "# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable\n", recs); err != nil {

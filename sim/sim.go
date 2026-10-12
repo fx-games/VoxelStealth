@@ -46,21 +46,46 @@ type Object struct {
 	Locked, Open   bool
 	Lit            bool // torches, lamps (powered and on)
 	Fallen         bool
-	Held           bool // torch in the player's hand
-	Running        bool // faucets
-	Gone           bool // taken or destroyed
-	Burn           int  // ticks burning; 0 = not burning
-	Burnt          bool
-	Pick           int   // lockpicking progress
-	Hidden         []int // NPC indices of bodies stored inside
-	LightCell      Cell  // where its light block is, when lit
-	HasLight       bool
+	// On is what a torch is attached to, like Minecraft: "floor" (the block
+	// below) or the wall in that direction: north (-Z), south, east (+X),
+	// west. Empty is resolved by TorchOn when the sim starts.
+	On        string
+	Held      bool // torch in the player's hand
+	Running   bool // faucets
+	Gone      bool // taken or destroyed
+	Burn      int  // ticks burning; 0 = not burning
+	Burnt     bool
+	Pick      int   // lockpicking progress
+	Hidden    []int // NPC indices of bodies stored inside
+	LightCell Cell  // where its light block is, when lit
+	HasLight  bool
 }
 
 // Cells occupied by a door.
 func (o *Object) doorCells() [2]Cell {
 	c := o.Pos.Cell()
 	return [2]Cell{c, c.Add(0, 1, 0)}
+}
+
+// wallDirs are the wall a torch hangs on, by On.
+var wallDirs = map[string][2]int{"north": {0, -1}, "south": {0, 1}, "east": {1, 0}, "west": {-1, 0}}
+
+// WallDir is the direction of the wall a torch hangs on (0,0: on the floor).
+func (o *Object) WallDir() (dx, dz int) {
+	d := wallDirs[o.On]
+	return d[0], d[1]
+}
+
+// TorchOn picks what a torch in cell c is attached to: a solid side wall,
+// else the floor. Missions without On get this at start.
+func TorchOn(solid func(x, y, z int) bool, c Cell) string {
+	for _, on := range []string{"north", "south", "east", "west"} {
+		d := wallDirs[on]
+		if solid(c.X+d[0], c.Y, c.Z+d[1]) {
+			return on
+		}
+	}
+	return "floor"
 }
 
 // Burning reports whether the object is on fire.
@@ -196,6 +221,9 @@ func New(w World, m *Mission) *Sim {
 	}
 	for _, d := range m.Objects {
 		o := *d
+		if o.Kind == KindTorch && o.On == "" {
+			o.On = TorchOn(w.Solid, o.Pos.Cell())
+		}
 		s.Objects = append(s.Objects, &o)
 	}
 	for _, d := range m.NPCs {
@@ -704,6 +732,8 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 		return Vec3{float64(c.X), float64(c.Y), float64(c.Z)}, Vec3{float64(c.X + 1), float64(c.Y + 2), float64(c.Z + 1)}
 	case KindTorch:
 		if !o.Fallen {
+			dx, dz := o.WallDir() // a wall torch hangs 0.5 toward its wall
+			p = p.Add(Vec3{0.3 * float64(dx), 0, 0.3 * float64(dz)})
 			return p.Add(Vec3{-0.25, 0.1, -0.25}), p.Add(Vec3{0.25, 0.9, 0.25})
 		}
 		return p.Add(Vec3{-0.4, 0, -0.4}), p.Add(Vec3{0.4, 0.25, 0.4})
