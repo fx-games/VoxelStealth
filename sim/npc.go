@@ -3,6 +3,7 @@ package sim
 import (
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/voxel/collide"
@@ -161,7 +162,7 @@ func (s *Sim) DecorBox(i int) collide.AABB {
 var DecorSize = map[string]Vec3{}
 
 func (w bodyWorld) Liquid(x, y, z int) character.Liquid {
-	if b := w.s.W.Block(x, y, z); b == "minecraft:water" {
+	if strings.HasPrefix(w.s.W.Block(x, y, z), "minecraft:water") { // any level
 		return character.LiquidWater
 	}
 	return character.LiquidNone

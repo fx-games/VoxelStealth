@@ -46,6 +46,7 @@ type (
 var (
 	receptrons       map[string]map[Stim]response
 	npcReceptrons    map[Stim]response
+	playerReceptrons map[Stim]func(s *Sim, st Stimulus) bool
 	blockReceptrons  map[string]map[Stim]cellResponse
 	liquidReceptrons map[Stim]map[Stim]cellResponse
 )
@@ -74,6 +75,19 @@ func init() { // in init: responses stimulate in turn
 		StimFire:   (*Sim).burnNPC,
 		StimShock:  func(s *Sim, k int, _ Stimulus) bool { s.killNPC(k, "accident", "electrocuted"); return true },
 		StimNoise:  (*Sim).hearNoise,
+	}
+	playerReceptrons = map[Stim]func(s *Sim, st Stimulus) bool{
+		StimShock: func(s *Sim, _ Stimulus) bool { s.HurtPlayer(20, "Electrocuted."); return true },
+		StimFire: func(s *Sim, st Stimulus) bool { // flames, not heat
+			if st.Amount >= 1 {
+				s.HurtPlayer(10, "You're burning!")
+			}
+			return st.Amount >= 1
+		},
+		StimBlast: func(s *Sim, st Stimulus) bool {
+			s.HurtPlayer(max(1, int(24-st.Pos.Dist(s.Player.Pos)*5)), "Caught in the blast.")
+			return true
+		},
 	}
 }
 
@@ -116,6 +130,10 @@ func (s *Sim) Stimulate(st Stimulus) bool {
 		if boxDist(st.Pos, Vec3{b.MinX, b.MinY, b.MinZ}, Vec3{b.MaxX, b.MaxY, b.MaxZ}) <= st.Radius && s.stimNPC(k, st) {
 			reacted = true
 		}
+	}
+	if p := s.Player.Pos; !s.Player.Dead && playerReceptrons[st.Stim] != nil &&
+		boxDist(st.Pos, p.Sub(Vec3{0.3, 0, 0.3}), p.Add(Vec3{0.3, 1.8, 0.3})) <= st.Radius && playerReceptrons[st.Stim](s, st) {
+		reacted = true
 	}
 	r := st.Radius
 	lo, hi := st.Pos.Sub(Vec3{r, r, r}).Cell(), st.Pos.Add(Vec3{r, r, r}).Cell()

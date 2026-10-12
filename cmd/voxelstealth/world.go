@@ -38,7 +38,7 @@ func (w *simWorld) Solid(x, y, z int) bool {
 }
 
 func (w *simWorld) Liquid(x, y, z int) character.Liquid {
-	switch w.Block(x, y, z) {
+	switch w.g.reg.Info(w.g.eng.World.Block(x, y, z)).Name { // any level
 	case "minecraft:water":
 		return character.LiquidWater
 	case "minecraft:lava":

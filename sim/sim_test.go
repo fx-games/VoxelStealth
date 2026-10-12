@@ -365,8 +365,12 @@ func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
 		t.Fatalf("oil %d cells, water %d", len(s.Oil), len(s.Puddles))
 	}
 	s.NPCs[0].Body.Teleport(5.5, 1, 2.5)                                         // standing in it
+	s.Player.Pos, s.Player.Health = Vec3{5.5, 1, 3.5}, 1000                      // and the player
 	s.Stimulate(Stimulus{Stim: StimFire, Pos: Vec3{5.5, 1.1, 2.5}, Radius: 0.3}) // a spark
 	run(s, 2*TicksPerSecond)
+	if s.Player.Health == 1000 {
+		t.Fatal("player unhurt standing in burning oil")
+	}
 	if s.NPCs[0].State != StateDead || s.NPCs[0].Death != "accident" {
 		t.Fatalf("guard %v (%s), want burned", s.NPCs[0].State, s.NPCs[0].Death)
 	}

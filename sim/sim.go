@@ -397,12 +397,6 @@ func (s *Sim) tickPlayer() {
 		n := s.NPCs[p.Carrying]
 		n.Body.Teleport(p.Pos.X, p.Pos.Y, p.Pos.Z)
 	}
-	if c := p.Pos.Cell(); s.Puddles[c] > 0 && !p.Dead {
-		s.HurtPlayer(20, "Electrocuted.")
-	}
-	if c := p.Pos.Cell(); s.Oil[c] > 0 && !p.Dead && s.Now%10 == 0 {
-		s.HurtPlayer(10, "You're burning!")
-	}
 }
 
 // visibility is the light gem: how lit the player's body is, raised by
@@ -649,9 +643,6 @@ func (s *Sim) Explode(pos Vec3) {
 	}
 	s.Stimulate(Stimulus{Stim: StimBlast, Pos: pos, Radius: 3})
 	s.Stimulate(Stimulus{Stim: StimFire, Pos: pos, Radius: 4.5})
-	if d := s.Player.Pos.Dist(pos); d < 3.5 {
-		s.HurtPlayer(int(24-d*5), "Caught in the blast.")
-	}
 	s.emit(pos, 95, "explosion", -1)
 	s.event(Event{Kind: EvBlast, Pos: pos})
 	s.init() // doors and walls changed: rebuild the room graph
