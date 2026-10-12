@@ -52,6 +52,15 @@ func (g *game) loadModels(dir string) error {
 	if err != nil {
 		return err
 	}
+	for _, name := range decor {
+		m, err := gltf.LoadFile(filepath.Join(dir, name+".gltf"))
+		if err != nil {
+			return err
+		}
+		if g.props[name], err = g.modelRend.Add(m); err != nil {
+			return err
+		}
+	}
 	candles, err := gltf.LoadFile(filepath.Join(dir, "candles.gltf"))
 	if err != nil {
 		return err
@@ -161,6 +170,9 @@ func (g *game) chestSkin(t float32) []mgl32.Mat4 {
 	skin[lid] = hinge.Mul4(mgl32.HomogRotate3DX(t * mgl32.DegToRad(80))).Mul4(g.chest.Bones[lid].InvBind)
 	return skin
 }
+
+// decor maps decoration Names to their models.
+var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_box", "Crate of bottles": "bottle_crate"}
 
 // ownModel maps torch Names that have their own model, flame included
 // (no particles), to it.

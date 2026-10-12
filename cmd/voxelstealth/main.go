@@ -60,7 +60,7 @@ func main() {
 		mute       = flag.Bool("mute", false, "no sound")
 		voiceDir   = flag.String("voices", "assets/voice", "voice lines, <dir>/<speaker>/<line>.ogg")
 		sfxDir     = flag.String("sfx", "assets/sfx", "recorded sounds, <dir>/<name>-<n>.ogg")
-		modelDir   = flag.String("models", "assets/models", "prop models (chest, lantern, lamp)")
+		modelDir   = flag.String("models", "assets/models", "prop models (chest, lantern, lamp, candles, decorations)")
 	)
 	flag.Parse()
 

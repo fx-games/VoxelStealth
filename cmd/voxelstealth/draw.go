@@ -331,6 +331,8 @@ func (g *game) drawObjects(objs []*sim.Object) {
 			} else {
 				g.prop(name, p, o.Yaw, 0)
 			}
+		case sim.KindDecor:
+			g.prop(decor[o.Name], p, o.Yaw, 0)
 		case sim.KindFaucet:
 			g.prop("faucet", p, o.Yaw, 0)
 			if o.Running {

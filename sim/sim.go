@@ -23,6 +23,7 @@ const (
 	KindKey       = "key"       // opens doors/chests with the same Key
 	KindAmmo      = "ammo"      // Name = ammo type, Count
 	KindFlammable = "flammable" // rugs, tapestries, hay
+	KindDecor     = "decor"     // decoration only: Name picks the model; never targeted
 )
 
 // Ammo types.
@@ -810,7 +811,7 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 	best := NoTarget
 	best.Dist = Reach
 	for i, o := range s.Objects {
-		if o.Gone || o.Held {
+		if o.Gone || o.Held || o.Kind == KindDecor {
 			continue
 		}
 		lo, hi := s.ObjectBox(i)

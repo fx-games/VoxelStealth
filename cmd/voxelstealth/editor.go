@@ -36,6 +36,9 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindFlammable, Name: "Rug"},
 	{Kind: sim.KindAmmo, Name: sim.AmmoWater, Count: 2},
 	{Kind: sim.KindAmmo, Name: sim.AmmoBroadhead, Count: 3},
+	{Kind: sim.KindDecor, Name: "Box of apples"},
+	{Kind: sim.KindDecor, Name: "Small box"},
+	{Kind: sim.KindDecor, Name: "Crate of bottles"},
 }
 
 var npcKinds = []sim.NPCDef{
@@ -270,6 +273,9 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 		ed.serial++
 		o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
 		o.Pos = at.Floor()
+		if o.Kind == sim.KindDecor {
+			o.Yaw = g.cam.Yaw
+		}
 		m.Objects = append(m.Objects, &o)
 	case k == glfw.KeyN && !shift:
 		ed.npc = (ed.npc + 1) % len(npcKinds)
