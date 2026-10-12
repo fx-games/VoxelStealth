@@ -24,6 +24,7 @@ type soundState struct {
 	lineLoud map[string]float64                 // line id → bark loudness
 	ambient  *audio.Voice
 	crickets *audio.Voice // outdoors at night (assets/sfx/crickets-1.ogg)
+	roomtone *audio.Voice // indoors (assets/sfx/roomtone-1.ogg)
 }
 
 const sr = audio.SampleRate
@@ -182,6 +183,19 @@ func (g *game) loadSFX(dir string) {
 	}
 }
 
+// woodNear reports a wooden block at or next to p (a bolt's hit point lies
+// on a block face).
+func (g *game) woodNear(p sim.Vec3) bool {
+	c := p.Cell()
+	for _, d := range [7][3]int{{0, 0, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}} {
+		x, y, z := c.X+d[0], c.Y+d[1], c.Z+d[2]
+		if g.world.Solid(x, y, z) && sim.Surface(g.world.Block(x, y, z)) == "wood" {
+			return true
+		}
+	}
+	return false
+}
+
 // sound picks a recording of name (a random variant), else the synth.
 func (g *game) sound(name string) *audio.Sound {
 	if v := g.sfx[name]; len(v) > 0 {
@@ -237,13 +251,19 @@ func (g *game) tickSounds() {
 	if g.crickets == nil && g.sfx["crickets"] != nil {
 		g.crickets = g.mixer.Loop(g.sound("crickets"), e.X, e.Y, e.Z, 0)
 	}
-	gain, bugs := float32(0.15), float32(0.1)
+	if g.roomtone == nil && g.sfx["roomtone"] != nil {
+		g.roomtone = g.mixer.Loop(g.sound("roomtone"), e.X, e.Y, e.Z, 0)
+	}
+	gain, bugs, room := float32(0.15), float32(0.1), float32(0)
 	if g.sim != nil && g.sim.Rooms.RoomAt(e.Cell()) != 0 {
-		gain, bugs = 0.05, 0.01 // indoors: the wind is muffled
+		gain, bugs, room = 0.05, 0.01, 0.2 // indoors: the wind is muffled
 	}
 	g.ambient.Set(e.X, e.Y+2, e.Z, gain)
 	if g.crickets != nil {
 		g.crickets.Set(e.X, e.Y, e.Z, bugs)
+	}
+	if g.roomtone != nil {
+		g.roomtone.Set(e.X, e.Y, e.Z, room)
 	}
 }
 
@@ -254,6 +274,10 @@ func (g *game) handleEvents() {
 	for _, e := range s.Events {
 		switch e.Kind {
 		case sim.EvSound:
+			if e.Sound == "arrow" && g.woodNear(e.Pos) && g.sfx["arrow-wood"] != nil {
+				g.playWorld("arrow-wood", e.Pos, e.Loud)
+				continue
+			}
 			if e.Sound == "footstep" {
 				name := "step-" + s.FloorSurface(e.Pos)
 				if g.sfx[name] == nil {

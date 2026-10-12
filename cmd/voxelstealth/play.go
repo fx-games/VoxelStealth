@@ -259,7 +259,9 @@ func (g *game) tickPlay() {
 		g.mouseWas = down
 	}
 	if g.reload > 0 {
-		g.reload--
+		if g.reload--; g.reload == reloadTicks-6 {
+			g.playLocal("reload", 0.4) // spanning the bow, after the twang
+		}
 	}
 	if g.recoil > 0 {
 		g.recoil--

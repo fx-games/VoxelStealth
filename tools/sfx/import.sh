@@ -93,3 +93,48 @@ oggenc -Q -q 4 -o "$out/ignite-1.ogg" "$tmp/mid.wav"
 sox "$fs/65174_7037.mp3" -r 44100 -c 1 -b 16 "$tmp/mid.wav" silence 1 0.005 0.5% reverse silence 1 0.05 0.5% reverse norm -3
 oggenc -Q -q 4 -o "$out/ignite-2.ogg" "$tmp/mid.wav"
 echo "ignite: 2"
+
+# More freesound previews (all CC0 1.0, verified on each sound's page):
+#   660765 "Loading a Ballista" (MadPanCake)        812058/812059 "Ratchet strap-8/-9" (nikerk)
+#   534956 "ARROW_WOOD_IMPACT_SINGLE_ARCHERY_01.wav" (JoeDinesSound)
+#   205938 "Arrow Impact" (Twisted_Euphoria)        410751 "Arrow strike.mp3" (plantmonkey)
+#   45650 "fuse_burning_48khz.wav" (elonen)         558859 "Faucet running.WAV" (DigPro120)
+#   272389 "Sink faucet Running.wav" (danhelbling)  441096 "Squeak Rusty Metal Water Tap" (brunoboselli)
+#   376195 "toy ratchet.wav" (monotraum)            637808 "room tone small space quiet.flac" (kyles)
+for p in 660/660765_5334162 812/812058_2039537 812/812059_2039537 534/534956_579267 \
+	205/205938_3842302 410/410751_182472 45/45650_45914 558/558859_7414526 272/272389_4783367 \
+	441/441096_300738 376/376195_1756543 637/637808_612689; do
+	curl -sfL -m 120 -A "Mozilla/5.0" "https://cdn.freesound.org/previews/$p-hq.mp3" -o "$fs/$(basename "$p").mp3"
+done
+# cut NAME-N IN EFFECTS...: one sox pass (44.1 kHz mono 16-bit) then Ogg q4.
+# (downmix first: norm after an implicit stereo->mono mix undershoots)
+cut() {
+	sox "$2" -r 44100 -c 1 -b 16 "$tmp/mid.wav" channels 1 "${@:3}"
+	oggenc -Q -q 4 -o "$out/$1.ogg" "$tmp/mid.wav"
+}
+trimsil='silence 1 0.005 0.1% reverse silence 1 0.05 0.1% reverse'
+# reload: ballista string being drawn; two ratchet-strap cranks joined (gaps >0.15 s removed).
+cut reload-1 "$fs/660765_5334162.mp3" $trimsil norm -3
+sox "$fs/812058_2039537.mp3" "$fs/812059_2039537.mp3" -r 44100 -c 1 -b 16 "$tmp/mid.wav" channels 1 silence -l 1 0.005 0.1% -1 0.15 0.1% norm -3
+oggenc -Q -q 4 -o "$out/reload-2.ogg" "$tmp/mid.wav"
+echo "reload: 2"
+# arrow-wood: longbow arrow into a wooden shed; synthesized wood impact; ruler twang (the wobble).
+cut arrow-wood-1 "$fs/534956_579267.mp3" trim 0.08 0.6 fade t 0 0.6 0.2 norm -3
+cut arrow-wood-2 "$fs/205938_3842302.mp3" $trimsil norm -3
+cut arrow-wood-3 "$fs/410751_182472.mp3" trim 0.75 1.5 fade t 0.01 1.5 0.3 norm -3
+echo "arrow-wood: 3"
+# fuse: 0.5 s chunk (sim repeats it every 0.5 s); water: 2.5 s chunks (every 2.25 s).
+cut fuse-1 "$fs/45650_45914.mp3" trim 3 0.5 fade t 0.05 0.5 0.05 norm -6
+echo "fuse: 1"
+cut water-1 "$fs/558859_7414526.mp3" trim 4 2.5 fade t 0.1 2.5 0.1 norm -6
+cut water-2 "$fs/272389_4783367.mp3" trim 2 2.5 fade t 0.1 2.5 0.1 norm -6
+echo "water: 2"
+# squeak: two single turns of the rusty tap; noisemaker: 0.4 s of toy-ratchet clicking (every 0.4 s).
+cut squeak-1 "$fs/441096_300738.mp3" trim 0.98 0.5 fade t 0.01 0.5 0.05 norm -3
+cut squeak-2 "$fs/441096_300738.mp3" trim 2.88 0.4 fade t 0.01 0.4 0.05 norm -3
+echo "squeak: 2"
+cut noisemaker-1 "$fs/376195_1756543.mp3" trim 6 0.4 fade t 0.01 0.4 0.01 norm -3
+echo "noisemaker: 1"
+# roomtone: 30 s from the steady middle, 0.5 s fades so the loop seam is silent.
+cut roomtone-1 "$fs/637808_612689.mp3" trim 20 30 fade t 0.5 30 0.5 norm -12
+echo "roomtone: 1"

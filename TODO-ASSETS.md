@@ -14,7 +14,7 @@ Voice lines: see TODO-VOICE.md.
 
 ## Props (replace box models)
 
-- [ ] Wall torch: lit (animated flame) and unlit
+- [x] Wall torch: lit (animated flame) and unlit
 - [ ] Standing electric lamp: on (lit shade) and off; also lying knocked over
 - [ ] Faucet + running water stream (animated)
 - [ ] Chest with opening lid
@@ -60,8 +60,8 @@ don't grate.
 
 - [x] Footsteps, 4+ variations per surface: stone, wood, carpet, grass,
       water/puddle; walking, running, crouching — Dynamic Surroundings (9–11 each; run/crouch differ only in loudness)
-- [x] Crossbow: shot (twang) — Dynamic Surroundings; [ ] reload
-- [x] Bolt impacts: stone (2, Angband), flesh (2, Angband); [ ] wood
+- [x] Crossbow: shot (twang) — Dynamic Surroundings; [x] reload — freesound/MadPanCake (ballista draw), freesound/nikerk (ratchet crank)
+- [x] Bolt impacts: stone (2, Angband), flesh (2, Angband); [x] wood (3) — freesound/JoeDinesSound, Twisted_Euphoria, plantmonkey
 - [x] Blackjack: swing (sword swing, Dynamic Surroundings), hit (Angband)
 - [x] Blade: swing (Dynamic Surroundings), stab (Angband)
 - [x] Body: falling to the floor, dropped (Angband); hidden in a chest uses the same
@@ -72,12 +72,12 @@ don't grate.
 - [x] Lamp crashing over (Angband ceramic breaks)
 - [x] Glass shattering (4, Angband)
 - [x] Water arrow splash (Dynamic Surroundings); torch doused hiss (Angband spray — check it)
-- [ ] Faucet running (loop); squeaky tap handle
+- [x] Faucet running (2 chunks) — freesound/DigPro120, danhelbling; squeaky tap handle (2) — freesound/brunoboselli
 - [x] Fire: crackle (4 cuts, freesound/Dynamicell), ignition whoosh + match strike (freesound)
 - [x] Electric zap (Angband)
-- [x] Flash bomb: blast (Dynamic Surroundings); [ ] fuse hiss
-- [ ] Noisemaker arrow: repeating chirp/rattle
-- [x] Ambience: outdoor night wind + crickets loops (Dynamic Surroundings); [ ] indoor room tone loop
+- [x] Flash bomb: blast (Dynamic Surroundings); [x] fuse hiss — freesound/elonen
+- [x] Noisemaker arrow: repeating chirp/rattle — freesound/monotraum (toy ratchet)
+- [x] Ambience: outdoor night wind + crickets loops (Dynamic Surroundings); [x] indoor room tone loop — freesound/kyles
 
 ## Music
 
