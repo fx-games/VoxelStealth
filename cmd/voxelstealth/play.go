@@ -270,6 +270,9 @@ func (g *game) tickPlay() {
 	if g.swing > 0 {
 		g.swing--
 	}
+	for _, t := range g.npcTargets { // NPCs going down topple, arrows or not
+		t.tickFall()
+	}
 	g.tickArrows()
 	s.Tick()
 	g.handleEvents()
@@ -349,7 +352,6 @@ func (g *game) tickArrows() {
 	}
 	targets := make([]projectile.Target, 0, len(g.npcTargets))
 	for k, t := range g.npcTargets {
-		t.tickFall()
 		if n := s.NPCs[k]; !n.Hidden && !n.CarriedBy {
 			targets = append(targets, t)
 		}
