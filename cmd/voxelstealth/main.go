@@ -114,15 +114,18 @@ func main() {
 		fmt.Sscanf(*startPos, "%f,%f,%f", &x, &y, &z)
 	}
 	g.player = character.New(x, y, z)
+	eng.Renderer.Opt.Daylight = float32(sim.DaylightAt(m.StartTime)) // no daylight flash while loading
 	g.cam.Yaw = m.StartYaw
 	if *look != "" {
 		var yd, pd float64
 		fmt.Sscanf(*look, "%f,%f", &yd, &pd)
 		g.cam.Yaw, g.cam.Pitch = yd*math.Pi/180, pd*math.Pi/180
 	}
+	t0 := time.Now()
 	if err := g.loadAssets(*assets); err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("assets loaded in %v", time.Since(t0))
 	if !*mute && *shot == "" {
 		if g.mixer, err = audio.New(); err != nil {
 			log.Printf("sound disabled: %v", err)
@@ -234,9 +237,7 @@ func (g *game) waitForWorld() {
 			}
 		}
 	}
-	if _, pc, pm := g.eng.Progress(); pc > 0 || pm > 0 {
-		return
-	}
+	log.Printf("world ready after %d ticks", g.tick)
 	g.ready = true
 	if g.editing {
 		g.player.Flying = true
@@ -269,7 +270,7 @@ func (g *game) missionBounds() (lo, hi sim.Cell) {
 			grow(b.Max)
 		}
 	}
-	return lo.Add(-16, 0, -16), hi.Add(16, 0, 16)
+	return lo, hi
 }
 
 // startSim begins the mission from its start.

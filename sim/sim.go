@@ -247,8 +247,11 @@ func (s *Sim) Restore(st State) {
 
 // Daylight is the sky light factor for the time of day: moonlight at
 // night, rising over dawn (5:00–7:00) and falling over dusk (19:00–21:00).
-func (s *Sim) Daylight() float64 {
-	h := math.Mod(s.Time/3600, 24)
+func (s *Sim) Daylight() float64 { return DaylightAt(s.Time) }
+
+// DaylightAt is the sky light factor at t seconds since midnight.
+func DaylightAt(t float64) float64 {
+	h := math.Mod(t/3600, 24)
 	const night = 0.12
 	switch {
 	case h < 5 || h >= 21:
