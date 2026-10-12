@@ -36,6 +36,10 @@ var lineIDs = map[string]string{
 	"Show me where!":                          "follow-reporter",
 }
 
+// shouted lines carry as far as an alarm; the rest is normal speech.
+var shouted = map[string]bool{"spot-player": true, "alarmed": true, "fire": true, "found-dead-body": true,
+	"found-unconscious-body": true, "lost-player": true, "follow-reporter": true}
+
 // vocalIDs are the wordless sounds an NPC makes, by sim sound kind; several
 // ids are variations to pick from.
 var vocalIDs = map[string][]string{
@@ -109,9 +113,13 @@ func (g *game) voiceFor(k int, ids ...string) *audio.Sound {
 // playBark plays what an NPC said: its recording, else the synthesized
 // voice.
 func (g *game) playBark(e sim.Event) {
-	if s := g.voiceFor(e.NPC, lineIDs[e.Line]); s != nil {
-		g.playWorldSound(s, e.Pos, 40)
+	id, loud := lineIDs[e.Line], 40.0
+	if shouted[id] {
+		loud = 60
+	}
+	if s := g.voiceFor(e.NPC, id); s != nil {
+		g.playWorldSound(s, e.Pos, loud)
 		return
 	}
-	g.playWorld("voice", e.Pos, 40)
+	g.playWorld("voice", e.Pos, loud)
 }
