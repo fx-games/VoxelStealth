@@ -51,12 +51,13 @@ var helpText = []string{
 	"E (hold)          use: doors, loot, pick locks, carry bodies, take torches, knock lamps",
 	"G                 drop the body or torch you carry (E on a chest hides a body)",
 	"1 2 3 4           crossbow, blackjack, blade, flash bomb",
-	"X                 next arrow type: broadhead, water, noisemaker",
+	"X                 next arrow type: broadhead, water, noisemaker, rope",
 	"Left mouse        shoot / swing / throw (with a torch in hand: throw it)",
 	"Tab               objectives          F5 / F9  quicksave / quickload",
 	"F2                screenshot           Esc  release mouse (again: quit)",
 	"",
 	"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
+	"Rope arrows hang a rope: jump at it to grab it, W/S climb, A/D (or Ctrl+W/S) swing, Space lets go.",
 	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
 	"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
@@ -240,7 +241,7 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 		wl = fmt.Sprintf("Flash bomb x%d", p.Ammo[sim.AmmoExplosive])
 	}
 	c.text(wl, w-c.width(wl)-10, h-34, white)
-	amm := fmt.Sprintf("broad %d  water %d  noise %d  bombs %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoExplosive])
+	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive])
 	c.text(amm, w-c.width(amm)-10, h-18, grey)
 	if p.Carrying >= 0 {
 		t := "Carrying " + s.NPCs[p.Carrying].Name + " (G drops)"

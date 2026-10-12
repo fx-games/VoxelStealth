@@ -128,7 +128,7 @@ func (g *game) loadAssets(dir string) error {
 		}
 		g.props[name] = h
 	}
-	for ammo, head := range map[string]color.NRGBA{"broadhead": steel, "water": water, "noisemaker": brass} {
+	for ammo, head := range map[string]color.NRGBA{"broadhead": steel, "water": water, "noisemaker": brass, "rope": hemp} {
 		h, err := g.modelRend.Add(arrowModel(head))
 		if err != nil {
 			return err
@@ -210,6 +210,7 @@ func (g *game) drawWorld(alpha float64) {
 			g.prop("noisemaker", n.Pos, 0, 0)
 		}
 		g.drawArrows(alpha)
+		g.drawRopes(alpha)
 	} else {
 		g.drawEditorMarks()
 		g.drawObjects(g.mission.Objects)
@@ -463,6 +464,7 @@ var (
 	shadeOn = color.NRGBA{255, 240, 170, 255}
 	shadeOf = color.NRGBA{120, 110, 90, 255}
 	water   = color.NRGBA{60, 110, 200, 255}
+	hemp    = color.NRGBA{150, 125, 85, 255}
 	spark   = color.NRGBA{200, 230, 255, 255}
 	rugRed  = color.NRGBA{140, 30, 34, 255}
 	ash     = color.NRGBA{40, 38, 36, 255}
@@ -478,6 +480,7 @@ var propParts = map[string][]part{
 	"lamp_lit":   {bx(-0.2, 0, -0.2, 0.2, 0.06, 0.2, brass), bx(-0.04, 0, -0.04, 0.04, 1.25, 0.04, brass), bx(-0.25, 1.2, -0.25, 0.25, 1.55, 0.25, shadeOn)},
 	"faucet":     {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
 	"stream":     {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
+	"rope":       {bx(-0.025, -0.025, 0, 0.025, 0.025, ropeSeg+0.02, hemp)}, // one segment, along +Z (see drawRopes)
 	"rug":        {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
 	"ash":        {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
 	"flames":     {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},

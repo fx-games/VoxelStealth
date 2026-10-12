@@ -268,7 +268,7 @@ func (m *Mission) Save(dir string) error {
 		return err
 	}
 	var ammo []string
-	for _, k := range []string{AmmoBroadhead, AmmoWater, AmmoNoise, AmmoExplosive} {
+	for _, k := range []string{AmmoBroadhead, AmmoWater, AmmoNoise, AmmoRope, AmmoExplosive} {
 		if m.Ammo[k] > 0 {
 			ammo = append(ammo, fmt.Sprintf("%s=%d", k, m.Ammo[k]))
 		}

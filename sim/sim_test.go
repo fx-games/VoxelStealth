@@ -296,3 +296,19 @@ func TestWaterArrowPuddle(t *testing.T) {
 		}
 	}
 }
+
+func TestRopeArrowHangsToFloor(t *testing.T) {
+	w, m := twoRooms()
+	s := New(w, m)
+	// Shot level along +X into the wall at x=10, 3 blocks up.
+	if !s.AddRope(Vec3{10.25, 3.5, 2.5}, math.Pi/2, 0) {
+		t.Fatal("no rope")
+	}
+	r := s.Ropes[0]
+	if math.Abs(r.Top.X-9.47) > 0.01 || math.Abs(r.Len-(3.5-1-0.3)) > 0.01 {
+		t.Fatalf("rope top %v len %.2f", r.Top, r.Len)
+	}
+	if s.AddRope(Vec3{4.5, 0.75, 4.5}, 0, -math.Pi/2) { // straight down into the floor
+		t.Fatal("rope from an arrow in the floor")
+	}
+}
