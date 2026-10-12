@@ -43,6 +43,7 @@ type weapons struct {
 	arrowAmmo  map[*projectile.Arrow]string
 	reported   map[*projectile.Arrow]bool
 	npcTargets []*npcTarget
+	mouseLatch bool // ignore the button until released
 	useHeld    int
 	target     sim.Target
 	mouseWas   bool
@@ -248,7 +249,10 @@ func (g *game) tickPlay() {
 			g.useHeld = 0
 		}
 		down := g.mouseDown()
-		if down && (!g.mouseWas || g.weapon == wCrossbow) {
+		if !down {
+			g.mouseLatch = false
+		}
+		if down && !g.mouseLatch && (!g.mouseWas || g.weapon == wCrossbow) {
 			g.useWeapon()
 		}
 		g.mouseWas = down
@@ -276,6 +280,7 @@ func (g *game) useWeapon() {
 		if g.swing == 0 {
 			s.ThrowTorch(g.eye(), g.viewDir(), 9)
 			g.swing = swingTicks
+			g.mouseLatch = true // the same click must not go on to fire
 		}
 		return
 	}
