@@ -92,7 +92,13 @@ func main() {
 	reg := voxel.NewRegistry()
 	reg.Resolver = pack.Resolver()
 	level.RegisterBlocks(reg)
+	var bounds *[2]voxel.ChunkPos
+	if a := m.Area; a != (sim.Box{}) {
+		// The level and the empty, lit ring buildmanor saves around it.
+		bounds = &[2]voxel.ChunkPos{{X: a.Min.X>>4 - 1, Z: a.Min.Z>>4 - 1}, {X: a.Max.X>>4 + 1, Z: a.Max.Z>>4 + 1}}
+	}
 	eng, err := engine.New(engine.Config{
+		Bounds:         bounds,
 		Registry:       reg,
 		RenderDistance: 10,
 		WorldDir:       filepath.Join(*missionDir, "world"),
@@ -155,6 +161,7 @@ type game struct {
 	sim        *sim.Sim // nil while loading and in the editor
 	editing    bool     // editor mode (sim == nil unless playtesting)
 	ready      bool     // the mission's chunks are loaded
+	loadFrac   float64  // loading progress, 0..1
 	captured   bool
 	auto       bool // automated -shot run: no input at all
 	script     []scriptStep
@@ -188,13 +195,18 @@ func (g *game) run(shotPath string, shotAt int) {
 		fw, fh := g.win.GetFramebufferSize()
 		gl.Viewport(0, 0, int32(fw), int32(fh))
 		day := float32(g.eng.Renderer.Opt.Daylight)
+		if !g.ready {
+			day = 0 // loading screen: black until the level is complete
+		}
 		gl.ClearColor(0.55*day, 0.65*day, 0.85*day, 1)
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		g.cam.X, g.cam.Y, g.cam.Z = ix, iy+g.player.EyeHeight, iz
 		g.cam.Aspect = float64(fw) / float64(max(fh, 1))
-		g.eng.Render(&g.cam)
-		g.drawWorld(alpha)
-		g.eng.Renderer.DrawCrosshair(float32(g.cam.Aspect))
+		if g.ready {
+			g.eng.Render(&g.cam)
+			g.drawWorld(alpha)
+			g.eng.Renderer.DrawCrosshair(float32(g.cam.Aspect))
+		}
 		if g.shotReq {
 			g.shotReq = false
 			saveShot(filepath.Join("screenshots", time.Now().Format("2006-01-02_15-04-05")+".png"), fw, fh)
@@ -230,12 +242,18 @@ func (g *game) step() {
 func (g *game) waitForWorld() {
 	g.player.PrevX, g.player.PrevY, g.player.PrevZ = g.player.X, g.player.Y, g.player.Z
 	lo, hi := g.missionBounds()
+	done, total := 0, 0
 	for cx := lo.X >> 4; cx <= hi.X>>4; cx++ {
 		for cz := lo.Z >> 4; cz <= hi.Z>>4; cz++ {
-			if !g.eng.ChunkReady(voxel.ChunkPos{X: cx, Z: cz}) {
-				return
+			total++
+			if g.eng.ChunkReady(voxel.ChunkPos{X: cx, Z: cz}) {
+				done++
 			}
 		}
+	}
+	g.loadFrac = float64(done) / float64(max(total, 1))
+	if _, pc, pm := g.eng.Progress(); done < total || pc > 0 || pm > 0 {
+		return // not all lit and meshed yet: keep the loading screen up
 	}
 	log.Printf("world ready after %d ticks", g.tick)
 	g.ready = true
@@ -250,6 +268,9 @@ func (g *game) waitForWorld() {
 // missionBounds is the cell box around everything the mission places.
 func (g *game) missionBounds() (lo, hi sim.Cell) {
 	m := g.mission
+	if m.Area != (sim.Box{}) {
+		return m.Area.Min, m.Area.Max
+	}
 	lo, hi = m.Start.Cell(), m.Start.Cell()
 	grow := func(c sim.Cell) {
 		lo = sim.Cell{X: min(lo.X, c.X), Y: min(lo.Y, c.Y), Z: min(lo.Z, c.Z)}
@@ -279,7 +300,6 @@ func (g *game) startSim() {
 	g.player.Teleport(g.mission.Start.X, g.mission.Start.Y, g.mission.Start.Z)
 	g.cam.Yaw, g.cam.Pitch = g.mission.StartYaw, 0
 	g.resetPlay()
-	g.message(g.mission.Title + ". " + g.mission.Briefing)
 	g.message("F1: controls   Tab: objectives")
 }
 

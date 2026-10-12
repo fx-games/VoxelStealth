@@ -159,7 +159,16 @@ func (g *game) drawHUD(fbW, fbH int) {
 
 func (g *game) paintHUD(c *canvas, w, h int) {
 	if !g.ready {
-		c.panel([]string{"Loading " + g.mission.Title + "..."}, []color.Color{white})
+		m := g.mission
+		hr, mi := int(m.StartTime)/3600, int(m.StartTime)/60%60
+		lines := []string{m.Title, fmt.Sprintf("%02d:%02d", hr, mi), ""}
+		lines = append(lines, wrap(m.Briefing, 60)...)
+		lines = append(lines, "", "", "Loading...")
+		c.panel(lines, []color.Color{gold, grey, white})
+		bw := 240
+		y := h * 3 / 4
+		c.rect((w-bw)/2, y, (w+bw)/2, y+6, color.NRGBA{40, 40, 40, 255})
+		c.rect((w-bw)/2, y, (w-bw)/2+int(float64(bw)*g.loadFrac), y+6, gold)
 		return
 	}
 	// Messages and captions, top left.

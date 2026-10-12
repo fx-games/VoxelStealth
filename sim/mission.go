@@ -31,6 +31,7 @@ type Mission struct {
 	TimeScale  float64 // game seconds per real second
 	LootQuota  int
 	Exit       Box
+	Area       Box // the cells the world occupies; only these chunks load
 	Ammo       map[string]int
 	Objectives []Objective
 	NPCs       []*NPCDef
@@ -182,6 +183,11 @@ func LoadMission(dir string) (*Mission, error) {
 				m.TimeScale, _ = strconv.ParseFloat(ts, 64)
 			}
 			m.LootQuota = atoi(r.get("LootQuota"))
+			if a := r.get("Area"); a != "" {
+				if m.Area, err = parseBox(a); err != nil {
+					return nil, fmt.Errorf("mission Area: %w", err)
+				}
+			}
 			if e := r.get("Exit"); e != "" {
 				if m.Exit, err = parseBox(e); err != nil {
 					return nil, fmt.Errorf("mission Exit: %w", err)
@@ -270,7 +276,7 @@ func (m *Mission) Save(dir string) error {
 	h, mi := int(m.StartTime)/3600, int(m.StartTime)/60%60
 	recs := []record{{{"Title", m.Title}, {"Briefing", m.Briefing}, {"Start", fmtVec(m.Start)}, {"Yaw", fmtDeg(m.StartYaw)},
 		{"Time", fmt.Sprintf("%02d:%02d", h, mi)}, {"TimeScale", fmtF(m.TimeScale)}, {"LootQuota", strconv.Itoa(m.LootQuota)},
-		{"Exit", fmtBox(m.Exit)}, {"Ammo", strings.Join(ammo, " ")}}}
+		{"Exit", fmtBox(m.Exit)}, {"Area", fmtBox(m.Area)}, {"Ammo", strings.Join(ammo, " ")}}}
 	for _, o := range m.Objectives {
 		recs = append(recs, record{{"Objective", o.Kind}, {"Target", o.Target}, {"Text", o.Text}, {"Optional", yesNo(o.Optional)}})
 	}

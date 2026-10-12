@@ -75,7 +75,7 @@ func main() {
 	level.RegisterBlocks(reg)
 	b := &builder{w: voxel.NewWorld(reg, -64, 384), reg: reg}
 
-	// Land: a grassy plateau with dirt under it.
+	// Land: a grassy plateau (area: everything the level occupies) with dirt under it.
 	b.fill(-24, 56, -24, 87, 56, 87, "bedrock")
 	b.fill(-24, 57, -24, 87, 62, 87, "dirt")
 	b.fill(-24, 63, -24, 87, 63, 87, "grass_block[snowy=false]")
@@ -188,15 +188,42 @@ func (b *builder) save(dir string) {
 	}
 	st := anvil.OpenStore(dir, true)
 	defer st.Close()
-	for _, p := range b.w.Chunks() {
-		c := b.w.Chunk(p)
-		c.RecomputeHeights(b.reg.Table())
-		if err := st.Write(p.X, p.Z, anvil.EncodeChunk(b.w, c)); err != nil {
-			log.Fatal(err)
+	// Light it here so the game loads it lit: the level plus an empty ring
+	// (the game's Bounds), with a second ring so the first has neighbours.
+	lo, hi := area.Min.X>>4, area.Max.X>>4
+	loZ, hiZ := area.Min.Z>>4, area.Max.Z>>4
+	for cx := lo - 2; cx <= hi+2; cx++ {
+		for cz := loZ - 2; cz <= hiZ+2; cz++ {
+			if p := (voxel.ChunkPos{X: cx, Z: cz}); b.w.Chunk(p) == nil {
+				b.w.AddChunk(b.w.NewChunk(p))
+			}
 		}
 	}
-	log.Printf("wrote %d chunks to %s", len(b.w.Chunks()), dir)
+	n := 0
+	for cx := lo - 1; cx <= hi+1; cx++ {
+		for cz := loZ - 1; cz <= hiZ+1; cz++ {
+			p := voxel.ChunkPos{X: cx, Z: cz}
+			c := b.w.Chunk(p)
+			c.RecomputeHeights(b.reg.Table())
+			if !b.w.TryLightChunk(p) {
+				log.Fatalf("chunk %v: neighbours missing", p)
+			}
+		}
+	}
+	for cx := lo - 1; cx <= hi+1; cx++ {
+		for cz := loZ - 1; cz <= hiZ+1; cz++ {
+			c := b.w.Chunk(voxel.ChunkPos{X: cx, Z: cz})
+			if err := st.Write(cx, cz, anvil.EncodeChunk(b.w, c)); err != nil {
+				log.Fatal(err)
+			}
+			n++
+		}
+	}
+	log.Printf("wrote %d lit chunks to %s", n, dir)
 }
+
+// area is the cells the level occupies (the land's extent).
+var area = box(-24, 56, -24, 87, 80, 87)
 
 func v(x, y, z float64) sim.Vec3 { return sim.Vec3{X: x, Y: y, Z: z} }
 
@@ -218,7 +245,7 @@ func writeMission(dir string) {
 		Briefing: "Lord Ashworth has grown fat on other people's misery. Tonight he dies, and his famous chalice " +
 			"leaves the vault with you. Take enough of his silver to make it worth the trip, and be gone through the gate before dawn.",
 		Start: v(31.5, G, 72.5), StartYaw: 0, StartTime: 22*3600 + 30*60, TimeScale: 8, LootQuota: 700,
-		Exit: box(24, G-1, 66, 39, G+6, 76),
+		Exit: box(24, G-1, 66, 39, G+6, 76), Area: area,
 		Ammo: map[string]int{sim.AmmoBroadhead: 6, sim.AmmoWater: 4, sim.AmmoNoise: 2, sim.AmmoExplosive: 1},
 		Objectives: []sim.Objective{
 			{Kind: "kill", Target: "ashworth", Text: "Kill Lord Ashworth"},

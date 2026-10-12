@@ -8,6 +8,7 @@ Time: 22:30
 TimeScale: 8
 LootQuota: 700
 Exit: 24,63,66 39,70,76
+Area: -24,56,-24 87,80,87
 Ammo: broadhead=6 water=4 noisemaker=2 explosive=1
 
 Objective: kill
