@@ -69,3 +69,27 @@ conv explosion -1 ambient/effect/explode1.ogg ambient/effect/explode2.ogg ambien
 conv splash -3 $(seqfiles ambient/effect/splash 4)
 conv ambient -6 ambient/wind/windnormal.ogg
 conv crickets -6 ambient/cricket/cricket-night.ogg
+
+# Freesound originals of the fire sounds Minecraft credits (previews: the
+# full files need a login; the -hq preview is 128 kb/s MP3, fine for q4 Ogg).
+fs=$tmp/fs
+mkdir -p "$fs"
+for p in 17/17548_47052 33/33943_298165 65/65174_7037; do
+	curl -sfL -m 120 -A "Mozilla/5.0" "https://cdn.freesound.org/previews/$p-hq.mp3" -o "$fs/$(basename "$p").mp3"
+done
+# Fire_Forest_Inferno (Dynamicell, CC BY 4.0): 2 s crackle cuts from its
+# steady middle; the sim plays "fire" every 1.5 s while something burns.
+i=0
+for t in 10 14 18 22; do
+	i=$((i + 1))
+	sox "$fs/17548_47052.mp3" -r 44100 -c 1 -b 16 "$tmp/mid.wav" trim "$t" 2 fade t 0.3 2 0.5 norm -6
+	oggenc -Q -q 4 -o "$out/fire-$i.ogg" "$tmp/mid.wav"
+done
+echo "fire: $i"
+# flamewind (scarbelly25, CC0): bursting into flame; match_strike (tim.kahn
+# a.k.a. Corsica_S, CC BY 4.0).
+sox "$fs/33943_298165.mp3" -r 44100 -c 1 -b 16 "$tmp/mid.wav" trim 0 3 fade t 0 3 1 norm -3
+oggenc -Q -q 4 -o "$out/ignite-1.ogg" "$tmp/mid.wav"
+sox "$fs/65174_7037.mp3" -r 44100 -c 1 -b 16 "$tmp/mid.wav" silence 1 0.005 0.5% reverse silence 1 0.05 0.5% reverse norm -3
+oggenc -Q -q 4 -o "$out/ignite-2.ogg" "$tmp/mid.wav"
+echo "ignite: 2"

@@ -73,7 +73,7 @@ don't grate.
 - [x] Glass shattering (4, Angband)
 - [x] Water arrow splash (Dynamic Surroundings); torch doused hiss (Angband spray — check it)
 - [ ] Faucet running (loop); squeaky tap handle
-- [ ] Fire: crackle loop, ignition whoosh
+- [x] Fire: crackle (4 cuts, freesound/Dynamicell), ignition whoosh + match strike (freesound)
 - [x] Electric zap (Angband)
 - [x] Flash bomb: blast (Dynamic Surroundings); [ ] fuse hiss
 - [ ] Noisemaker arrow: repeating chirp/rattle
