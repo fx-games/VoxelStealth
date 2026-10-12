@@ -68,7 +68,8 @@ func (g *game) makeSounds() {
 	g.sounds = map[string]*audio.Sound{}
 	add := func(name string, s *audio.Sound) { g.sounds[name] = s }
 	step := n(0.25)
-	add("footstep", synth(0.12, func(t float64) float64 { return 1.6 * env(t, 0.004, 0.03) * step() }))
+	// TODO: Need nice foot step audio samples. Footsteps are silent until then (guards still hear them).
+	_ = step
 	thud := n(0.06)
 	add("body", synth(0.5, func(t float64) float64 { return 3 * env(t, 0.005, 0.09) * thud() }))
 	add("thud", synth(0.3, func(t float64) float64 { return 3 * env(t, 0.003, 0.05) * thud() }))
