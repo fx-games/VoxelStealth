@@ -1,13 +1,14 @@
 package main
 
 // Art models under assets/models (see ASSETS.md): the chest as a Bedrock
-// geometry over the Stripped Chests texture, the lantern and the electric
-// lamp as glTFs whose textures we paint here (the lantern's original was
+// geometry over the Stripped Chests texture, the lantern, the candles and
+// the electric lamp as glTFs whose textures we paint here (the lantern's original was
 // derived from Minecraft's).
 
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -51,12 +52,19 @@ func (g *game) loadModels(dir string) error {
 	if err != nil {
 		return err
 	}
+	candles, err := gltf.LoadFile(filepath.Join(dir, "candles.gltf"))
+	if err != nil {
+		return err
+	}
 	for _, lit := range []bool{false, true} {
 		sfx := map[bool]string{false: "", true: "_lit"}[lit]
 		if err := g.addRetextured("lantern"+sfx, lantern, lanternTexture(lit)); err != nil {
 			return err
 		}
 		if err := g.addRetextured("lamp"+sfx, lamp, lampTexture(lit)); err != nil {
+			return err
+		}
+		if err := g.addRetextured("candles"+sfx, candles, candleTexture(candles.Textures[0], lit)); err != nil {
 			return err
 		}
 	}
@@ -111,6 +119,22 @@ func lanternTexture(lit bool) image.Image {
 	return img
 }
 
+// candleTexture is the candles' own texture, with flames on the wicks
+// when lit: the wick quads cross, one mapped to texel column 3 (the wick)
+// and one to column 4 (empty), rows 2–5 from the top down.
+func candleTexture(tex image.Image, lit bool) image.Image {
+	if !lit {
+		return tex
+	}
+	img := image.NewNRGBA(tex.Bounds())
+	draw.Draw(img, img.Bounds(), tex, image.Point{}, draw.Src)
+	for x := 3; x <= 4; x++ {
+		img.SetNRGBA(x, 2, color.NRGBA{255, 236, 140, 255})
+		img.SetNRGBA(x, 3, color.NRGBA{255, 150, 40, 255})
+	}
+	return img
+}
+
 // lanternHeight is the lantern model's height, chain top included.
 const lanternHeight = 0.8125
 
@@ -138,12 +162,15 @@ func (g *game) chestSkin(t float32) []mgl32.Mat4 {
 	return skin
 }
 
-// torchModel is the prop for a torch object: lanterns (Name) have their
-// own model and no particle flame.
+// ownModel maps torch Names that have their own model, flame included
+// (no particles), to it.
+var ownModel = map[string]string{"Lantern": "lantern", "Candles": "candles"}
+
+// torchModel is the prop for a torch object.
 func torchModel(o *sim.Object) string {
 	name := "torch"
-	if o.Name == "Lantern" {
-		name = "lantern"
+	if m := ownModel[o.Name]; m != "" {
+		name = m
 	}
 	if o.Lit {
 		name += "_lit"

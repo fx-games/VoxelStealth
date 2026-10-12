@@ -313,6 +313,7 @@ func writeMission(b *builder, dir string) {
 		// Lanterns hang from the ceilings of the big rooms.
 		lantern("l_hall", 31.5, G+3, 35.5), lantern("l_dining", 25.5, G+3, 20.5), lantern("l_library", 43.5, G+3, 20.5),
 		lantern("l_gallery", 33.5, U+3, 25.5), lantern("l_cellar", 43.5, C+4, 20.5),
+		{ID: "study_candles", Kind: sim.KindTorch, Name: "Candles", Pos: v(46.5, U+1, 20.5), Lit: true, On: "floor"},
 		// The accident kit.
 		{ID: "faucet", Kind: sim.KindFaucet, Name: "Wash basin tap", Pos: v(22.5, U, 29.5)},
 		{ID: "bath_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(24.5, U, 31.5), Lit: true},

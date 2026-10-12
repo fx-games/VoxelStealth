@@ -24,6 +24,7 @@ var palette = []string{
 var objectKinds = []sim.Object{
 	{Kind: sim.KindTorch, Name: "Torch", Lit: true},
 	{Kind: sim.KindTorch, Name: "Lantern", Lit: true},
+	{Kind: sim.KindTorch, Name: "Candles", Lit: true},
 	{Kind: sim.KindDoor, Name: "Door"},
 	{Kind: sim.KindDoor, Name: "Locked door", Locked: true, Key: "key1"},
 	{Kind: sim.KindLoot, Name: "Silver plate", Value: 50},
@@ -52,7 +53,7 @@ var editorHelp = []string{
 	"F / Shift+F         fill marked box with the block / with air",
 	"C / V               copy marked box / paste it at the crosshair",
 	"Z                   undo (50 steps)",
-	"O / P               choose object / place it at the crosshair (torches: floor or wall; lanterns: floor or ceiling)",
+	"O / P               choose object / place it at the crosshair (torches: floor or wall; lanterns: floor or ceiling; candles: floor)",
 	"N / Shift+N         choose NPC kind / place it (faces your way)",
 	"K / Shift+K         add a patrol point for the last NPC / clear its patrol",
 	"Backspace           delete the object or NPC at the crosshair",
@@ -251,11 +252,14 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 		o := objectKinds[ed.obj]
 		if o.Kind == sim.KindTorch {
 			o.On = torchFaceOn[face]
-			if o.Name == "Lantern" {
+			switch o.Name {
+			case "Lantern":
 				o.On = lanternFaceOn[face]
+			case "Candles":
+				o.On = map[voxel.Face]string{voxel.FaceUp: "floor"}[face]
 			}
 			if o.On == "" {
-				g.message("Torches stand on floors or hang on walls; lanterns stand on floors or hang from ceilings.")
+				g.message("Torches stand on floors or hang on walls; lanterns stand on floors or hang from ceilings; candles stand on floors.")
 				return
 			}
 			if n := face.Normal(); n.Y == 0 && sim.IsGlass(g.world.Block(at.X-n.X, at.Y-n.Y, at.Z-n.Z)) {

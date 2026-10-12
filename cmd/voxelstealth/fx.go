@@ -78,15 +78,15 @@ func (g *game) tickFX() {
 			if s.Now%3 == 0 {
 				g.burst("wisp", o.Pos.Add(sim.Vec3{Y: 1}))
 			}
-		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen && o.Name != "Lantern":
+		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen && ownModel[o.Name] == "":
 			g.burst("flame", g.torchTip(o))
-		case o.Kind == sim.KindTorch && o.Lit && o.Fallen && o.Name != "Lantern":
+		case o.Kind == sim.KindTorch && o.Lit && o.Fallen && ownModel[o.Name] == "":
 			g.burst("flame", o.Pos.Add(sim.Vec3{Y: 0.15}))
 		}
 	}
 	// The held torch: its tip in view space (see drawHand) mapped through
 	// the camera basis; the hand's walk bob is ignored.
-	if i := s.HeldTorch(); i >= 0 && s.Objects[i].Lit && s.Objects[i].Name != "Lantern" {
+	if i := s.HeldTorch(); i >= 0 && s.Objects[i].Lit && ownModel[s.Objects[i].Name] == "" {
 		fwd := g.cam.Forward()
 		right := fwd.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
 		up := right.Cross(fwd)

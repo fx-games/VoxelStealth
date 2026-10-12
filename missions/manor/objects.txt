@@ -233,6 +233,13 @@ Kind: faucet
 Name: Wash basin tap
 Pos: 22.5,69,29.5
 
+ID: study_candles
+Kind: torch
+Name: Candles
+Pos: 46.5,70,20.5
+Lit: yes
+On: floor
+
 ID: bath_lamp
 Kind: lamp
 Name: Electric lamp
