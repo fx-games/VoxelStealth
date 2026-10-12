@@ -222,6 +222,13 @@ func (g *game) handleEvents() {
 	for _, e := range s.Events {
 		switch e.Kind {
 		case sim.EvSound:
+			for _, f := range soundFX[e.Sound] {
+				p := e.Pos
+				if e.Sound == "stab" {
+					p.Y += 1.1 // feet to chest
+				}
+				g.burst(f, p)
+			}
 			if v := g.voiceFor(e.NPC, vocalIDs[e.Sound]...); v != nil {
 				g.playWorldSound(v, e.Pos, e.Loud)
 			} else {

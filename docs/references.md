@@ -26,3 +26,7 @@ Adapted (copied, not imported) from VoxelLib `cmd/explorer`: main loop and scree
 
 - `cmd/voxelstealth/arrow.go`: bolt model copied from VoxelLib `cmd/explorer/crossbow.go` (`arrowModel`), head colour made a parameter.
 - `cmd/voxelstealth/corpse.go`: exact arrow hits, bone-riding arrows and the topple-over death, copied from VoxelLib `cmd/explorer/crossbow.go` (shapeInfo, creatureMatrix, Joint/Intersect/Reach, deathTilt); bodies stay instead of fading.
+
+## Particles (cmd/voxelstealth/fx.go, VoxelLib particles + voxel/render/particles.go)
+
+New CPU particle system written for this project. The preset shape (count, spread, velocity and its variation, radial speed, start/end colour and size, life) follows the go-fps `ParticleProperties` presets (~/Projects/go-fps, the user's own code). Its GPU transform-feedback simulation was not reused: it had no gravity, alpha, collision or lighting, and it is fragile on macOS drivers.

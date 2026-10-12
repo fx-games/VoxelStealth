@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/memmaker/voxellib/particles"
 	"image"
 	"image/color"
 	"image/png"
@@ -55,6 +56,8 @@ type drawState struct {
 	insts     []render.ModelInstance
 	items     []render.ItemInstance
 	lastAnim  time.Time
+	parts     particles.System
+	partRend  *render.ParticleRenderer
 }
 
 // lootSprites picks an item sprite (assets/items, CC0) for a loot name.
@@ -84,6 +87,9 @@ func spriteFor(o *sim.Object) string {
 func (g *game) loadAssets(dir string) error {
 	var err error
 	if g.modelRend, err = render.NewModelRenderer(g.eng.Renderer); err != nil {
+		return err
+	}
+	if g.partRend, err = render.NewParticleRenderer(g.eng.Renderer); err != nil {
 		return err
 	}
 	p, err := mcmodel.Import(filepath.Join(dir, "cleannrooster"))
@@ -207,6 +213,9 @@ func (g *game) drawWorld(alpha float64) {
 	}
 	g.modelRend.Draw(&g.cam, g.insts)
 	g.itemRend.DrawWorld(&g.cam, g.items)
+	if g.sim != nil {
+		g.partRend.Draw(&g.cam, g.parts.P, alpha, g.light)
+	}
 	if g.sim != nil && !g.sim.Player.Dead {
 		g.drawHand(alpha)
 	}

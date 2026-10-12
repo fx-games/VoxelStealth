@@ -19,7 +19,7 @@ Voice lines: see TODO-VOICE.md.
 - [ ] Faucet + running water stream (animated)
 - [ ] Chest with opening lid
 - [ ] Rug / tapestry / hay (flammables) and their burnt versions
-- [ ] Fire: animated flames (sprite sheet or particles)
+- [x] Fire: animated flames (sprite sheet or particles) — particles (fx.go)
 - [ ] Puddle decal, and electrified puddle (arcs)
 - [ ] Flash bomb (thrown item and in hand)
 - [ ] Noisemaker arrow head
@@ -38,13 +38,13 @@ Voice lines: see TODO-VOICE.md.
 
 ## Effects
 
-- [ ] Glass shards (window breaking)
-- [ ] Fire and smoke particles
-- [ ] Water splash (water arrow, puddles)
-- [ ] Sparks / electric arcs
+- [x] Glass shards (window breaking)
+- [x] Fire and smoke particles
+- [x] Water splash (water arrow, puddles)
+- [x] Sparks / electric arcs
 - [ ] Flash bomb blast (now only a white screen flash)
-- [ ] Blood (hits)
-- [ ] Bolt impact dust / chips
+- [x] Blood (hits)
+- [x] Bolt impact dust / chips
 
 ## UI
 

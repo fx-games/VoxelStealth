@@ -58,6 +58,7 @@ func (g *game) resetPlay() {
 	g.arrows = projectile.World{}
 	g.arrowAmmo, g.reported = map[*projectile.Arrow]string{}, map[*projectile.Arrow]bool{}
 	g.npcTargets = nil
+	g.parts.P = g.parts.P[:0]
 	for k := range g.sim.NPCs {
 		t := &npcTarget{g: g, k: k}
 		if n := g.sim.NPCs[k]; !n.Alive() { // already down (quickload)
@@ -269,6 +270,7 @@ func (g *game) tickPlay() {
 	g.tickArrows()
 	s.Tick()
 	g.handleEvents()
+	g.tickFX()
 	g.eng.Renderer.Opt.Daylight = float32(s.Daylight())
 	g.tickSounds()
 }
@@ -378,6 +380,9 @@ func (g *game) arrowHit(a *projectile.Arrow, t projectile.Target) {
 	n := g.sim.NPCs[nt.k]
 	alive := n.Alive()
 	g.sim.ArrowHit(ammo, vec(a.X, a.Y, a.Z), nt.k, alive && nt.isHead(a.Part))
+	if alive {
+		g.burst("blood", vec(a.X, a.Y, a.Z))
+	}
 	if alive && !n.Alive() {
 		nt.fall(a.Yaw) // pushed over along the arrow's flight
 	}
