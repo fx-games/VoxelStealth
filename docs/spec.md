@@ -13,7 +13,10 @@ built on VoxelLib (`../VoxelLib`, via `replace` in go.mod).
 - Platforms: macOS + Windows, keyboard & mouse. First person only.
 
 ## Player
-- Tools: blackjack (KO from behind), blade, water arrow (douse torch), noisemaker, lockpick + keys, one explosive.
+- Default weapon: the crossbow from VoxelLib (`cmd/explorer/crossbow.go`, model = `repeater_crossbow_arrow` bone of
+  cleannrooster `artmob.bbmodel`, MIT). Move it out of `package main` into a reusable VoxelLib package first.
+  Arrow types are its ammo: broadhead (kill), water arrow (douse torch).
+- Other tools: blackjack (KO from behind), blade, noisemaker, lockpick + keys, one explosive.
 - Bodies (dead/KO) can be carried and hidden (shadows, containers).
 - Combat: hard and unforgiving; 2–3 hits kill. Death fails the mission. Quicksave/quickload of full state (mission + voxel edits).
 - Single "use" (frob) key, context-driven, with target highlight.
