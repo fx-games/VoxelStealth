@@ -104,7 +104,7 @@ func main() {
 	eng, err := engine.New(engine.Config{
 		Bounds:         bounds,
 		Registry:       reg,
-		RenderDistance: 10,
+		RenderDistance: renderDistance,
 		WorldDir:       filepath.Join(*missionDir, "world"),
 		ReadOnly:       !*edit, // play never changes the mission on disk
 		Textures:       pack,
@@ -255,14 +255,19 @@ func (g *game) step() {
 	g.tickPlay()
 }
 
+const renderDistance = 10 // chunks; fog ends at 16 blocks per chunk
+
 // waitForWorld holds the player until every chunk the mission touches is
 // loaded and lit, then starts the simulation (or the editor).
 func (g *game) waitForWorld() {
 	g.player.PrevX, g.player.PrevY, g.player.PrevZ = g.player.X, g.player.Y, g.player.Z
 	lo, hi := g.missionBounds()
+	// Only chunks the engine keeps loaded around the player can get ready
+	// (the manor's ocean reaches past them).
+	px, pz := int(math.Floor(g.player.X))>>4, int(math.Floor(g.player.Z))>>4
 	done, total := 0, 0
-	for cx := lo.X >> 4; cx <= hi.X>>4; cx++ {
-		for cz := lo.Z >> 4; cz <= hi.Z>>4; cz++ {
+	for cx := max(lo.X>>4, px-renderDistance+1); cx <= min(hi.X>>4, px+renderDistance-1); cx++ {
+		for cz := max(lo.Z>>4, pz-renderDistance+1); cz <= min(hi.Z>>4, pz+renderDistance-1); cz++ {
 			total++
 			if g.eng.ChunkReady(voxel.ChunkPos{X: cx, Z: cz}) {
 				done++

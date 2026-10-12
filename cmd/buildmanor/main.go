@@ -80,11 +80,24 @@ func main() {
 	level.RegisterBlocks(reg)
 	b := &builder{w: voxel.NewWorld(reg, -64, 384), reg: reg}
 
-	// Land: a grassy plateau (area: everything the level occupies) with dirt
-	// under it, down to bedrock 10 below the cellar so no blast reaches the void.
-	b.fill(-24, C-10, -24, 87, C-10, 87, "bedrock")
-	b.fill(-24, C-9, -24, 87, 62, 87, "dirt")
-	b.fill(-24, 63, -24, 87, 63, 87, "grass_block[snowy=false]")
+	// Land: a round island (grass on dirt, a sand beach) in an ocean that
+	// runs past the fog; bedrock under all of it, 10 below the cellar, so no
+	// blast reaches the void.
+	b.fill(area.Min.X, C-10, area.Min.Z, area.Max.X, C-10, area.Max.Z, "bedrock")
+	for x := area.Min.X; x <= area.Max.X; x++ {
+		for z := area.Min.Z; z <= area.Max.Z; z++ {
+			switch d := math.Hypot(float64(x)-31.5, float64(z)-31.5); {
+			case d <= island:
+				b.fill(x, C-9, z, x, 62, z, "dirt")
+				b.set(x, 63, z, "grass_block[snowy=false]")
+			case d <= island+4:
+				b.fill(x, C-9, z, x, 63, z, "sand")
+			default:
+				b.fill(x, C-9, z, x, sea-8, z, "sand")
+				b.fill(x, sea-7, z, x, sea, z, "water[level=0]")
+			}
+		}
+	}
 
 	// Outer wall with a gate in the south, gravel drive to the front door.
 	b.fill(0, G, 0, 63, G+3, 0, "stone_bricks")
@@ -228,8 +241,15 @@ func (b *builder) save(dir string) {
 	log.Printf("wrote %d lit chunks to %s", n, dir)
 }
 
-// area is the cells the level occupies (the land's extent).
-var area = box(-24, 56, -24, 87, 80, 87)
+// The island's radius around the manor's centre, the sea level, and area,
+// the cells the level occupies: the island and the ocean out to the fog's
+// end (160 blocks) seen from its shore.
+const (
+	island = 58
+	sea    = 62
+)
+
+var area = box(-190, C-10, -190, 253, 80, 253)
 
 func v(x, y, z float64) sim.Vec3 { return sim.Vec3{X: x, Y: y, Z: z} }
 
