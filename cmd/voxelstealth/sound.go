@@ -91,6 +91,17 @@ func (g *game) makeSounds() {
 	add("crash", synth(0.9, func(t float64) float64 {
 		return 1.4 * env(t, 0.002, 0.2) * (crash() + 0.3*tone(t, 1300+300*math.Sin(t*30)))
 	}))
+	// Breaking glass: a sharp crack, then tinkling shards.
+	shard := n(0.95)
+	add("shatter", synth(1.4, func(t float64) float64 {
+		v := 2.5 * env(t, 0.001, 0.06) * shard()
+		for i, at := range []float64{0.05, 0.11, 0.16, 0.24, 0.31, 0.45, 0.6, 0.82} {
+			if t >= at {
+				v += 0.35 * env(t-at, 0.001, 0.05) * tone(t, 3000+float64(i%4)*700)
+			}
+		}
+		return v + 0.4*env(t, 0.01, 0.35)*shard()
+	}))
 	boom := n(0.03)
 	add("explosion", synth(2.2, func(t float64) float64 { return 6 * env(t, 0.004, 0.5) * boom() }))
 	hiss := n(0.9)

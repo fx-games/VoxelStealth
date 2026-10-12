@@ -83,9 +83,20 @@ func lightAt(w World, c Cell, daylight float64) float64 {
 	return math.Max(curve(float64(sky)/15)*daylight, bl)
 }
 
-// lineOfSight walks the voxels between a and b (DDA) and reports whether
-// no solid block lies between them. The cells of a and b don't count.
-func lineOfSight(w World, a, b Vec3) bool {
+// IsGlass reports whether a block is glass: see-through and breakable.
+func IsGlass(name string) bool { return strings.Contains(name, "glass") }
+
+// lineOfSight reports whether a can see b: nothing but glass in between.
+func lineOfSight(w World, a, b Vec3) bool { return clearLine(w, a, b, true) }
+
+// clearPath reports whether nothing solid, glass included, lies between a
+// and b (reaching, not seeing).
+func clearPath(w World, a, b Vec3) bool { return clearLine(w, a, b, false) }
+
+// clearLine walks the voxels between a and b (DDA) and reports whether no
+// solid block (glass only if !glass) lies between them. The cells of a and
+// b don't count.
+func clearLine(w World, a, b Vec3, glass bool) bool {
 	d := b.Sub(a)
 	dist := d.Len()
 	if dist < 1e-6 {
@@ -141,7 +152,7 @@ func lineOfSight(w World, a, b Vec3) bool {
 		if c == end {
 			return true
 		}
-		if w.Solid(c.X, c.Y, c.Z) {
+		if w.Solid(c.X, c.Y, c.Z) && !(glass && IsGlass(w.Block(c.X, c.Y, c.Z))) {
 			return false
 		}
 	}

@@ -355,7 +355,7 @@ func (g *game) tickArrows() {
 			g.reported[a] = true
 			ammo := g.arrowAmmo[a]
 			s.ArrowHit(ammo, vec(a.X, a.Y, a.Z), -1, false)
-			if ammo != sim.AmmoBroadhead {
+			if c := vec(a.X, a.Y, a.Z).Cell(); ammo != sim.AmmoBroadhead || !g.world.Solid(c.X, c.Y, c.Z) { // or the glass it hit broke
 				a.Discard()
 			}
 		}

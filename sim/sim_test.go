@@ -235,3 +235,37 @@ func TestMissionRoundTrip(t *testing.T) {
 	}
 	_ = os.Remove
 }
+
+func TestGuardSeesThroughGlassAndHearsItBreak(t *testing.T) {
+	w, m := twoRooms()
+	for z := 1; z <= 3; z++ {
+		for y := 1; y <= 3; y++ {
+			w.b[Cell{10, y, z}] = "minecraft:glass"
+		}
+	}
+	m.NPCs = []*NPCDef{guard(Vec3{15.5, 1, 2.5}, -math.Pi/2)} // facing -X, at the window
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{6.5, 2, 2.5}, Lit: true})
+	s := New(w, m)
+	s.Player.Pos, s.Player.OnGround = Vec3{7.5, 1, 2.5}, true
+	run(s, 60)
+	if st := s.NPCs[0].State; st != StateCombat {
+		t.Fatalf("guard behind glass: %v, want combat", st)
+	}
+	if s.TargetAt(Vec3{9.5, 2.5, 2.5}, Vec3{1, 0, 0}).NPC >= 0 {
+		t.Fatal("reached through glass")
+	}
+
+	w, m = twoRooms()
+	w.b[Cell{10, 2, 2}] = "minecraft:glass"
+	m.NPCs = []*NPCDef{guard(Vec3{18.5, 1, 9.5}, 0)} // far corner, back turned
+	s = New(w, m)
+	s.Player.Pos = Vec3{1.5, 1, 9.5}
+	s.ArrowHit(AmmoBroadhead, Vec3{10.2, 2.5, 2.5}, -1, false)
+	if w.Block(10, 2, 2) != BlockAir {
+		t.Fatal("glass not broken")
+	}
+	run(s, 2)
+	if g := s.NPCs[0]; g.State == StatePatrol {
+		t.Fatalf("guard didn't react to breaking glass (suspicion %.1f)", g.Suspicion)
+	}
+}

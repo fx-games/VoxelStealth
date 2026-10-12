@@ -667,6 +667,18 @@ func (s *Sim) Explode(pos Vec3) {
 	s.init() // doors and walls changed: rebuild the room graph
 }
 
+// Shatter breaks the glass block at c, if it is glass: very loud. It
+// reports whether it did.
+func (s *Sim) Shatter(c Cell) bool {
+	if !IsGlass(s.W.Block(c.X, c.Y, c.Z)) {
+		return false
+	}
+	s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
+	s.emit(c.Center(), 95, "shatter", -1) // as loud as a bomb
+	s.init() // the window is an opening now: rebuild the room graph
+	return true
+}
+
 // Target is what the player points at: an object or an NPC body.
 type Target struct {
 	Obj, NPC int // -1 = none
@@ -741,7 +753,7 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 		lo, hi := s.ObjectBox(i)
 		if t, ok := rayBox(eye, dir, lo, hi); ok && t < best.Dist {
 			hit := eye.Add(dir.Scale(t))
-			if o.Kind == KindDoor || lineOfSight(s.W, eye, hit) {
+			if o.Kind == KindDoor || clearPath(s.W, eye, hit) {
 				best = Target{Obj: i, NPC: -1, Dist: t}
 			}
 		}
@@ -755,7 +767,7 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 		if !n.alive() {
 			lo, hi = p.Add(Vec3{-0.9, 0, -0.9}), p.Add(Vec3{0.9, 0.5, 0.9})
 		}
-		if t, ok := rayBox(eye, dir, lo, hi); ok && t < best.Dist && lineOfSight(s.W, eye, eye.Add(dir.Scale(t))) {
+		if t, ok := rayBox(eye, dir, lo, hi); ok && t < best.Dist && clearPath(s.W, eye, eye.Add(dir.Scale(t))) {
 			best = Target{Obj: -1, NPC: k, Dist: t}
 		}
 	}
@@ -1036,7 +1048,9 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 			s.hurtNPC(npc, dmg, "shot")
 			return
 		}
-		s.emit(pos, 26, "arrow", -1)
+		if !s.Shatter(pos.Cell()) {
+			s.emit(pos, 26, "arrow", -1)
+		}
 	case AmmoWater:
 		s.emit(pos, 18, "splash", -1)
 		doused := false
@@ -1117,6 +1131,17 @@ func (s *Sim) Melee(tool string) bool {
 	}
 	if best < 0 {
 		s.emit(p.Pos, 6, "swish", -1)
+		// A swing at a window within reach breaks it.
+		eye := p.Eye()
+		fx, fz := forward(p.Yaw)
+		cp := math.Cos(p.Pitch)
+		dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
+		for t := 0.2; t < 2.2; t += 0.1 {
+			c := eye.Add(dir.Scale(t)).Cell()
+			if s.W.Solid(c.X, c.Y, c.Z) {
+				return s.Shatter(c)
+			}
+		}
 		return false
 	}
 	n := s.NPCs[best]

@@ -58,6 +58,7 @@ var helpText = []string{
 	"",
 	"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
 	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
+	"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
 }
 
