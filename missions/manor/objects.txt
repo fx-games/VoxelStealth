@@ -1,0 +1,334 @@
+# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable
+
+ID: front_door
+Kind: door
+Name: Door
+Pos: 31.5,64,41.5
+
+ID: kitchen_back
+Kind: door
+Name: Door
+Pos: 14.5,64,35.5
+
+ID: kitchen_dining
+Kind: door
+Name: Door
+Pos: 20.5,64,30.5
+
+ID: hall_dining
+Kind: door
+Name: Door
+Pos: 31.5,64,30.5
+
+ID: kitchen_hall
+Kind: door
+Name: Door
+Pos: 26.5,64,35.5
+
+ID: dining_library
+Kind: door
+Name: Door
+Pos: 37.5,64,20.5
+
+ID: hall_guardroom
+Kind: door
+Name: Door
+Pos: 37.5,64,35.5
+
+ID: library_guardroom
+Kind: door
+Name: Door
+Pos: 43.5,64,30.5
+
+ID: bed_bath
+Kind: door
+Name: Door
+Pos: 22.5,69,26.5
+
+ID: bed_gallery
+Kind: door
+Name: Door
+Pos: 30.5,69,18.5
+
+ID: bath_gallery
+Kind: door
+Name: Door
+Pos: 30.5,69,33.5
+
+ID: gallery_study
+Kind: door
+Name: Door
+Pos: 37.5,69,25.5
+
+ID: vault_door
+Kind: door
+Name: Vault door
+Pos: 37.5,58,15.5
+Key: vault
+Locked: yes
+
+ID: t_gate_w
+Kind: torch
+Name: Torch
+Pos: 29.5,65,65.5
+Lit: yes
+
+ID: t_gate_e
+Kind: torch
+Name: Torch
+Pos: 34.5,65,65.5
+Lit: yes
+
+ID: t_front_w
+Kind: torch
+Name: Torch
+Pos: 29.5,65,42.5
+Lit: yes
+
+ID: t_front_e
+Kind: torch
+Name: Torch
+Pos: 33.5,65,42.5
+Lit: yes
+
+ID: t_hall
+Kind: torch
+Name: Torch
+Pos: 27.5,65,31.5
+Lit: yes
+
+ID: t_hall2
+Kind: torch
+Name: Torch
+Pos: 35.5,65,39.5
+Lit: yes
+
+ID: t_dining_n
+Kind: torch
+Name: Torch
+Pos: 25.5,65,11.5
+Lit: yes
+
+ID: t_dining_w
+Kind: torch
+Name: Torch
+Pos: 15.5,65,22.5
+Lit: yes
+
+ID: t_kitchen
+Kind: torch
+Name: Torch
+Pos: 25.5,65,39.5
+Lit: yes
+
+ID: t_guard
+Kind: torch
+Name: Torch
+Pos: 47.5,65,39.5
+Lit: yes
+
+ID: t_library
+Kind: torch
+Name: Torch
+Pos: 42.5,65,28.5
+Lit: yes
+
+ID: t_cellar
+Kind: torch
+Name: Torch
+Pos: 42.5,59,11.5
+Lit: yes
+
+ID: t_vault
+Kind: torch
+Name: Torch
+Pos: 35.5,59,18.5
+Lit: yes
+
+ID: t_bedroom
+Kind: torch
+Name: Torch
+Pos: 18.5,70,24.5
+Lit: yes
+
+ID: t_gallery_n
+Kind: torch
+Name: Torch
+Pos: 35.5,70,11.5
+Lit: yes
+
+ID: t_gallery_s
+Kind: torch
+Name: Torch
+Pos: 31.5,70,39.5
+Lit: yes
+
+ID: t_study
+Kind: torch
+Name: Torch
+Pos: 38.5,70,38.5
+Lit: yes
+
+ID: t_bath
+Kind: torch
+Name: Torch
+Pos: 28.5,70,39.5
+Lit: yes
+
+ID: faucet
+Kind: faucet
+Name: Wash basin tap
+Pos: 22.5,69,29.5
+
+ID: bath_lamp
+Kind: lamp
+Name: Electric lamp
+Pos: 24.5,69,31.5
+Lit: yes
+
+ID: study_lamp
+Kind: lamp
+Name: Electric lamp
+Pos: 45.5,69,21.5
+Lit: yes
+
+ID: bed_lamp
+Kind: lamp
+Name: Electric lamp
+Pos: 18.5,69,15.5
+Lit: yes
+
+ID: dining_rug
+Kind: flammable
+Name: Rug
+Pos: 25.5,64,12.5
+
+ID: bed_tapestry
+Kind: flammable
+Name: Tapestry
+Pos: 18.5,69,23.5
+
+ID: hay
+Kind: flammable
+Name: Hay
+Pos: 47.5,64,54.5
+
+ID: chalice
+Kind: loot
+Name: Ashworth Chalice
+Pos: 31.5,59,15.5
+Value: 300
+
+ID: plate1
+Kind: loot
+Name: Silver plate
+Pos: 21.5,65,20.5
+Value: 50
+
+ID: plate2
+Kind: loot
+Name: Silver plate
+Pos: 26.5,65,20.5
+Value: 50
+
+ID: candelabrum
+Kind: loot
+Name: Gold candelabrum
+Pos: 30.5,65,20.5
+Value: 75
+
+ID: silverware
+Kind: loot
+Name: Silverware
+Pos: 17.5,65,40.5
+Value: 60
+
+ID: purse
+Kind: loot
+Name: Coin purse
+Pos: 39.5,65,40.5
+Value: 40
+
+ID: gems
+Kind: loot
+Name: Gemstones
+Pos: 46.5,70,19.5
+Value: 150
+
+ID: idol
+Kind: loot
+Name: Golden idol
+Pos: 35.5,69,22.5
+Value: 120
+
+ID: ring
+Kind: loot
+Name: Signet ring
+Pos: 47.5,70,23.5
+Value: 90
+
+ID: wine
+Kind: loot
+Name: Vintage wine
+Pos: 47.5,58,20.5
+Value: 45
+
+ID: necklace
+Kind: loot
+Name: Pearl necklace
+Pos: 16.5,70,12.5
+Value: 110
+
+ID: jewel_box
+Kind: chest
+Name: Jewellery chest
+Pos: 28.5,69,12.5
+Value: 200
+Key: jewels
+Locked: yes
+
+ID: vault_chest
+Kind: chest
+Name: Strongbox
+Pos: 28.5,58,19.5
+Value: 150
+
+ID: footlocker
+Kind: chest
+Name: Footlocker
+Pos: 46.5,64,32.5
+
+ID: pantry
+Kind: chest
+Name: Pantry chest
+Pos: 16.5,64,31.5
+
+ID: vault_key
+Kind: key
+Name: Vault key
+Pos: 40.5,65,39.5
+Key: vault
+
+ID: jewel_key
+Kind: key
+Name: Small brass key
+Pos: 46.5,70,22.5
+Key: jewels
+
+ID: ammo_water
+Kind: ammo
+Name: water
+Pos: 18.5,64,39.5
+Count: 2
+
+ID: ammo_broad
+Kind: ammo
+Name: broadhead
+Pos: 38.5,65,39.5
+Count: 4
+
+ID: ammo_noise
+Kind: ammo
+Name: noisemaker
+Pos: 50.5,64,57.5
+Count: 1

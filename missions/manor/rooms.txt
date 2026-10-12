@@ -1,0 +1,48 @@
+# One record per room; Box lines are inclusive cell corners. Sound travels between rooms through openings and doors.
+
+ID: 1
+Name: Entrance hall
+Box: 27,64,31 36,67,40
+
+ID: 2
+Name: Dining hall
+Box: 15,64,11 36,67,29
+
+ID: 3
+Name: Kitchen
+Box: 15,64,31 25,67,40
+
+ID: 4
+Name: Guard room
+Box: 38,64,31 48,67,40
+
+ID: 5
+Name: Library
+Box: 38,64,11 48,67,29
+Box: 40,68,12 43,68,13
+Box: 43,63,27 47,63,28
+
+ID: 6
+Name: Bedroom
+Box: 15,69,11 29,72,25
+
+ID: 7
+Name: Bathroom
+Box: 15,69,27 29,72,40
+
+ID: 8
+Name: Gallery
+Box: 31,69,11 36,72,40
+
+ID: 9
+Name: Study
+Box: 38,69,11 48,72,40
+
+ID: 10
+Name: Wine cellar
+Box: 38,58,11 48,62,29
+Box: 43,58,27 47,62,28
+
+ID: 11
+Name: Vault
+Box: 27,58,11 36,61,20

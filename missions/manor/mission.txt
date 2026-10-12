@@ -1,0 +1,38 @@
+# Mission settings, then one record per objective.
+
+Title: Ashworth Manor
+Briefing: Lord Ashworth has grown fat on other people's misery. Tonight he dies, and his famous chalice leaves the vault with you. Take enough of his silver to make it worth the trip, and be gone through the gate before dawn.
+Start: 31.5,64,72.5
+Yaw: 0
+Time: 22:30
+TimeScale: 8
+LootQuota: 700
+Exit: 24,63,66 39,70,76
+Ammo: broadhead=6 water=4 noisemaker=2 explosive=1
+
+Objective: kill
+Target: ashworth
+Text: Kill Lord Ashworth
+
+Objective: steal
+Target: chalice
+Text: Steal the Ashworth Chalice from the cellar vault
+
+Objective: loot
+Text: Steal at least 700 in valuables
+
+Objective: exit
+Text: Escape through the front gate
+
+Objective: accident
+Target: ashworth
+Text: Make Lord Ashworth's death look like an accident
+Optional: yes
+
+Objective: nokill
+Text: Kill no one but Lord Ashworth
+Optional: yes
+
+Objective: ghost
+Text: Never get into a fight
+Optional: yes

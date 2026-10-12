@@ -1,0 +1,321 @@
+// Command voxelstealth plays (or edits) a mission.
+//
+//	go run ./cmd/buildmanor                 # (re)build the demo mission once
+//	go run ./cmd/voxelstealth               # play missions/manor
+//	go run ./cmd/voxelstealth -edit         # edit it (F6 playtests)
+//
+// Files:
+//
+//	main.go    flags, window, engine and asset setup, main loop
+//	world.go   adapters: engine world → sim.World, character.World
+//	play.go    player, input, frobbing, weapons, arrows
+//	draw.go    NPC models, props, items, first-person hands
+//	sound.go   synthesized sounds, played through the room graph
+//	hud.go     light gem, captions, objectives, end screen
+//	save.go    quicksave / quickload
+//	editor.go  the mission editor
+//
+// Glue adapted from VoxelLib's cmd/explorer (see docs/references.md).
+package main
+
+import (
+	"flag"
+	"fmt"
+	"image"
+	"image/png"
+	"log"
+	"math"
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/voxellib/audio"
+	"github.com/memmaker/voxellib/character"
+	"github.com/memmaker/voxellib/voxel"
+	"github.com/memmaker/voxellib/voxel/engine"
+	"github.com/memmaker/voxellib/voxel/mcres"
+	"github.com/memmaker/voxellib/voxel/render"
+	"github.com/memmaker/voxelstealth/level"
+	"github.com/memmaker/voxelstealth/sim"
+)
+
+func init() { runtime.LockOSThread() }
+
+const tickDur = time.Second / sim.TicksPerSecond
+
+func main() {
+	var (
+		missionDir = flag.String("mission", "missions/manor", "mission directory")
+		assets     = flag.String("assets", "../VoxelLib/assets", "VoxelLib asset directory (rpg16pack, cleannrooster, items)")
+		edit       = flag.Bool("edit", false, "open the mission in the editor (saves to the mission directory)")
+		shot       = flag.String("shot", "", "save a screenshot PNG at tick -shot-at and quit (never grabs input)")
+		shotAt     = flag.Int("shot-at", 100, "tick for -shot, counted from when the mission starts")
+		startPos   = flag.String("pos", "", "debug: start position x,y,z")
+		look       = flag.String("look", "", "debug: start yaw,pitch in degrees")
+		script     = flag.String("script", "", "debug: automated inputs for -shot runs, 'tick:action;...' (see play.go)")
+		mute       = flag.Bool("mute", false, "no sound")
+	)
+	flag.Parse()
+
+	m, err := sim.LoadMission(*missionDir)
+	if err != nil {
+		log.Fatalf("%v (build the demo with: go run ./cmd/buildmanor)", err)
+	}
+	if err := glfw.Init(); err != nil {
+		log.Fatal(err)
+	}
+	defer glfw.Terminate()
+	glfw.WindowHint(glfw.ContextVersionMajor, 3)
+	glfw.WindowHint(glfw.ContextVersionMinor, 3)
+	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
+	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
+	if *shot != "" {
+		// Automated run: don't take focus from whatever the user is doing.
+		glfw.WindowHint(glfw.Focused, glfw.False)
+		glfw.WindowHint(glfw.FocusOnShow, glfw.False)
+	}
+	win, err := glfw.CreateWindow(1280, 720, "VoxelStealth - "+m.Title, nil, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	win.MakeContextCurrent()
+	glfw.SwapInterval(1)
+
+	pack, err := mcres.Open(filepath.Join(*assets, "rpg16pack"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer pack.Close()
+	reg := voxel.NewRegistry()
+	reg.Resolver = pack.Resolver()
+	level.RegisterBlocks(reg)
+	eng, err := engine.New(engine.Config{
+		Registry:       reg,
+		RenderDistance: 10,
+		WorldDir:       filepath.Join(*missionDir, "world"),
+		ReadOnly:       !*edit, // play never changes the mission on disk
+		Textures:       pack,
+		RenderOptions:  render.Options{Missing: mcres.MissingTexture, IsGreyscale: mcres.IsGreyscale},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer eng.Close()
+
+	g := &game{eng: eng, win: win, reg: reg, mission: m, missionDir: *missionDir, editing: *edit,
+		auto: *shot != "", script: parseScript(*script)}
+	g.world = &simWorld{g: g, orig: map[sim.Cell]string{}}
+	g.cam = render.Camera{FOV: 70 * math.Pi / 180, Near: 0.05}
+	x, y, z := m.Start.X, m.Start.Y, m.Start.Z
+	if *startPos != "" {
+		fmt.Sscanf(*startPos, "%f,%f,%f", &x, &y, &z)
+	}
+	g.player = character.New(x, y, z)
+	g.cam.Yaw = m.StartYaw
+	if *look != "" {
+		var yd, pd float64
+		fmt.Sscanf(*look, "%f,%f", &yd, &pd)
+		g.cam.Yaw, g.cam.Pitch = yd*math.Pi/180, pd*math.Pi/180
+	}
+	if err := g.loadAssets(*assets); err != nil {
+		log.Fatal(err)
+	}
+	if !*mute && *shot == "" {
+		if g.mixer, err = audio.New(); err != nil {
+			log.Printf("sound disabled: %v", err)
+		} else {
+			defer g.mixer.Close()
+			g.makeSounds()
+		}
+	}
+	// -shot runs are automated: never grab the user's mouse or take any
+	// keyboard or mouse input.
+	if *shot == "" {
+		g.setupInput()
+	}
+	g.run(*shot, *shotAt)
+}
+
+// game is the glue between the engine, the simulation and the player.
+type game struct {
+	eng        *engine.Engine
+	win        *glfw.Window
+	reg        *voxel.Registry
+	cam        render.Camera
+	player     *character.Character
+	world      *simWorld
+	mission    *sim.Mission
+	missionDir string
+	sim        *sim.Sim // nil while loading and in the editor
+	editing    bool     // editor mode (sim == nil unless playtesting)
+	ready      bool     // the mission's chunks are loaded
+	captured   bool
+	auto       bool // automated -shot run: no input at all
+	script     []scriptStep
+
+	tick, playTick     int // ticks since launch / since the mission started
+	walkDist, prevWalk float64
+
+	weapons
+	drawState
+	hudState
+	soundState
+	ed editor
+}
+
+func (g *game) run(shotPath string, shotAt int) {
+	last := time.Now()
+	acc := time.Duration(0)
+	for !g.win.ShouldClose() {
+		glfw.PollEvents()
+		now := time.Now()
+		acc = min(acc+now.Sub(last), 250*time.Millisecond)
+		last = now
+		for acc >= tickDur {
+			g.step()
+			acc -= tickDur
+		}
+		alpha := float64(acc) / float64(tickDur)
+		ix, iy, iz := g.player.Lerp(alpha)
+		g.eng.Update(ix, iy, iz)
+
+		fw, fh := g.win.GetFramebufferSize()
+		gl.Viewport(0, 0, int32(fw), int32(fh))
+		day := float32(g.eng.Renderer.Opt.Daylight)
+		gl.ClearColor(0.55*day, 0.65*day, 0.85*day, 1)
+		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+		g.cam.X, g.cam.Y, g.cam.Z = ix, iy+g.player.EyeHeight, iz
+		g.cam.Aspect = float64(fw) / float64(max(fh, 1))
+		g.eng.Render(&g.cam)
+		g.drawWorld(alpha)
+		g.eng.Renderer.DrawCrosshair(float32(g.cam.Aspect))
+		if g.shotReq {
+			g.shotReq = false
+			saveShot(filepath.Join("screenshots", time.Now().Format("2006-01-02_15-04-05")+".png"), fw, fh)
+		}
+		g.drawHUD(fw, fh)
+		if shotPath != "" && g.ready && g.playTick >= shotAt {
+			saveShot(shotPath, fw, fh)
+			g.printStatus()
+			return
+		}
+		g.win.SwapBuffers()
+	}
+}
+
+// step is one 20 Hz tick.
+func (g *game) step() {
+	g.tick++
+	if !g.ready {
+		g.waitForWorld()
+		return
+	}
+	g.playTick++
+	g.runScript()
+	if g.editing && g.sim == nil {
+		g.tickEditor()
+		return
+	}
+	g.tickPlay()
+}
+
+// waitForWorld holds the player until every chunk the mission touches is
+// loaded and lit, then starts the simulation (or the editor).
+func (g *game) waitForWorld() {
+	g.player.PrevX, g.player.PrevY, g.player.PrevZ = g.player.X, g.player.Y, g.player.Z
+	lo, hi := g.missionBounds()
+	for cx := lo.X >> 4; cx <= hi.X>>4; cx++ {
+		for cz := lo.Z >> 4; cz <= hi.Z>>4; cz++ {
+			if !g.eng.ChunkReady(voxel.ChunkPos{X: cx, Z: cz}) {
+				return
+			}
+		}
+	}
+	if _, pc, pm := g.eng.Progress(); pc > 0 || pm > 0 {
+		return
+	}
+	g.ready = true
+	if g.editing {
+		g.player.Flying = true
+		g.message("Editor: F1 for keys. F6 playtests.")
+		return
+	}
+	g.startSim()
+}
+
+// missionBounds is the cell box around everything the mission places.
+func (g *game) missionBounds() (lo, hi sim.Cell) {
+	m := g.mission
+	lo, hi = m.Start.Cell(), m.Start.Cell()
+	grow := func(c sim.Cell) {
+		lo = sim.Cell{X: min(lo.X, c.X), Y: min(lo.Y, c.Y), Z: min(lo.Z, c.Z)}
+		hi = sim.Cell{X: max(hi.X, c.X), Y: max(hi.Y, c.Y), Z: max(hi.Z, c.Z)}
+	}
+	for _, o := range m.Objects {
+		grow(o.Pos.Cell())
+	}
+	for _, n := range m.NPCs {
+		grow(n.Pos.Cell())
+		for _, w := range n.Patrol {
+			grow(w.Pos.Cell())
+		}
+	}
+	for _, r := range m.Rooms {
+		for _, b := range r.Boxes {
+			grow(b.Min)
+			grow(b.Max)
+		}
+	}
+	return lo.Add(-16, 0, -16), hi.Add(16, 0, 16)
+}
+
+// startSim begins the mission from its start.
+func (g *game) startSim() {
+	g.sim = sim.New(g.world, g.mission)
+	g.player.Teleport(g.mission.Start.X, g.mission.Start.Y, g.mission.Start.Z)
+	g.cam.Yaw, g.cam.Pitch = g.mission.StartYaw, 0
+	g.resetPlay()
+	g.message(g.mission.Title + ". " + g.mission.Briefing)
+	g.message("F1: controls   Tab: objectives")
+}
+
+func (g *game) printStatus() {
+	if g.sim == nil {
+		fmt.Println("shot saved (editor)")
+		return
+	}
+	s := g.sim
+	h, mi := s.Clock()
+	fmt.Printf("shot saved | tick %d | %02d:%02d | player %.1f %.1f %.1f hp %d vis %.2f loot %d | outcome %d %s\n",
+		s.Now, h, mi, s.Player.Pos.X, s.Player.Pos.Y, s.Player.Pos.Z, s.Player.Health, s.Visibility, s.Player.Loot, s.Outcome, s.FailReason)
+	for _, n := range s.NPCs {
+		p := n.Pos()
+		fmt.Printf("  %-16s %-11s susp %5.1f at %.1f %.1f %.1f\n", n.Name, n.State, n.Suspicion, p.X, p.Y, p.Z)
+	}
+	for _, l := range g.log {
+		fmt.Println("  >", l)
+	}
+}
+
+func saveShot(path string, w, h int) {
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	px := make([]byte, w*h*4)
+	gl.ReadPixels(0, 0, int32(w), int32(h), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(px))
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		copy(img.Pix[y*w*4:(y+1)*w*4], px[(h-1-y)*w*4:(h-y)*w*4])
+	}
+	for i := 3; i < len(img.Pix); i += 4 {
+		img.Pix[i] = 255
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	defer f.Close()
+	png.Encode(f, img)
+}

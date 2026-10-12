@@ -180,3 +180,10 @@ func (rm *RoomMap) heard(f soundField, loud float64, at Vec3) (float64, Vec3) {
 	e := f.entry[r]
 	return loud - SoundFalloff*(d+e.Dist(at)), e
 }
+
+// Hear returns how loud a sound of loudness loud at src is at the listener
+// and where it seems to come from, travelling through rooms and doors as
+// the guards hear it. The game plays the player's sounds the same way.
+func (s *Sim) Hear(src Vec3, loud float64, at Vec3) (float64, Vec3) {
+	return s.Rooms.heard(s.Rooms.spread(src, s.doorClosed), loud, at)
+}
