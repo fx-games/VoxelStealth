@@ -258,19 +258,19 @@ func writeMission(dir string) {
 		},
 	}
 	m.NPCs = []*sim.NPCDef{
-		{ID: "aldric", Name: "Guard Aldric", Kind: "guard", Model: "guard", Voice: "generic-male-guard-a", Pos: v(10.5, G, 58.5), Patrol: []sim.Waypoint{
+		{ID: "aldric", Name: "Guard Aldric", Kind: "guard", Model: "guard", Voice: "generic-guard-a", Pos: v(10.5, G, 58.5), Patrol: []sim.Waypoint{
 			wp(10.5, G, 58.5, 3), wp(9.5, G, 8.5, 4, 90), wp(53.5, G, 8.5, 3), wp(53.5, G, 47.5, 4, 270), wp(40.5, G, 46.5, 2), wp(22.5, G, 46.5, 2)}},
-		{ID: "bertram", Name: "Guard Bertram", Kind: "guard", Model: "guard", Voice: "generic-male-guard-b", Pos: v(31.5, G, 36.5), Patrol: []sim.Waypoint{
+		{ID: "bertram", Name: "Guard Bertram", Kind: "guard", Model: "guard", Voice: "generic-guard-b", Pos: v(31.5, G, 36.5), Patrol: []sim.Waypoint{
 			wp(31.5, G, 36.5, 6, 180), wp(31.5, G, 26.5, 1), wp(20.5, G, 15.5, 4, 0), wp(34.5, G, 15.5, 4, 90), wp(31.5, G, 26.5, 1)}},
-		{ID: "cuthbert", Name: "Guard Cuthbert", Kind: "guard", Model: "guard", Voice: "generic-male-guard-a", Pos: v(33.5, U, 13.5), Patrol: []sim.Waypoint{
+		{ID: "cuthbert", Name: "Guard Cuthbert", Kind: "guard", Model: "guard", Voice: "generic-guard-a", Pos: v(33.5, U, 13.5), Patrol: []sim.Waypoint{
 			wp(33.5, U, 13.5, 4), wp(33.5, U, 38.5, 4), wp(42.5, U, 32.5, 5, 90), wp(33.5, U, 25.5, 1)}},
-		{ID: "dunstan", Name: "Captain Dunstan", Kind: "guard", Model: "captain", Voice: "unique-male-captain", Pos: v(43.5, G, 35.5), Keys: []string{"vault"}, Patrol: []sim.Waypoint{
+		{ID: "dunstan", Name: "Captain Dunstan", Kind: "guard", Model: "captain", Voice: "unique-captain", Pos: v(43.5, G, 35.5), Keys: []string{"vault"}, Patrol: []sim.Waypoint{
 			wp(43.5, G, 35.5, 10, 180), wp(41.5, G, 24.5, 1), wp(41.5, C, 20.5, 2), wp(38.5, C, 15.5, 6, 270), wp(44.5, C, 24.5, 1)}},
-		{ID: "edith", Name: "Maid Edith", Kind: "civilian", Model: "servant", Voice: "generic-female-servant", Pos: v(20.5, G, 36.5), Patrol: []sim.Waypoint{
+		{ID: "edith", Name: "Maid Edith", Kind: "civilian", Model: "servant", Voice: "generic-servant-a", Pos: v(20.5, G, 36.5), Patrol: []sim.Waypoint{
 			wp(20.5, G, 36.5, 12, 270), wp(18.5, G, 32.5, 3), wp(25.5, G, 17.5, 8, 180), wp(20.5, G, 26.5, 1)}},
-		{ID: "fenwick", Name: "Butler Fenwick", Kind: "civilian", Model: "servant", Voice: "generic-male-servant", Pos: v(22.5, U, 18.5), Patrol: []sim.Waypoint{
+		{ID: "fenwick", Name: "Butler Fenwick", Kind: "civilian", Model: "servant", Voice: "generic-servant-b", Pos: v(22.5, U, 18.5), Patrol: []sim.Waypoint{
 			wp(22.5, U, 18.5, 8), wp(33.5, U, 30.5, 4), wp(42.5, U, 36.5, 8, 0), wp(33.5, U, 20.5, 1)}},
-		{ID: "ashworth", Name: "Lord Ashworth", Kind: "target", Model: "lord", Voice: "unique-male-lord", Pos: v(44.5, U, 22.5), Patrol: []sim.Waypoint{
+		{ID: "ashworth", Name: "Lord Ashworth", Kind: "target", Model: "lord", Voice: "unique-lord", Pos: v(44.5, U, 22.5), Patrol: []sim.Waypoint{
 			wp(44.5, U, 22.5, 30, 90), wp(22.5, U, 30.5, 20, 0), wp(20.5, U, 16.5, 25, 270), wp(25.5, G, 13.5, 20, 0), wp(39.5, G, 16.5, 1)}},
 	}
 	torch := func(id string, x, y, z float64) *sim.Object {

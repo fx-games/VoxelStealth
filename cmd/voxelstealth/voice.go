@@ -36,9 +36,9 @@ var lineIDs = map[string]string{
 	"Show me where!":                          "follow-reporter",
 }
 
-// shouted lines carry as far as an alarm; the rest is normal speech.
-var shouted = map[string]bool{"spot-player": true, "alarmed": true, "fire": true, "found-dead-body": true,
-	"found-unconscious-body": true, "lost-player": true, "follow-reporter": true}
+// loudness is how loud (and so how far) a bark carries, by the line's
+// loudness in assets/voice/lines.txt (from TODO-VOICE.md).
+var loudness = map[string]float64{"quiet": 30, "normal": 40, "shout": 60}
 
 // vocalIDs are the wordless sounds an NPC makes, by sim sound kind; several
 // ids are variations to pick from.
@@ -51,6 +51,14 @@ var vocalIDs = map[string][]string{
 // loadVoices reads every speaker's lines under dir; missing files are fine.
 func (g *game) loadVoices(dir string) {
 	g.voices = map[string]map[string]*audio.Sound{}
+	g.lineLoud = map[string]float64{}
+	if b, err := os.ReadFile(filepath.Join(dir, "lines.txt")); err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			if f := strings.Fields(l); len(f) == 2 && !strings.HasPrefix(l, "#") {
+				g.lineLoud[f[0]] = loudness[f[1]]
+			}
+		}
+	}
 	paths, _ := filepath.Glob(filepath.Join(dir, "*", "*.ogg"))
 	for _, p := range paths {
 		s, err := loadOgg(p)
@@ -113,9 +121,9 @@ func (g *game) voiceFor(k int, ids ...string) *audio.Sound {
 // playBark plays what an NPC said: its recording, else the synthesized
 // voice.
 func (g *game) playBark(e sim.Event) {
-	id, loud := lineIDs[e.Line], 40.0
-	if shouted[id] {
-		loud = 60
+	id, loud := lineIDs[e.Line], loudness["normal"]
+	if l := g.lineLoud[id]; l > 0 {
+		loud = l
 	}
 	if s := g.voiceFor(e.NPC, id); s != nil {
 		g.playWorldSound(s, e.Pos, loud)

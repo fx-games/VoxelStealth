@@ -15,10 +15,11 @@ import (
 )
 
 type soundState struct {
-	mixer   *audio.Mixer
-	sounds  map[string]*audio.Sound
-	voices  map[string]map[string]*audio.Sound // speaker → line id → recording
-	ambient *audio.Voice
+	mixer    *audio.Mixer
+	sounds   map[string]*audio.Sound
+	voices   map[string]map[string]*audio.Sound // speaker → line id → recording
+	lineLoud map[string]float64                 // line id → bark loudness
+	ambient  *audio.Voice
 }
 
 const sr = audio.SampleRate

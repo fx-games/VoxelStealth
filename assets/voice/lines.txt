@@ -1,0 +1,21 @@
+# line-id loudness (quiet/normal/shout), generated from TODO-VOICE.md
+alarm-shout shout
+alarmed shout
+calm-down-1 quiet
+calm-down-2 quiet
+death quiet
+fire shout
+follow-reporter shout
+found-dead-body shout
+found-unconscious-body shout
+give-up-search normal
+investigate quiet
+knocked-out quiet
+lost-player shout
+nothing-here quiet
+pain-1 shout
+pain-2 shout
+spot-player shout
+suspicious-1 quiet
+suspicious-2 normal
+suspicious-3 normal

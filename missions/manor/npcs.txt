@@ -4,7 +4,7 @@ ID: aldric
 Name: Guard Aldric
 Kind: guard
 Model: guard
-Voice: generic-male-guard-a
+Voice: generic-guard-a
 Pos: 10.5,64,58.5
 Yaw: 0
 Patrol: 10.5,64,58.5 3; 9.5,64,8.5 4 90; 53.5,64,8.5 3; 53.5,64,47.5 4 270; 40.5,64,46.5 2; 22.5,64,46.5 2
@@ -13,7 +13,7 @@ ID: bertram
 Name: Guard Bertram
 Kind: guard
 Model: guard
-Voice: generic-male-guard-b
+Voice: generic-guard-b
 Pos: 31.5,64,36.5
 Yaw: 0
 Patrol: 31.5,64,36.5 6 180; 31.5,64,26.5 1; 20.5,64,15.5 4 0; 34.5,64,15.5 4 90; 31.5,64,26.5 1
@@ -22,7 +22,7 @@ ID: cuthbert
 Name: Guard Cuthbert
 Kind: guard
 Model: guard
-Voice: generic-male-guard-a
+Voice: generic-guard-a
 Pos: 33.5,69,13.5
 Yaw: 0
 Patrol: 33.5,69,13.5 4; 33.5,69,38.5 4; 42.5,69,32.5 5 90; 33.5,69,25.5 1
@@ -31,7 +31,7 @@ ID: dunstan
 Name: Captain Dunstan
 Kind: guard
 Model: captain
-Voice: unique-male-captain
+Voice: unique-captain
 Pos: 43.5,64,35.5
 Yaw: 0
 Keys: vault
@@ -41,7 +41,7 @@ ID: edith
 Name: Maid Edith
 Kind: civilian
 Model: servant
-Voice: generic-female-servant
+Voice: generic-servant-a
 Pos: 20.5,64,36.5
 Yaw: 0
 Patrol: 20.5,64,36.5 12 270; 18.5,64,32.5 3; 25.5,64,17.5 8 180; 20.5,64,26.5 1
@@ -50,7 +50,7 @@ ID: fenwick
 Name: Butler Fenwick
 Kind: civilian
 Model: servant
-Voice: generic-male-servant
+Voice: generic-servant-b
 Pos: 22.5,69,18.5
 Yaw: 0
 Patrol: 22.5,69,18.5 8; 33.5,69,30.5 4; 42.5,69,36.5 8 0; 33.5,69,20.5 1
@@ -59,7 +59,7 @@ ID: ashworth
 Name: Lord Ashworth
 Kind: target
 Model: lord
-Voice: unique-male-lord
+Voice: unique-lord
 Pos: 44.5,69,22.5
 Yaw: 0
 Patrol: 44.5,69,22.5 30 90; 22.5,69,30.5 20 0; 20.5,69,16.5 25 270; 25.5,64,13.5 20 0; 39.5,64,16.5 1

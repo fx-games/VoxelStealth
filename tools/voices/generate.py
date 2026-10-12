@@ -15,54 +15,70 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 VOICES = glob.glob(os.path.expanduser(
     "~/.cache/huggingface/hub/models--mlx-community--Kokoro-82M-bf16/snapshots/*/voices"))[0]
 
-# speaker -> (kokoro voice, speed, pitch shift in cents)
-SPEAKERS = {
-    "unique-male-lord":       ("bm_george", 0.92, -50),
-    "unique-male-captain":    ("bm_lewis",  0.95, -150),
-    "generic-male-guard-a":   ("bm_fable",  1.00, 0),
-    "generic-male-guard-b":   ("am_onyx",   0.95, -100),
-    "generic-female-servant": ("bf_lily",   1.05, 0),
-    "generic-male-servant":   ("bm_daniel", 0.95, 50),
-}
-GUARDS = {"unique-male-captain", "generic-male-guard-a", "generic-male-guard-b"}
+DOC = f"{ROOT}/TODO-VOICE.md"
 
-# line-id -> (text, speed multiplier); loud lines go faster
-COMMON = {
-    "suspicious-1": ("Hm? What was that?", 0.95),
-    "suspicious-2": ("Is someone there?", 1.0),
-    "suspicious-3": ("Who's there?", 1.05),
-    "investigate": ("I'd better check that out.", 0.95),
-    "calm-down-1": ("Must have been rats.", 0.95),
-    "calm-down-2": ("Just my imagination.", 0.95),
-    "nothing-here": ("Nothing here.", 0.9),
-    "found-dead-body": ("Someone's been murdered!", 1.15),
-    "found-unconscious-body": ("Wake up! Who did this?", 1.15),
-    "fire": ("Fire!", 1.2),
-    "knocked-out": ("Ugh...", 0.8),
-    # non-verbal approximations
-    "pain-1": ("Agh!", 1.2),
-    "pain-2": ("Ngh!", 1.2),
-    "death": ("Ughhh...", 0.8),
-    "alarm-shout": ("Hey!", 1.2),
+# Engine side only: speaker -> (kokoro voice, speed, pitch shift in cents).
+# Kokoro voice names start with a/b (US/UK) then f/m (gender), checked
+# against the speaker's gender in TODO-VOICE.md.
+KOKORO = {
+    "unique-lord":       ("bm_george", 0.92, -50),
+    "unique-captain":    ("bm_lewis",  0.95, -150),
+    "generic-guard-a":   ("bm_fable",  1.00, 0),
+    "generic-guard-b":   ("am_onyx",   0.95, -100),
+    "generic-servant-a": ("bf_lily",   1.05, 0),
+    "generic-servant-b": ("bm_daniel", 0.95, 50),
 }
-GUARD = {
-    "spot-player": ("There you are!", 1.15),
-    "alarmed": ("What's going on?!", 1.15),
-    "lost-player": ("Where did you go?", 1.1),
-    "give-up-search": ("Must have gone. I'll keep my eyes open.", 1.0),
-    "follow-reporter": ("Show me where!", 1.15),
-}
-CIVILIAN = {"spot-player": ("Help! Guards!", 1.2)}
+
+# loudness -> delivery pace (the game sets the playback level)
+PACE = {"quiet": 0.92, "normal": 1.0, "shout": 1.15}
+
+
+def cells(line):
+    return [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+
+
+def read_doc():
+    """Speakers {id: (gender, role)} and lines {set: {id: (loudness, text)}}
+    from the tables in TODO-VOICE.md; set is common, guard or civilian."""
+    speakers, lines, section = {}, {"common": {}, "guard": {}, "civilian": {}}, None
+    for line in open(DOC, encoding="utf-8"):
+        if line.startswith("#"):
+            h = line.lower()
+            section = ("guard" if "guard lines" in h else "civilian" if "civilian lines" in h
+                       else "common" if "everyone" in h or "non-verbal" in h else None)
+            continue
+        if not line.startswith("| `"):
+            continue
+        c = cells(line)
+        if section is None and len(c) >= 3 and c[1] in ("male", "female"):
+            speakers[c[0]] = (c[1], c[2])
+        elif section and len(c) >= 3:
+            if c[1] not in PACE:
+                sys.exit(f"{c[0]}: loudness {c[1]!r} is not quiet, normal or shout")
+            lines[section][c[0]] = (c[1], c[2])
+    return speakers, lines
 
 
 def main():
     force = "--force" in sys.argv
     pipe = KPipeline(lang_code="b")  # British English G2P
     made = 0
-    for spk, (voice, speed, cents) in SPEAKERS.items():
-        lines = {**COMMON, **(GUARD if spk in GUARDS else CIVILIAN)}
+    speakers, sets = read_doc()
+    # The game reads each line's loudness from here.
+    with open(f"{ROOT}/assets/voice/lines.txt", "w") as f:
+        f.write("# line-id loudness (quiet/normal/shout), generated from TODO-VOICE.md\n")
+        for lid, (loud, _) in sorted({k: v for s in sets.values() for k, v in s.items()}.items()):
+            f.write(f"{lid} {loud}\n")
+    for spk, (gender, role) in speakers.items():
+        if spk not in KOKORO:
+            sys.exit(f"{spk}: no Kokoro voice assigned in generate.py")
+        voice, speed, cents = KOKORO[spk]
+        if voice[1] != gender[0]:
+            sys.exit(f"{spk}: Kokoro voice {voice} does not match gender {gender}")
+        lines = {**sets["common"], **sets[role]}
         os.makedirs(f"{ROOT}/assets/voice/{spk}", exist_ok=True)
-        for lid, (text, mult) in lines.items():
+        for lid, (loud, text) in lines.items():
+            mult = PACE[loud]
             out = f"{ROOT}/assets/voice/{spk}/{lid}.ogg"
             if os.path.exists(out) and not force:
                 continue
