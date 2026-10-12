@@ -8,6 +8,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"os"
@@ -120,6 +121,15 @@ func main() {
 		b.set(63-x, G, 50, "oak_leaves[distance=1,persistent=true,waterlogged=false]")
 	}
 	b.fill(48, G, 52, 52, G, 56, "hay_block") // hay by the stable wall
+	// The graveyard in the south-west corner (x 18..28, z 53..62, clear of
+	// Aldric's patrol): cursed grass, dirt on the graves, a dead tree.
+	b.fill(19, G-1, 54, 27, G-1, 62, "voxelstealth:corrupted_grass")
+	for _, g := range graves {
+		b.set(g[0], G-1, g[1], "voxelstealth:corrupted_dirt")
+	}
+	b.fill(26, G, 61, 26, G+3, 61, "voxelstealth:dark_trunk_log")
+	b.fill(25, G+3, 60, 27, G+4, 62, "voxelstealth:red_leaves")
+	b.set(26, G+5, 61, "voxelstealth:red_leaves")
 
 	// Cellar block, carved below.
 	b.fill(13, 56, 9, 50, 62, 42, "cobblestone")
@@ -241,6 +251,9 @@ func (b *builder) save(dir string) {
 	log.Printf("wrote %d lit chunks to %s", n, dir)
 }
 
+// graves are the graveyard's grave cells, two rows of three.
+var graves = [][2]int{{20, 56}, {23, 56}, {26, 56}, {20, 59}, {23, 59}, {26, 59}}
+
 // The island's radius around the manor's centre, the sea level, and area,
 // the cells the level occupies: the island and the ocean out to the fog's
 // end (160 blocks) seen from its shore.
@@ -272,7 +285,7 @@ func writeMission(b *builder, dir string) {
 			"leaves the vault with you. Take enough of his silver to make it worth the trip, and be gone through the gate before dawn.",
 		Start: v(31.5, G, 72.5), StartYaw: 0, StartTime: 22*3600 + 30*60, TimeScale: 8, LootQuota: 700,
 		Exit: box(24, G-1, 66, 39, G+6, 76), Area: area,
-		Ammo: map[string]int{sim.AmmoBroadhead: 6, sim.AmmoWater: 4, sim.AmmoNoise: 2, sim.AmmoExplosive: 1},
+		Ammo: map[string]int{sim.AmmoBroadhead: 6, sim.AmmoWater: 4, sim.AmmoNoise: 2, sim.AmmoRope: 2, sim.AmmoExplosive: 1},
 		Objectives: []sim.Objective{
 			{Kind: "kill", Target: "ashworth", Text: "Kill Lord Ashworth"},
 			{Kind: "steal", Target: "chalice", Text: "Steal the Ashworth Chalice from the cellar vault"},
@@ -370,6 +383,7 @@ func writeMission(b *builder, dir string) {
 		{ID: "cellar_barrel2", Kind: sim.KindDecor, Name: "Barrel", Pos: v(45.5, C, 15.5), Yaw: 1.1},
 		{ID: "cellar_oil", Kind: sim.KindDecor, Name: "Oil barrel", Pos: v(45.5, C, 16.5), Yaw: 0.7},
 	}
+	m.Objects = append(m.Objects, graveyard()...)
 	m.Rooms = []*sim.Room{
 		{ID: 1, Name: "Entrance hall", Boxes: []sim.Box{box(27, G, 31, 36, G+3, 40)}},
 		{ID: 2, Name: "Dining hall", Boxes: []sim.Box{box(15, G, 11, 36, G+3, 29)}},
@@ -387,4 +401,50 @@ func writeMission(b *builder, dir string) {
 		log.Fatal(err)
 	}
 	log.Printf("wrote mission %q to %s", m.Title, dir)
+}
+
+// graveyard is the graveyard's fence, graves, candles and clutter: iron
+// fence on three sides (the outer wall is the fourth) with the gate open in
+// the north, candles at the graves' feet.
+func graveyard() []*sim.Object {
+	var os []*sim.Object
+	add := func(kind, name string, x, z, yaw float64, lit bool) {
+		o := &sim.Object{ID: fmt.Sprintf("grave_%d", len(os)), Kind: kind, Name: name, Pos: v(x, G, z), Yaw: yaw, Lit: lit}
+		if kind == sim.KindTorch {
+			o.On = "floor"
+		}
+		os = append(os, o)
+	}
+	decor := func(name string, x, z, yaw float64) { add(sim.KindDecor, name, x, z, yaw, false) }
+	for x := 18; x <= 28; x++ {
+		switch {
+		case x == 18 || x == 21 || x == 24 || x == 28:
+			decor("Iron pillar", float64(x)+0.5, 53.5, 0)
+		case x == 22:
+			decor("Iron gate", 22.5, 53.5, math.Pi/2) // swung open
+		case x != 23: // the way in
+			decor("Iron fence", float64(x)+0.5, 53.5, 0)
+		}
+	}
+	for z := 54.5; z < 63; z++ {
+		decor("Iron fence", 18.5, z, math.Pi/2)
+		decor("Iron fence", 28.5, z, math.Pi/2)
+	}
+	for i, g := range graves {
+		x, z := float64(g[0])+0.5, float64(g[1])+0.5
+		decor([]string{"Tomb", "Grave", "Grave slab"}[i%3], x, z, 0)
+		add(sim.KindTorch, "Candle", x+0.3, z-0.9, 0, i != 4) // one has gone out
+	}
+	decor("Stone table", 21.5, 61.5, 0)
+	decor("Stone chair", 20.5, 61.5, math.Pi/2)
+	add(sim.KindTorch, "Candlestick", 22.5, 61.5, 0.4, true)
+	decor("Ritual book", 23.5, 61.6, 0.3)
+	decor("Skull", 24.5, 61.5, -0.5)
+	decor("Bone", 19.5, 55.5, 1.2)
+	decor("Bone", 25.0, 57.8, 0.3)
+	decor("Dead flower", 21.5, 57.5, 0)
+	decor("Dead flower", 27.5, 58.5, 0.8)
+	decor("Dead grass", 24.5, 58.5, 0.5)
+	decor("Dead grass", 27.5, 55.5, 2)
+	return os
 }

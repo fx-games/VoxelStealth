@@ -440,3 +440,299 @@ Kind: decor
 Name: Oil barrel
 Pos: 45.5,58,16.5
 Yaw: 40.11
+
+ID: grave_0
+Kind: decor
+Name: Iron pillar
+Pos: 18.5,64,53.5
+
+ID: grave_1
+Kind: decor
+Name: Iron fence
+Pos: 19.5,64,53.5
+
+ID: grave_2
+Kind: decor
+Name: Iron fence
+Pos: 20.5,64,53.5
+
+ID: grave_3
+Kind: decor
+Name: Iron pillar
+Pos: 21.5,64,53.5
+
+ID: grave_4
+Kind: decor
+Name: Iron gate
+Pos: 22.5,64,53.5
+Yaw: 90
+
+ID: grave_5
+Kind: decor
+Name: Iron pillar
+Pos: 24.5,64,53.5
+
+ID: grave_6
+Kind: decor
+Name: Iron fence
+Pos: 25.5,64,53.5
+
+ID: grave_7
+Kind: decor
+Name: Iron fence
+Pos: 26.5,64,53.5
+
+ID: grave_8
+Kind: decor
+Name: Iron fence
+Pos: 27.5,64,53.5
+
+ID: grave_9
+Kind: decor
+Name: Iron pillar
+Pos: 28.5,64,53.5
+
+ID: grave_10
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,54.5
+Yaw: 90
+
+ID: grave_11
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,54.5
+Yaw: 90
+
+ID: grave_12
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,55.5
+Yaw: 90
+
+ID: grave_13
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,55.5
+Yaw: 90
+
+ID: grave_14
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,56.5
+Yaw: 90
+
+ID: grave_15
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,56.5
+Yaw: 90
+
+ID: grave_16
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,57.5
+Yaw: 90
+
+ID: grave_17
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,57.5
+Yaw: 90
+
+ID: grave_18
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,58.5
+Yaw: 90
+
+ID: grave_19
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,58.5
+Yaw: 90
+
+ID: grave_20
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,59.5
+Yaw: 90
+
+ID: grave_21
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,59.5
+Yaw: 90
+
+ID: grave_22
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,60.5
+Yaw: 90
+
+ID: grave_23
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,60.5
+Yaw: 90
+
+ID: grave_24
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,61.5
+Yaw: 90
+
+ID: grave_25
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,61.5
+Yaw: 90
+
+ID: grave_26
+Kind: decor
+Name: Iron fence
+Pos: 18.5,64,62.5
+Yaw: 90
+
+ID: grave_27
+Kind: decor
+Name: Iron fence
+Pos: 28.5,64,62.5
+Yaw: 90
+
+ID: grave_28
+Kind: decor
+Name: Tomb
+Pos: 20.5,64,56.5
+
+ID: grave_29
+Kind: torch
+Name: Candle
+Pos: 20.8,64,55.6
+Lit: yes
+On: floor
+
+ID: grave_30
+Kind: decor
+Name: Grave
+Pos: 23.5,64,56.5
+
+ID: grave_31
+Kind: torch
+Name: Candle
+Pos: 23.8,64,55.6
+Lit: yes
+On: floor
+
+ID: grave_32
+Kind: decor
+Name: Grave slab
+Pos: 26.5,64,56.5
+
+ID: grave_33
+Kind: torch
+Name: Candle
+Pos: 26.8,64,55.6
+Lit: yes
+On: floor
+
+ID: grave_34
+Kind: decor
+Name: Tomb
+Pos: 20.5,64,59.5
+
+ID: grave_35
+Kind: torch
+Name: Candle
+Pos: 20.8,64,58.6
+Lit: yes
+On: floor
+
+ID: grave_36
+Kind: decor
+Name: Grave
+Pos: 23.5,64,59.5
+
+ID: grave_37
+Kind: torch
+Name: Candle
+Pos: 23.8,64,58.6
+On: floor
+
+ID: grave_38
+Kind: decor
+Name: Grave slab
+Pos: 26.5,64,59.5
+
+ID: grave_39
+Kind: torch
+Name: Candle
+Pos: 26.8,64,58.6
+Lit: yes
+On: floor
+
+ID: grave_40
+Kind: decor
+Name: Stone table
+Pos: 21.5,64,61.5
+
+ID: grave_41
+Kind: decor
+Name: Stone chair
+Pos: 20.5,64,61.5
+Yaw: 90
+
+ID: grave_42
+Kind: torch
+Name: Candlestick
+Pos: 22.5,64,61.5
+Yaw: 22.92
+Lit: yes
+On: floor
+
+ID: grave_43
+Kind: decor
+Name: Ritual book
+Pos: 23.5,64,61.6
+Yaw: 17.19
+
+ID: grave_44
+Kind: decor
+Name: Skull
+Pos: 24.5,64,61.5
+Yaw: -28.65
+
+ID: grave_45
+Kind: decor
+Name: Bone
+Pos: 19.5,64,55.5
+Yaw: 68.75
+
+ID: grave_46
+Kind: decor
+Name: Bone
+Pos: 25,64,57.8
+Yaw: 17.19
+
+ID: grave_47
+Kind: decor
+Name: Dead flower
+Pos: 21.5,64,57.5
+
+ID: grave_48
+Kind: decor
+Name: Dead flower
+Pos: 27.5,64,58.5
+Yaw: 45.84
+
+ID: grave_49
+Kind: decor
+Name: Dead grass
+Pos: 24.5,64,58.5
+Yaw: 28.65
+
+ID: grave_50
+Kind: decor
+Name: Dead grass
+Pos: 27.5,64,55.5
+Yaw: 114.59
