@@ -36,7 +36,7 @@ func (w *simWorld) Solid(x, y, z int) bool {
 	if wd.Chunk(voxel.ChunkPos{X: x >> 4, Z: z >> 4}) == nil {
 		return true
 	}
-	return wd.Reg.Info(wd.Block(x, y, z)).Collides
+	return wd.Reg.Info(wd.Block(x, y, z)).Collides && !sim.OpenDoor(w.Block(x, y, z))
 }
 
 func (w *simWorld) Liquid(x, y, z int) character.Liquid {

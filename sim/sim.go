@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"slices"
@@ -518,16 +519,22 @@ func (s *Sim) unlight(c Cell) {
 	}
 }
 
-// setDoor opens (air) or closes (door blocks) a door.
+// setDoor swings a door open or shut. The door lies in the plane of the
+// wall around it: walls east and west hang it across X, else across Z.
 func (s *Sim) setDoor(i int, open bool) {
 	o := s.Objects[i]
 	o.Open = open
-	b := BlockDoor
-	if open {
-		b = BlockAir
+	c := o.doorCells()[0]
+	facing := "east"
+	if s.W.Solid(c.X-1, c.Y, c.Z) && s.W.Solid(c.X+1, c.Y, c.Z) {
+		facing = "south"
 	}
-	for _, c := range o.doorCells() {
-		s.W.SetBlock(c.X, c.Y, c.Z, b)
+	for k, c := range o.doorCells() {
+		half := "lower"
+		if k == 1 {
+			half = "upper"
+		}
+		s.W.SetBlock(c.X, c.Y, c.Z, fmt.Sprintf("%s[facing=%s,half=%s,hinge=left,open=%t,powered=false]", BlockDoor, facing, half, open))
 	}
 }
 

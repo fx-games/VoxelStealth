@@ -20,7 +20,9 @@ const (
 	// meshed as a film on the floor. Block names carry their properties, so
 	// it is not "minecraft:water" and nobody swims in it.
 	BlockPuddle = "minecraft:water[level=7]"
-	BlockDoor   = "voxelstealth:door" // closed door; an open door is air
+	// BlockDoor is a door half, shaped like Minecraft's door and swung open
+	// or shut (setDoor). An open door doesn't collide, as far as Solid goes.
+	BlockDoor = "voxelstealth:manor_door"
 	// BlockOil is an oily cell: a black film like BlockPuddle.
 	BlockOil = "voxelstealth:oil[level=7]"
 )
@@ -31,6 +33,11 @@ type World interface {
 	Solid(x, y, z int) bool   // collides
 	Light(x, y, z int) (sky, block uint8)
 	SetBlock(x, y, z int, name string)
+}
+
+// OpenDoor reports whether a block name is an open door.
+func OpenDoor(name string) bool {
+	return strings.HasPrefix(name, BlockDoor+"[") && strings.Contains(name, "open=true")
 }
 
 // Vec3 is a world position.

@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/memmaker/voxellib/character"
@@ -21,7 +22,7 @@ func (w *fakeWorld) Block(x, y, z int) string {
 }
 func (w *fakeWorld) Solid(x, y, z int) bool {
 	n := w.Block(x, y, z)
-	return n != BlockAir && n != BlockLight && n != BlockPuddle && n != BlockOil
+	return n != BlockAir && n != BlockLight && n != BlockPuddle && n != BlockOil && !OpenDoor(n)
 }
 func (w *fakeWorld) SetBlock(x, y, z int, n string) {
 	if n == BlockAir {
@@ -798,5 +799,20 @@ func TestThrownLanternSpillsBurningOil(t *testing.T) {
 	}
 	if len(s.Oil) < 2 || burning == 0 {
 		t.Fatalf("lantern spilled %d oil cells, %d burning", len(s.Oil), burning)
+	}
+}
+
+func TestDoorSwings(t *testing.T) {
+	w, m := twoRooms()
+	s := New(w, m)
+	if !w.Solid(10, 1, 5) || !w.Solid(10, 2, 5) {
+		t.Fatalf("shut door not solid: %q", w.Block(10, 1, 5))
+	}
+	s.setDoor(0, true)
+	if w.Solid(10, 1, 5) || w.Solid(10, 2, 5) {
+		t.Fatalf("open door still solid: %q", w.Block(10, 1, 5))
+	}
+	if b := w.Block(10, 2, 5); !strings.Contains(b, "half=upper") {
+		t.Fatalf("upper half = %q", b)
 	}
 }
