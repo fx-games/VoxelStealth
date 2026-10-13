@@ -10,12 +10,20 @@ import (
 )
 
 // TicksPerSecond is the simulation rate.
+// StreetLamp names the big lamp post outside, its light StreetLampHead
+// blocks up; other lamps are small. Water puts a street lamp out; it is
+// too heavy to knock over.
+const (
+	StreetLamp     = "Street lamp"
+	StreetLampHead = 2.97
+)
+
 const TicksPerSecond = 20
 
 // Object kinds.
 const (
 	KindTorch     = "torch"     // wall torch: lit, can be doused or knocked down
-	KindLamp      = "lamp"      // standing electric lamp: knock it into water
+	KindLamp      = "lamp"      // electric lamp (StreetLamp: the big post outside): knock it into water
 	KindFaucet    = "faucet"    // leaks water while running
 	KindDoor      = "door"      // two cells high; may be locked
 	KindLoot      = "loot"      // valuables
@@ -32,7 +40,8 @@ const (
 	AmmoWater     = "water"
 	AmmoNoise     = "noisemaker"
 	AmmoRope      = "rope"
-	AmmoExplosive = "explosive"
+	AmmoExplosive = "explosive" // flash bombs
+	AmmoTNT       = "tnt"
 )
 
 // Object is anything in the world the player or the stimulus system can
@@ -56,6 +65,7 @@ type Object struct {
 	Held      bool // torch in the player's hand
 	Vel, Prev Vec3 // a thrown torch in flight: blocks/tick, last tick's Pos
 	Flight    int  // ticks in the air; 0 at rest
+	Hard      bool // thrown at full windup: bashes the first thing it hits
 	Running   bool // faucets
 	Gone      bool // taken or destroyed
 	Burn      int  // ticks burning; 0 = not burning
@@ -124,6 +134,7 @@ type Player struct {
 	Ammo        map[string]int
 	Loot        int
 	Dead        bool
+	Blind       int // ticks left dazzled by a flash (the screen whites out)
 	walk        float64
 	last        Vec3
 	lastInit    bool
@@ -148,6 +159,7 @@ const (
 	EvHurt                     // player was hurt
 	EvSpark                    // electricity in the puddle at Pos
 	EvBlast                    // explosion at Pos
+	EvFlash                    // a flash bomb went off at Pos
 )
 
 // Event is something the game should show or play.
@@ -178,8 +190,11 @@ type Stats struct {
 }
 
 type bomb struct {
-	Pos  Vec3
-	Fuse int
+	Pos, Prev, Vel Vec3 // Prev and Vel while Flying
+	Fuse           int
+	Flash          bool // a flash bomb, else TNT
+	Flying, Hard   bool // thrown and still in the air (fly); thrown hard
+	Flight         int  // ticks in the air, for its spin
 }
 
 type noisemaker struct {
@@ -245,7 +260,7 @@ func New(w World, m *Mission) *Sim {
 			o.On = TorchOn(TorchWall(w), o.Pos.Cell())
 		}
 		if c := o.Pos.Cell(); o.Kind == KindTorch && o.On == "floor" && !w.Solid(c.X, c.Y-1, c.Z) {
-			if g, ok := s.groundBelow(c, 16); ok { // nothing under it: it stands on the floor below
+			if g, ok := s.floorBelow(c, 16); ok { // nothing under it: it stands on the floor below
 				o.Pos.Y = float64(g.Y)
 			}
 		}
@@ -353,6 +368,9 @@ func (s *Sim) Tick() {
 	s.Stats.Ticks++
 	s.Time += s.Mission.TimeScale / TicksPerSecond
 	s.tickPlayer()
+	if s.Player.Blind > 0 {
+		s.Player.Blind--
+	}
 	s.tickObjects()
 	s.tickSpills()
 	s.tickPuddles()
@@ -472,8 +490,11 @@ func (s *Sim) setLight(i int, on bool) {
 		return
 	}
 	c := o.Pos.Cell()
-	if o.Kind == KindTorch && !o.Fallen {
+	if (o.Kind == KindTorch || o.Kind == KindLamp) && !o.Fallen {
 		c = o.Pos.Add(Vec3{0, 0.5, 0}).Cell()
+	}
+	if o.Kind == KindLamp && o.Name == StreetLamp && !o.Fallen { // the post's head
+		c = o.Pos.Add(Vec3{Y: StreetLampHead}).Cell()
 	}
 	if b := s.W.Block(c.X, c.Y, c.Z); b == BlockAir || b == BlockLight {
 		s.W.SetBlock(c.X, c.Y, c.Z, BlockLight)
@@ -544,6 +565,9 @@ func (s *Sim) tickObjects() {
 				s.setLight(i, false)
 			}
 		}
+		if o.Kind == KindTorch && o.Fallen && o.Lit && !o.Held && s.Now%(2*TicksPerSecond) == 0 { // lying lit, it keeps at what it landed by
+			s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2, Amount: 0.5})
+		}
 		if o.Kind == KindFaucet && o.Running && s.Now%15 == 0 {
 			s.Stimulate(Stimulus{Stim: StimWater, Pos: o.Pos, Radius: 0.5, Amount: 1})
 			if s.Now%45 == 0 {
@@ -574,6 +598,19 @@ func (s *Sim) walkable(c Cell) bool {
 func (s *Sim) groundBelow(c Cell, depth int) (Cell, bool) {
 	for i := 0; i <= depth; i++ {
 		if s.walkable(c) {
+			return c, true
+		}
+		c.Y--
+	}
+	return c, false
+}
+
+// floorBelow finds where an object dropped at c comes to rest: the first
+// cell at or below it with a solid block under it. Unlike groundBelow,
+// door cells count (an object can lie in a doorway).
+func (s *Sim) floorBelow(c Cell, depth int) (Cell, bool) {
+	for i := 0; i <= depth; i++ {
+		if !s.W.Solid(c.X, c.Y, c.Z) && s.W.Solid(c.X, c.Y-1, c.Z) {
 			return c, true
 		}
 		c.Y--
@@ -638,18 +675,37 @@ func (s *Sim) tickPuddles() {
 func (s *Sim) tickBombs() {
 	for i := 0; i < len(s.Bombs); i++ {
 		b := &s.Bombs[i]
+		if b.Flying {
+			b.Flight++
+			if s.fly(&b.Pos, &b.Prev, &b.Vel, &b.Hard) {
+				b.Flying = false
+			}
+		}
 		if b.Fuse--; b.Fuse%10 == 0 && b.Fuse > 0 {
 			s.emit(b.Pos, 18, "fuse", -1)
 		}
-		if b.Fuse <= 0 {
+		switch {
+		case b.Fuse > 0:
+		case b.Flash:
+			s.Flash(b.Pos)
+		default:
 			s.Explode(b.Pos)
 		}
 	}
 	s.Bombs = slices.DeleteFunc(s.Bombs, func(b bomb) bool { return b.Fuse <= 0 })
 }
 
-// Explode destroys blocks, objects and people around pos: the one way to
-// break voxels.
+// Flash bursts a flash bomb at pos: a blinding light (StimFlash) for
+// whoever sees it and a sharp bang. Nothing breaks or burns.
+func (s *Sim) Flash(pos Vec3) {
+	pos = pos.Add(Vec3{Y: 0.5})
+	s.Stimulate(Stimulus{Stim: StimFlash, Pos: pos, Radius: 14, Amount: 8 * TicksPerSecond})
+	s.emit(pos, 45, "flash", -1)
+	s.event(Event{Kind: EvFlash, Pos: pos})
+}
+
+// Explode is TNT going off: it destroys blocks, objects and people around
+// pos, the one way to break voxels.
 func (s *Sim) Explode(pos Vec3) {
 	const r = 2.6
 	c := pos.Cell()
@@ -721,13 +777,16 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 		if o.Fallen {
 			return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.35, 0.5})
 		}
-		return p.Add(Vec3{-0.3, 0, -0.3}), p.Add(Vec3{0.3, 1.6, 0.3})
+		if o.Name == StreetLamp {
+			return p.Add(Vec3{-0.3, 0, -0.3}), p.Add(Vec3{0.3, 3.2, 0.3})
+		}
+		return p.Add(Vec3{-0.25, 0, -0.25}), p.Add(Vec3{0.25, 0.8, 0.25})
 	case KindChest:
 		return p.Add(Vec3{-0.45, 0, -0.45}), p.Add(Vec3{0.45, 0.8, 0.45})
 	case KindFlammable:
 		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.15, 0.5})
 	case KindFaucet:
-		return p.Add(Vec3{-0.35, 0, -0.35}), p.Add(Vec3{0.35, 1.0, 0.35})
+		return p.Add(Vec3{-0.35, 0, -0.35}), p.Add(Vec3{0.35, 1.3, 0.35})
 	case KindDecor:
 		b := s.DecorBox(i)
 		return Vec3{b.MinX, b.MinY, b.MinZ}, Vec3{b.MaxX, b.MaxY, b.MaxZ}
@@ -833,13 +892,9 @@ func (s *Sim) Describe(t Target) string {
 			return name + " (" + itoa(o.Value) + " inside)"
 		}
 		return name + " (empty)"
-	case KindTorch:
-		if s.HeldTorch() < 0 {
+	case KindTorch, KindLamp:
+		if o.Name != StreetLamp && s.HeldTorch() < 0 {
 			return name + " (take)"
-		}
-	case KindLamp:
-		if !o.Fallen {
-			return name + " (knock over)"
 		}
 	case KindFaucet:
 		if o.Running {
@@ -945,14 +1000,10 @@ func (s *Sim) Frob(t Target, held bool) {
 			o.Open = !o.Open
 			s.emit(o.Pos, 6, "door", -1)
 		}
-	case KindTorch:
-		if s.HeldTorch() < 0 {
+	case KindTorch, KindLamp: // a street lamp is too big to carry
+		if o.Name != StreetLamp && s.HeldTorch() < 0 {
 			o.Held, o.Fallen, o.Flight = true, false, 0
 			s.emit(o.Pos, 6, "swish", -1)
-		}
-	case KindLamp:
-		if !o.Fallen {
-			s.knockLamp(t.Obj)
 		}
 	case KindFaucet:
 		o.Running = !o.Running
@@ -987,78 +1038,98 @@ func (s *Sim) HeldTorch() int {
 
 // ThrowTorch lobs the held torch along the view about dist blocks
 // (0 drops it). It tumbles through the air (flyTorch) and, where it lands,
-// clatters, which draws guards over, and sets flammables alight.
-func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64) {
+// clatters, which draws guards over, and sets flammables alight; thrown
+// hard, it bashes the first thing it hits.
+func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64, hard bool) {
 	i := s.HeldTorch()
 	if i < 0 {
 		return
 	}
 	o := s.Objects[i]
-	o.Held, o.Fallen, o.Flight = false, true, 1
-	o.Pos, o.Yaw = eye, math.Atan2(dir.X, -dir.Z)
-	if c := eye.Add(dir.Scale(0.4)).Cell(); !s.W.Solid(c.X, c.Y, c.Z) {
-		o.Pos = eye.Add(dir.Scale(0.4))
-	}
-	o.Prev, o.Vel = o.Pos, dir.Scale(dist/12).Add(Vec3{Y: 0.1 * min(dist, 1)})
+	o.Held, o.Fallen, o.Flight, o.Hard = false, true, 1, hard
+	o.Yaw = math.Atan2(dir.X, -dir.Z)
+	o.Pos, o.Vel = s.launch(eye, dir, dist)
+	o.Prev = o.Pos
 	s.setLight(i, o.Lit)
+}
+
+// launch is where and how fast something thrown dist blocks along dir
+// leaves the hand: a little ahead of the eye unless that is in a wall.
+func (s *Sim) launch(eye, dir Vec3, dist float64) (pos, vel Vec3) {
+	pos = eye
+	if c := eye.Add(dir.Scale(0.4)).Cell(); !s.W.Solid(c.X, c.Y, c.Z) {
+		pos = eye.Add(dir.Scale(0.4))
+	}
+	return pos, dir.Scale(dist / 12).Add(Vec3{Y: 0.1 * min(dist, 1)})
 }
 
 // torchGravity matches the arrows' (projectile.Gravity), blocks/tick².
 const torchGravity = 0.05
 
-// flyTorch moves a thrown torch one tick: it glances off walls and
-// ceilings and comes to rest on the first floor it falls onto.
-func (s *Sim) flyTorch(i int) {
-	o := s.Objects[i]
-	o.Prev = o.Pos
-	o.Flight++
-	o.Vel = o.Vel.Add(Vec3{Y: -torchGravity}).Scale(0.99)
+// fly moves something thrown one tick: it glances off walls and ceilings
+// and comes to rest on the first floor it falls onto. Thrown hard, its
+// first impact, on an NPC or decoration in its path or a block, bashes.
+// It reports whether it landed this tick.
+func (s *Sim) fly(pos, prev, vel *Vec3, hard *bool) bool {
+	*prev = *pos
+	*vel = vel.Add(Vec3{Y: -torchGravity}).Scale(0.99)
+	impact := func(p Vec3) {
+		if *hard {
+			*hard = false
+			s.Stimulate(Stimulus{Stim: StimBash, Pos: p})
+		}
+	}
+	if *hard && s.Stimulate(Stimulus{Stim: StimBash, Pos: *pos}) { // struck someone or something: drops off it
+		*hard = false
+		vel.X, vel.Z = vel.X*-0.3, vel.Z*-0.3
+	}
 	solid := func(p Vec3) bool { c := p.Cell(); return s.W.Solid(c.X, c.Y, c.Z) }
-	if n := o.Pos.Add(Vec3{X: o.Vel.X}); solid(n) {
-		o.Vel.X *= -0.3
+	if n := pos.Add(Vec3{X: vel.X}); solid(n) {
+		impact(n)
+		vel.X *= -0.3
 	} else {
-		o.Pos = n
+		*pos = n
 	}
-	if n := o.Pos.Add(Vec3{Z: o.Vel.Z}); solid(n) {
-		o.Vel.Z *= -0.3
+	if n := pos.Add(Vec3{Z: vel.Z}); solid(n) {
+		impact(n)
+		vel.Z *= -0.3
 	} else {
-		o.Pos = n
+		*pos = n
 	}
-	n := o.Pos.Add(Vec3{Y: o.Vel.Y})
+	n := pos.Add(Vec3{Y: vel.Y})
 	switch {
 	case !solid(n):
-		o.Pos = n
-	case o.Vel.Y > 0: // ceiling
-		o.Vel.Y = 0
+		*pos = n
+	case vel.Y > 0: // ceiling
+		impact(n)
+		vel.Y = 0
 	default: // landed: rest on the block's top
-		o.Pos.Y = math.Floor(n.Y) + 1
-		o.Vel, o.Flight = Vec3{}, 0
-		s.emit(o.Pos, 22, "clatter", -1)
-		if o.Lit { // a small flame: catches rugs and fuel, doesn't burn people
+		impact(n)
+		pos.Y = math.Floor(n.Y) + 1
+		*vel = Vec3{}
+		s.emit(*pos, 22, "clatter", -1)
+		return true
+	}
+	return false
+}
+
+// flyTorch moves a thrown torch one tick (fly); a lit one landing starts a
+// small flame, and a lantern spills its oil first, which that flame lights.
+func (s *Sim) flyTorch(i int) {
+	o := s.Objects[i]
+	o.Flight++
+	if s.fly(&o.Pos, &o.Prev, &o.Vel, &o.Hard) {
+		o.Flight = 0
+		if o.Kind == KindTorch && o.Name == "Lantern" { // it cracks: its oil runs out over the floor
+			s.Stimulate(Stimulus{Stim: StimOil, Pos: o.Pos, Radius: 1, Amount: 3})
+		}
+		if o.Lit && o.Kind == KindTorch { // a small flame: catches rugs and fuel, doesn't burn people
 			s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2, Amount: 0.5})
 		}
 	}
 	if o.Lit && (!o.HasLight || o.LightCell != o.Pos.Cell()) {
 		s.setLight(i, true)
 	}
-}
-
-// knockLamp tips a standing lamp over, away from the player.
-func (s *Sim) knockLamp(i int) {
-	o := s.Objects[i]
-	yaw := yawTo(s.Player.Pos, o.Pos)
-	fx, fz := forward(yaw)
-	c := o.Pos.Cell()
-	n := Vec3{o.Pos.X + fx, o.Pos.Y, o.Pos.Z + fz}.Cell()
-	if g, ok := s.groundBelow(n, 2); ok {
-		c = g
-	}
-	o.Fallen, o.Yaw = true, yaw
-	o.Pos = c.Floor()
-	if o.Lit {
-		s.setLight(i, true)
-	}
-	s.emit(o.Pos, 36, "crash", -1)
 }
 
 // pickUpBody lifts an unconscious or dead NPC onto the player's shoulder.
@@ -1147,16 +1218,31 @@ func (s *Sim) AddRope(tip Vec3, yaw, pitch float64) bool {
 	return false
 }
 
-// Throw lobs an explosive along the view; it goes off after 3 seconds.
-func (s *Sim) Throw(eye, dir Vec3) bool {
+// Throw lobs a flash bomb along the view, flying like a thrown torch (fly)
+// at dist/12 blocks a tick; it goes off 3 seconds after leaving the hand,
+// wherever it is. Thrown hard, its first impact bashes.
+func (s *Sim) Throw(eye, dir Vec3, dist float64, hard bool) bool {
 	p := &s.Player
 	if p.Ammo[AmmoExplosive] <= 0 {
 		return false
 	}
 	p.Ammo[AmmoExplosive]--
-	land := s.landing(eye, dir, 7)
-	s.Bombs = append(s.Bombs, bomb{Pos: land, Fuse: 3 * TicksPerSecond})
-	s.emit(land, 20, "clatter", -1)
+	pos, vel := s.launch(eye, dir, dist)
+	s.Bombs = append(s.Bombs, bomb{Pos: pos, Prev: pos, Vel: vel, Fuse: 3 * TicksPerSecond, Flash: true, Flying: true, Hard: hard})
+	return true
+}
+
+// PlaceTNT sets lit TNT down on the floor in reach along the view; it goes
+// off after 4 seconds, like Minecraft's.
+func (s *Sim) PlaceTNT(eye, dir Vec3) bool {
+	p := &s.Player
+	if p.Ammo[AmmoTNT] <= 0 {
+		return false
+	}
+	p.Ammo[AmmoTNT]--
+	land := s.landing(eye, dir, 2.5)
+	s.Bombs = append(s.Bombs, bomb{Pos: land, Fuse: 4 * TicksPerSecond})
+	s.emit(land, 8, "fuse", -1)
 	return true
 }
 
@@ -1171,7 +1257,7 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 		}
 		land = q
 	}
-	if g, ok := s.groundBelow(land.Cell(), 8); ok {
+	if g, ok := s.floorBelow(land.Cell(), 8); ok {
 		land = g.Floor()
 	}
 	return land

@@ -2,6 +2,8 @@ package main
 
 import (
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/voxel"
@@ -38,13 +40,29 @@ func (w *simWorld) Solid(x, y, z int) bool {
 }
 
 func (w *simWorld) Liquid(x, y, z int) character.Liquid {
-	switch w.g.reg.Info(w.g.eng.World.Block(x, y, z)).Name { // any level
+	info := w.g.reg.Info(w.g.eng.World.Block(x, y, z))
+	switch info.Name {
 	case "minecraft:water":
+		if shallow(info.Props) { // a puddle: waded through, not swum in
+			return character.LiquidNone
+		}
 		return character.LiquidWater
 	case "minecraft:lava":
 		return character.LiquidLava
 	}
 	return character.LiquidNone
+}
+
+// shallow reports whether liquid block properties are a thin flowing layer,
+// a third of a block deep or less (level 5-7; 0 is a source, 8+ falls).
+func shallow(props string) bool {
+	_, l, ok := strings.Cut(props, "level=")
+	if !ok {
+		return false
+	}
+	l, _, _ = strings.Cut(l, ",")
+	n, err := strconv.Atoi(l)
+	return err == nil && n >= 5 && n <= 7
 }
 
 func (w *simWorld) Light(x, y, z int) (sky, block uint8) { return w.g.eng.World.Light(x, y, z) }

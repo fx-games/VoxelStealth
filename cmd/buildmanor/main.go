@@ -285,7 +285,7 @@ func writeMission(b *builder, dir string) {
 			"leaves the vault with you. Take enough of his silver to make it worth the trip, and be gone through the gate before dawn.",
 		Start: v(31.5, G, 72.5), StartYaw: 0, StartTime: 22*3600 + 30*60, TimeScale: 8, LootQuota: 700,
 		Exit: box(24, G-1, 66, 39, G+6, 76), Area: area,
-		Ammo: map[string]int{sim.AmmoBroadhead: 6, sim.AmmoWater: 4, sim.AmmoNoise: 2, sim.AmmoRope: 2, sim.AmmoExplosive: 1},
+		Ammo: map[string]int{sim.AmmoBroadhead: 6, sim.AmmoWater: 4, sim.AmmoNoise: 2, sim.AmmoRope: 2, sim.AmmoExplosive: 1, sim.AmmoTNT: 5},
 		Objectives: []sim.Objective{
 			{Kind: "kill", Target: "ashworth", Text: "Kill Lord Ashworth"},
 			{Kind: "steal", Target: "chalice", Text: "Steal the Ashworth Chalice from the cellar vault"},
@@ -353,6 +353,11 @@ func writeMission(b *builder, dir string) {
 		{ID: "bath_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(24.5, U, 31.5), Lit: true},
 		{ID: "study_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(45.5, U, 21.5), Lit: true},
 		{ID: "bed_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(18.5, U, 15.5), Lit: true},
+		// Street lamps line the drive.
+		{ID: "drive_lamp_nw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 46.5), Lit: true},
+		{ID: "drive_lamp_ne", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 46.5), Lit: true},
+		{ID: "drive_lamp_sw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 58.5), Lit: true},
+		{ID: "drive_lamp_se", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 58.5), Lit: true},
 		{ID: "dining_rug", Kind: sim.KindFlammable, Name: "Rug", Pos: v(25.5, G, 12.5)},
 		{ID: "bed_tapestry", Kind: sim.KindFlammable, Name: "Tapestry", Pos: v(18.5, U, 23.5)},
 		{ID: "hay", Kind: sim.KindFlammable, Name: "Hay", Pos: v(47.5, G, 54.5)},

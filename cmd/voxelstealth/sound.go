@@ -110,6 +110,7 @@ func (g *game) makeSounds() {
 	add("explosion", synth(2.2, func(t float64) float64 { return 6 * env(t, 0.004, 0.5) * boom() }))
 	hiss := n(0.9)
 	add("hiss", synth(0.8, func(t float64) float64 { return 0.5 * env(t, 0.05, 0.3) * hiss() }))
+	add("flash", synth(1.0, func(t float64) float64 { return 3*env(t, 0.001, 0.08)*boom() + 0.6*env(t, 0.01, 0.4)*hiss() }))
 	add("fuse", synth(0.25, func(t float64) float64 { return 0.35 * env(t, 0.01, 0.15) * hiss() }))
 	add("swish", synth(0.25, func(t float64) float64 { return 0.6 * math.Sin(math.Pi*t/0.25) * hiss() * (0.4 + t*3) }))
 	add("stab", synth(0.3, func(t float64) float64 { return 2*env(t, 0.003, 0.05)*thud() + 0.4*env(t, 0, 0.06)*hiss() }))

@@ -20,6 +20,7 @@ const (
 	StimPierce Stim = "pierce" // broadheads, the blade
 	StimBash   Stim = "bash"   // the blackjack
 	StimBlast  Stim = "blast"  // explosions
+	StimFlash  Stim = "flash"  // flash bombs: blinds whoever sees it (Amount: ticks)
 	StimNoise  Stim = "noise"  // sound: reaches NPCs through the room graph, not Radius
 )
 
@@ -84,6 +85,7 @@ func init() { // in init: responses stimulate in turn
 		StimFire:   (*Sim).burnNPC,
 		StimShock:  func(s *Sim, k int, _ Stimulus) bool { s.killNPC(k, "accident", "electrocuted"); return true },
 		StimNoise:  (*Sim).hearNoise,
+		StimFlash:  (*Sim).blindNPC,
 	}
 	playerReceptrons = map[Stim]func(s *Sim, st Stimulus) bool{
 		StimShock: func(s *Sim, _ Stimulus) bool { s.HurtPlayer(20, "Electrocuted."); return true },
@@ -92,6 +94,14 @@ func init() { // in init: responses stimulate in turn
 				s.HurtPlayer(10, "You're burning!")
 			}
 			return st.Amount >= 1
+		},
+		StimFlash: func(s *Sim, st Stimulus) bool {
+			p := &s.Player
+			if !dazzled(s, p.Eye(), p.Yaw, st.Pos) {
+				return false
+			}
+			p.Blind = max(p.Blind, int(st.Amount)/3) // the player knew it was coming
+			return true
 		},
 		StimBlast: func(s *Sim, st Stimulus) bool {
 			s.HurtPlayer(max(1, int(24-st.Pos.Dist(s.Player.Pos)*5)), "Caught in the blast.")
@@ -233,10 +243,17 @@ func (s *Sim) kindle(i int, _ Stimulus) bool {
 	return true
 }
 
-// shortOut is water reaching a fallen, lit lamp: it dies, and its current
-// goes into the water. (A standing lamp's wiring is high and dry.)
+// shortOut is water reaching a lit lamp. A street lamp's head fizzles out
+// in a shower of sparks. A small lamp dropped or thrown dies and its current goes into the
+// water. (A small lamp standing or in hand is high and dry.)
 func (s *Sim) shortOut(i int, _ Stimulus) bool {
 	o := s.Objects[i]
+	if o.Lit && o.Name == StreetLamp {
+		o.Lit = false
+		s.setLight(i, false)
+		s.emit(o.Pos.Add(Vec3{Y: StreetLampHead}), 16, "zap", -1)
+		return true
+	}
 	if !o.Fallen || !o.Lit {
 		return false
 	}
@@ -295,10 +312,30 @@ func (s *Sim) wound(k int, st Stimulus) bool {
 	return true
 }
 
-// knockOut is a bash: the unaware drop, the fighting only notice.
+// blindNPC is a flash in sight: the NPC staggers about blind for
+// st.Amount ticks, unable to see, chase or fight (stagger).
+func (s *Sim) blindNPC(k int, st Stimulus) bool {
+	n := s.NPCs[k]
+	if !dazzled(s, n.eye(), n.Yaw, st.Pos) {
+		return false
+	}
+	n.Blind = max(n.Blind, int(st.Amount))
+	n.Path, n.AttackT, n.Attacking = nil, 0, false
+	n.LKP = st.Pos
+	s.bark(k, pick(k, "Argh, my eyes!", "I can't see!", "Aagh!"))
+	return true
+}
+
+// dazzled reports whether a flash at p blinds eyes at e facing yaw: in
+// sight, and looked at unless it is close.
+func dazzled(s *Sim, e Vec3, yaw float64, p Vec3) bool {
+	return lineOfSight(s.W, e, p) && (e.Dist(p) < 3 || angleDiff(yawTo(e, p), yaw) < 1.4)
+}
+
+// knockOut is a bash: the unaware (or blinded) drop, the fighting only notice.
 func (s *Sim) knockOut(k int, _ Stimulus) bool {
 	n := s.NPCs[k]
-	if n.State == StateCombat {
+	if n.State == StateCombat && n.Blind == 0 {
 		s.emit(n.pos(), 20, "thud", -1)
 		s.alertNPC(k, s.Player.Pos)
 		return true

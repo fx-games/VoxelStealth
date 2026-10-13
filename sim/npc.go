@@ -78,8 +78,11 @@ type NPC struct {
 	PathI                 int
 	Goal                  Vec3
 	Repath, Stuck         int
-	LKP                   Vec3 // last known position of whatever worries it
-	LastSeen              int  // ticks since it last saw the player
+	Wander                float64 // a staggering NPC's turn rate
+	Blind                 int     // ticks left dazzled by a flash: staggering, it can't see, chase or fight
+	NoPath                int     // ticks before trying again after a failed path search, whatever the goal
+	LKP                   Vec3    // last known position of whatever worries it
+	LastSeen              int     // ticks since it last saw the player
 	Known                 []int
 	Keys                  []string
 	Hidden, CarriedBy     bool
@@ -246,6 +249,10 @@ func (s *Sim) tickNPC(k int) {
 		return
 	}
 	n.StateT++
+	if n.Blind > 0 {
+		s.stagger(k)
+		return
+	}
 	stim := s.perceive(k)
 	s.decide(k, stim)
 	s.act(k)
@@ -270,7 +277,7 @@ func (s *Sim) hearNoise(k int, snd Stimulus) bool {
 	}
 	over := rcv - thr
 	switch snd.Kind {
-	case "alarm", "explosion", "pain":
+	case "alarm", "explosion", "flash", "pain":
 		if n.State == StateCombat {
 			return false
 		}
@@ -537,6 +544,32 @@ func (s *Sim) act(k int) {
 	case StateCower:
 		s.turn(n, yawTo(n.pos(), n.LKP), 0.1)
 	}
+	s.move(k, in)
+}
+
+// stagger is a blinded NPC's tick: it reels about at random, rubbing its
+// eyes, and when its sight comes back it looks for whoever threw the flash.
+func (s *Sim) stagger(k int) {
+	n := s.NPCs[k]
+	if n.Blind--; n.Blind == 0 {
+		n.Suspicion = 90
+		if n.IsGuard() {
+			s.setState(k, StateSearch)
+			s.bark(k, "Where are you?!")
+		} else {
+			s.setState(k, StateFlee)
+		}
+	}
+	if n.StateT%15 == 0 {
+		n.Wander = s.rng.Float64()*2 - 1
+	}
+	n.Yaw += n.Wander * 0.12
+	s.move(k, character.Input{Yaw: n.Yaw, Forward: 0.2})
+}
+
+// move steps the NPC's body by in and makes its footsteps.
+func (s *Sim) move(k int, in character.Input) {
+	n := s.NPCs[k]
 	n.prevPos = n.pos()
 	n.Body.Tick(bodyWorld{s}, in)
 	n.Moving = math.Hypot(n.Body.X-n.Body.PrevX, n.Body.Z-n.Body.PrevZ) > 0.01
@@ -636,6 +669,10 @@ func (s *Sim) walkTo(k int, goal Vec3, speed float64, in *character.Input) bool 
 	if n.Repath > 0 {
 		n.Repath--
 	}
+	if n.NoPath > 0 { // an unreachable goal costs a whole search: don't retry every tick
+		n.NoPath--
+		return false
+	}
 	if n.Path == nil || n.Goal.Dist(goal) > 1 || n.Stuck > 30 || (len(n.Path) == 0 && n.Repath == 0) {
 		g := s.navs[k]
 		from, ok1 := g.Ground(floor(p.X), floor(p.Y+0.3), floor(p.Z))
@@ -647,7 +684,7 @@ func (s *Sim) walkTo(k int, goal Vec3, speed float64, in *character.Input) bool 
 		}
 		path, ok := g.Path(from, to, 6000)
 		if !ok {
-			n.Path = []Cell{}
+			n.Path, n.NoPath = []Cell{}, TicksPerSecond
 			return false
 		}
 		n.Path = n.Path[:0]

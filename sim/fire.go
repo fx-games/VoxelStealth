@@ -38,6 +38,8 @@ func flammability(block string) (ignite, burn int) {
 		wooden && (strings.HasSuffix(b, "_slab") || strings.HasSuffix(b, "_stairs") || strings.HasSuffix(b, "_fence") || strings.HasSuffix(b, "_fence_gate")),
 		b == "composter", b == "beehive", b == "bee_nest":
 		return 5, 20
+	case b == "dark_trunk_log": // dead, dry wood: catches like tinder
+		return 30, 20
 	case strings.HasSuffix(b, "_log"), strings.HasSuffix(b, "_wood"), b == "coal_block":
 		return 5, 5
 	case strings.HasSuffix(b, "_leaves"), strings.HasSuffix(b, "_wool"), b == "dried_kelp_block":
@@ -204,6 +206,9 @@ func catchFire(s *Sim, c Cell, st Stimulus) bool {
 		return false
 	}
 	o := (odds + 40 + 2*7) / (age + 30)
+	if st.From == nil { // flame touching fuel: its ignite odds straight, so a torch lights a hedge, rarely planks
+		o = odds
+	}
 	if odds == 0 || o <= 0 || s.rng.Intn(k) > o {
 		return false
 	}

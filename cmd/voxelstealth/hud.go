@@ -49,9 +49,9 @@ var helpText = []string{
 	"Ctrl              run: fast and loud",
 	"E (hold)          use: doors, loot, pick locks, carry bodies, take torches, knock lamps",
 	"G                 drop the body or torch you carry (E on a chest hides a body)",
-	"1 2 3 4           crossbow, blackjack, blade, flash bomb",
+	"1 2 3 4 5         crossbow, blackjack, blade, flash bomb, TNT",
 	"X                 next arrow type: broadhead, water, noisemaker, rope",
-	"Left mouse        shoot / swing / throw (with a torch in hand: throw it)",
+	"Left mouse        shoot; hold and release: strike, or throw (a torch in hand: it)",
 	"Tab               objectives          F5 / F9  quicksave / quickload",
 	"F2                screenshot           Esc  release mouse (again: quit)",
 	"",
@@ -61,6 +61,8 @@ var helpText = []string{
 	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
 	"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
+	"Wind a throw up fully and it hits hard: a guard it strikes goes down.",
+	"A flash bomb blinds whoever looks at it: they stagger about and can't fight. TNT, set down with a click, breaks walls.",
 }
 
 const msgTicks = 6 * sim.TicksPerSecond
@@ -143,6 +145,12 @@ func (g *game) drawHUD(fbW, fbH int) {
 			return
 		}
 		g.flashOv, _ = render.NewOverlay()
+	}
+	if g.sim != nil && g.sim.Player.Blind > 0 && g.flashOv != nil { // dazzled by a flash: white, fading out
+		img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+		img.Set(0, 0, color.NRGBA{255, 255, 255, uint8(min(245, g.sim.Player.Blind*12))})
+		g.flashOv.SetImage(img)
+		g.flashOv.Draw(0, 0, max(fbW, fbH), fbW, fbH)
 	}
 	if g.flash > 0 && g.flashOv != nil {
 		img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
@@ -236,9 +244,11 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 		wl = fmt.Sprintf("Crossbow: %s x%d", g.ammo, p.Ammo[g.ammo])
 	case wExplosive:
 		wl = fmt.Sprintf("Flash bomb x%d", p.Ammo[sim.AmmoExplosive])
+	case wTNT:
+		wl = fmt.Sprintf("TNT x%d", p.Ammo[sim.AmmoTNT])
 	}
 	c.text(wl, w-c.width(wl)-10, h-34, white)
-	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive])
+	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d  tnt %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive], p.Ammo[sim.AmmoTNT])
 	c.text(amm, w-c.width(amm)-10, h-18, grey)
 	if p.Carrying >= 0 {
 		t := "Carrying " + s.NPCs[p.Carrying].Name + " (G drops)"

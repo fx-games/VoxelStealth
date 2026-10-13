@@ -9,7 +9,7 @@ TimeScale: 8
 LootQuota: 700
 Exit: 24,63,66 39,70,76
 Area: -190,48,-190 253,80,253
-Ammo: broadhead=6 water=4 noisemaker=2 rope=2 explosive=1
+Ammo: broadhead=6 water=4 noisemaker=2 rope=2 explosive=1 tnt=5
 
 Objective: kill
 Target: ashworth

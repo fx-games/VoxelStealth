@@ -258,6 +258,30 @@ Name: Electric lamp
 Pos: 18.5,69,15.5
 Lit: yes
 
+ID: drive_lamp_nw
+Kind: lamp
+Name: Street lamp
+Pos: 29.5,64,46.5
+Lit: yes
+
+ID: drive_lamp_ne
+Kind: lamp
+Name: Street lamp
+Pos: 34.5,64,46.5
+Lit: yes
+
+ID: drive_lamp_sw
+Kind: lamp
+Name: Street lamp
+Pos: 29.5,64,58.5
+Lit: yes
+
+ID: drive_lamp_se
+Kind: lamp
+Name: Street lamp
+Pos: 34.5,64,58.5
+Lit: yes
+
 ID: dining_rug
 Kind: flammable
 Name: Rug

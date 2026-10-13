@@ -5,6 +5,8 @@ package main
 // shape of go-fps's particle presets, retuned to block units.
 
 import (
+	"math"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxellib/particles"
 	"github.com/memmaker/voxelstealth/sim"
@@ -15,6 +17,9 @@ var fx = map[string]particles.Props{
 	"shatter": {Count: 40, Spread: 0.4, VelVar: 2.5, Radial: 1.5, Gravity: 22, Drag: 0.3, Bounce: 0.35,
 		Life: 1.6, LifeVar: 0.5, Size0: 0.07, Size1: 0.05, SizeVar: 0.03,
 		Col0: [4]float32{0.75, 0.88, 0.95, 0.85}, Col1: [4]float32{0.75, 0.88, 0.95, 0.5}},
+	// A flash bomb: a white burst, gone in a blink.
+	"flash": {Count: 50, Spread: 0.2, Radial: 9, Drag: 4, Life: 0.25, LifeVar: 0.1,
+		Size0: 0.6, Size1: 0.1, SizeVar: 0.2, Col0: [4]float32{1, 1, 1, 1}, Col1: [4]float32{0.8, 0.9, 1, 0}, Additive: true},
 	"explosion": {Count: 70, Spread: 0.3, Radial: 7, Drag: 3, Life: 0.45, LifeVar: 0.15,
 		Size0: 0.5, Size1: 0.15, SizeVar: 0.15, Col0: [4]float32{1, 0.75, 0.3, 1}, Col1: [4]float32{0.8, 0.15, 0, 0}, Additive: true},
 	"smoke": {Count: 25, Spread: 0.6, Vel: [3]float64{0, 1, 0}, VelVar: 0.6, Gravity: -0.6, Drag: 1, Life: 2.5, LifeVar: 0.8,
@@ -30,11 +35,15 @@ var fx = map[string]particles.Props{
 		Size0: 0.06, Size1: 0.18, Col0: [4]float32{0.55, 0.52, 0.48, 0.8}, Col1: [4]float32{0.55, 0.52, 0.48, 0}},
 	"steam": {Count: 20, Spread: 0.3, Vel: [3]float64{0, 1.2, 0}, VelVar: 0.4, Gravity: -0.5, Drag: 1, Life: 1.5, LifeVar: 0.4,
 		Size0: 0.2, Size1: 0.8, Col0: [4]float32{0.85, 0.85, 0.85, 0.5}, Col1: [4]float32{0.9, 0.9, 0.9, 0}},
-	"blood": {Count: 14, Spread: 0.1, VelVar: 1.5, Gravity: 18, Life: 0.7, LifeVar: 0.2,
-		Size0: 0.06, Size1: 0.04, SizeVar: 0.02, Col0: [4]float32{0.5, 0.02, 0.02, 1}, Col1: [4]float32{0.35, 0, 0, 0.8}},
+	"blood": {Count: 30, Spread: 0.12, Vel: [3]float64{0, 1, 0}, VelVar: 2.2, Gravity: 18, Life: 0.9, LifeVar: 0.25,
+		Size0: 0.09, Size1: 0.05, SizeVar: 0.03, Col0: [4]float32{0.65, 0.03, 0.03, 1}, Col1: [4]float32{0.4, 0, 0, 0.85}},
 	// Continuous, emitted a few per tick.
+	"wick": {Count: 1, Spread: 0.01, Vel: [3]float64{0, 0.3, 0}, VelVar: 0.05, Gravity: -0.5, Drag: 1, Life: 0.3, LifeVar: 0.08,
+		Size0: 0.05, Size1: 0.01, Col0: [4]float32{1, 0.75, 0.3, 0.9}, Col1: [4]float32{0.9, 0.3, 0, 0}, Additive: true},
 	"flame": {Count: 2, Spread: 0.06, Vel: [3]float64{0, 0.8, 0}, VelVar: 0.2, Gravity: -1, Drag: 1, Life: 0.4, LifeVar: 0.1,
 		Size0: 0.16, Size1: 0.03, Col0: [4]float32{1, 0.65, 0.2, 0.9}, Col1: [4]float32{0.9, 0.2, 0, 0}, Additive: true},
+	"glow": {Count: 1, Spread: 0.06, Life: 0.4, LifeVar: 0.1,
+		Size0: 0.35, Size1: 0.5, Col0: [4]float32{0.75, 0.85, 1, 0.12}, Col1: [4]float32{0.6, 0.75, 1, 0}, Additive: true},
 	"wisp": {Count: 1, Spread: 0.2, Vel: [3]float64{0, 0.8, 0}, VelVar: 0.2, Gravity: -0.4, Drag: 0.5, Life: 2, LifeVar: 0.5,
 		Size0: 0.25, Size1: 0.7, Col0: [4]float32{0.2, 0.2, 0.2, 0.5}, Col1: [4]float32{0.3, 0.3, 0.3, 0}},
 }
@@ -48,6 +57,7 @@ var soundFX = map[string][]string{
 	"ignite":    {"ignite"},
 	"arrow":     {"dust"},
 	"hiss":      {"steam"},
+	"flash":     {"flash", "smoke"},
 	"stab":      {"blood"},
 }
 
@@ -78,12 +88,28 @@ func (g *game) tickFX() {
 			if s.Now%3 == 0 {
 				g.burst("wisp", o.Pos.Add(sim.Vec3{Y: 1}))
 			}
+		case o.Kind == sim.KindLamp && o.Lit && !o.Fallen && lampModel(o) == "lamp_electric":
+			g.burst("glow", o.Pos.Add(sim.Vec3{Y: 0.25})) // around the panes
 		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen && ownModel[o.Name] == "":
 			g.burst("flame", g.torchTip(o))
+		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen:
+			// Candles: a spark or two over each wick, turned with the model.
+			sin, cos := math.Sincos(math.Pi - o.Yaw)
+			for i, w := range g.wicks[torchModel(o)] {
+				if (s.Now+i)%3 == 0 {
+					x, z := float64(w[0]), float64(w[2])
+					g.burst("wick", o.Pos.Add(sim.Vec3{X: x*cos + z*sin, Y: float64(w[1]), Z: -x*sin + z*cos}))
+				}
+			}
 		case o.Kind == sim.KindTorch && o.Lit && o.Fallen && ownModel[o.Name] == "":
 			_, _, tip := lyingTorch(o, 1)
 			g.burst("flame", tip)
 		}
+	}
+	// Lit fuses: a spark on each bomb's wick once it leaves the hand.
+	for _, b := range s.Bombs {
+		_, _, _, wick := bombPose(b.Pos, b.Prev, b.Vel, b.Flight, b.Flying, b.Flash, 1)
+		g.burst("wick", wick)
 	}
 	// The held torch: its tip in view space (see drawHand) mapped through
 	// the camera basis; the hand's walk bob is ignored.

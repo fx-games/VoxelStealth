@@ -50,7 +50,13 @@ type drawState struct {
 	modelRend *render.ModelRenderer
 	skins     map[string]*npcSkin
 	npcAnims  []*npcAnim
-	props     map[string]int // prop box models
+	props     map[string]int          // prop box models
+	wicks     map[string][]mgl32.Vec3 // lit candle props' flame tops, model space
+	fp        map[int]*model.Animator // the melee weapons' first-person arms (fpArms)
+	fpSkin    []mgl32.Mat4
+	fpHand    *model.Animator // the empty first-person hand that throws flash bombs and sets TNT down
+	handBone  int             // fpHand's fist bone, and its bind pose: the held item follows it
+	handBind  mgl32.Mat4
 	bowModel  int
 	itemRend  *render.ItemRenderer
 	lightGem  image.Image // HUD light gem sprite
@@ -121,7 +127,7 @@ func (g *game) loadAssets(dir, texDir string) error {
 	if len(g.skins) == 0 {
 		return fmt.Errorf("no NPC models found in %s", dir)
 	}
-	g.props = map[string]int{}
+	g.props, g.wicks, g.fp = map[string]int{}, map[string][]mgl32.Vec3{}, map[int]*model.Animator{}
 	for name, parts := range propParts {
 		h, err := g.modelRend.Add(boxModel(name, parts))
 		if err != nil {
@@ -205,7 +211,8 @@ func (g *game) drawWorld(alpha float64) {
 		g.drawNPCs(alpha, dt)
 		g.drawObjects(g.sim.Objects, alpha)
 		for _, b := range g.sim.Bombs {
-			g.prop("bomb", b.Pos, 0, 0)
+			origin, yaw, tilt, _ := bombPose(b.Pos, b.Prev, b.Vel, b.Flight, b.Flying, b.Flash, alpha)
+			g.prop(map[bool]string{true: "bomb", false: "tnt"}[b.Flash], origin, yaw, tilt)
 		}
 		for _, n := range g.sim.Noisemakers {
 			g.prop("noisemaker", n.Pos, 0, 0)
@@ -222,7 +229,7 @@ func (g *game) drawWorld(alpha float64) {
 		g.partRend.Draw(&g.cam, g.parts.P, alpha, g.light)
 	}
 	if g.sim != nil && !g.sim.Player.Dead {
-		g.drawHand(alpha)
+		g.drawHand(alpha, dt)
 		g.partRend.Draw(&g.cam, g.handParts.P, alpha, nil) // after the hand's depth clear
 	}
 }
@@ -253,9 +260,36 @@ func lyingTorch(o *sim.Object, alpha float64) (origin sim.Vec3, tilt float64, ti
 	return origin, math.Pi / 2, origin.Add(axis(math.Pi / 2).Scale(length))
 }
 
+// lampModel is the lamp's model, unlit: the big street lamp post, else the
+// small electric lamp indoors (the lantern, glowing blue-white).
+func lampModel(o *sim.Object) string {
+	if o.Name == sim.StreetLamp {
+		return "lamp"
+	}
+	return "lamp_electric"
+}
+
+// bombPose places a bomb or TNT: tumbling end over end about its middle
+// toward where it flies while thrown, else standing. Returns the model
+// origin, its yaw and tilt, and the tip of its wick.
+func bombPose(pos, prev, vel sim.Vec3, flight int, flying, flash bool, alpha float64) (origin sim.Vec3, yaw, tilt float64, wick sim.Vec3) {
+	item := map[bool]string{true: "bomb", false: "tnt"}[flash]
+	top := float64(wickTop[item][1])
+	if !flying {
+		return pos, 0, 0, pos.Add(sim.Vec3{Y: top})
+	}
+	c := prev.Add(pos.Sub(prev).Scale(alpha)).Add(sim.Vec3{Y: top / 2})
+	yaw = math.Atan2(vel.X, -vel.Z)
+	tilt = (float64(flight-1) + alpha) * 0.6 // radians/tick
+	fx, fz := math.Sin(yaw), -math.Cos(yaw)
+	axis := sim.Vec3{X: fx * math.Sin(tilt), Y: math.Cos(tilt), Z: fz * math.Sin(tilt)}
+	return c.Sub(axis.Scale(top / 2)), yaw, tilt, c.Add(axis.Scale(top / 2))
+}
+
 // lieLift raises a lying torch model by its half thickness, so it rests on
 // the floor instead of sinking into it.
 var lieLift = map[string]float64{"torch": 0.07, "torch_lit": 0.07, "lantern": 0.13, "lantern_lit": 0.13, "candles": 0.1, "candles_lit": 0.1,
+	"lamp_electric": 0.19, "lamp_electric_lit": 0.19,
 	"candle": 0.13, "candle_lit": 0.13, "candlestick": 0.19, "candlestick_lit": 0.19}
 
 // torchTilt is a wall torch's lean away from the wall (Minecraft's 22.5°).
@@ -347,12 +381,13 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 				g.propTilted(name, mp, o.Yaw, tilt, tiltYaw)
 			}
 		case sim.KindLamp:
-			name := "lamp"
+			name := lampModel(o)
 			if o.Lit {
-				name = "lamp_lit"
+				name += "_lit"
 			}
-			if o.Fallen {
-				g.prop(name, p, o.Yaw+math.Pi/2, math.Pi/2)
+			if o.Fallen { // the small lamp, dropped or thrown like a torch
+				mp, tilt, _ := lyingTorch(o, alpha)
+				g.prop(name, mp, o.Yaw, tilt)
 			} else {
 				g.prop(name, p, o.Yaw, 0)
 			}
@@ -371,10 +406,7 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 			switch {
 			case o.Burnt:
 				g.prop("ash", p, o.Yaw, 0)
-			case o.Burning():
-				g.prop("rug", p, o.Yaw, 0)
-				g.prop("flames", p, float64(g.tick%8)*0.8, 0)
-			default:
+			default: // burning or not: the fire is particles (fx.go)
 				g.prop("rug", p, o.Yaw, 0)
 			}
 		case sim.KindDoor:
@@ -414,27 +446,36 @@ func (g *game) drawArrows(alpha float64) {
 
 // drawHand draws the weapon in first person with walk bob and a kick or
 // swing.
-func (g *game) drawHand(alpha float64) {
+func (g *game) drawHand(alpha float64, dt float32) {
 	t := (g.prevWalk + (g.walkDist-g.prevWalk)*alpha) * 1.6
 	bobX, bobY := float32(math.Sin(t))*0.02, -float32(math.Abs(math.Cos(t)))*0.03
 	sky, blk := g.light(g.cam.X, g.cam.Y, g.cam.Z)
 	aspect := float32(g.cam.Aspect)
+	sw := float32(0)
+	if g.swing > 0 {
+		sw = float32(math.Sin(float64(float32(g.swing)-float32(alpha)) / swingTicks * math.Pi))
+	}
+	pull := float32(g.throwHold) / throwTicks // a throw wound up: the hand drawn back
 	if i := g.sim.HeldTorch(); i >= 0 {
 		name := torchModel(g.sim.Objects[i])
 		if g.sim.Objects[i].Lit {
 			blk = 15
 		}
-		sw := float32(0)
-		if g.swing > 0 {
-			sw = float32(math.Sin(float64(float32(g.swing)-float32(alpha)) / swingTicks * math.Pi))
-		}
-		view := mgl32.Translate3D(-0.35+bobX, -0.6+bobY+0.2*sw, -0.85-0.3*sw).
-			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(15 - 60*sw))).
-			Mul4(mgl32.Scale3D(0.6, 0.6, 0.6))
-		g.modelRend.DrawHand(g.props[name], aspect, view, sky, blk)
+		hand := mgl32.Translate3D(-0.35+bobX, -0.45+bobY+0.2*sw+0.25*pull, -0.85-0.3*sw+0.2*pull).
+			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(15 - 60*sw + 40*pull)))
+		g.drawArm(hand, -20, aspect, sky, blk)
+		g.modelRend.DrawHand(g.props[name], aspect, hand.Mul4(mgl32.Translate3D(0, -0.15, 0)).Mul4(mgl32.Scale3D(0.6, 0.6, 0.6)), sky, blk)
 		return
 	}
 	switch g.weapon {
+	case wBlade, wBlackjack: // animated in Blockbench; play.go's strike picks the clip
+		arm, a := fpArms[g.weapon], g.fp[g.weapon]
+		if a.Clip.Name == arm.strike && a.Done() || a.Clip.Name == "windup" && !g.windup {
+			a.Play("idle", false)
+		}
+		a.Update(dt)
+		g.fpSkin = a.Skin(g.fpSkin)
+		g.modelRend.DrawHandSkinned(g.props[arm.file], aspect, mgl32.Translate3D(bobX, bobY, 0), g.fpSkin, sky, blk)
 	case wCrossbow:
 		kick := float32(0)
 		if g.recoil > 0 {
@@ -446,17 +487,39 @@ func (g *game) drawHand(alpha float64) {
 			Mul4(bowHold).
 			Mul4(mgl32.Scale3D(0.55, 0.55, 0.55))
 		g.modelRend.DrawHand(g.bowModel, aspect, view, sky, blk)
-	default:
-		sw := float32(0)
-		if g.swing > 0 {
-			sw = float32(math.Sin(float64(float32(g.swing)-float32(alpha)) / swingTicks * math.Pi))
+	case wExplosive, wTNT: // the Blockbench hand (fp_hand.gltf), the bomb or TNT in its fist
+		a := g.fpHand
+		if (a.Clip.Name == "throw" || a.Clip.Name == "place") && a.Done() || a.Clip.Name == "windup" && g.throwHold == 0 {
+			a.Play("idle", false)
 		}
-		name := map[int]string{wBlackjack: "blackjack", wBlade: "blade", wExplosive: "bomb"}[g.weapon]
-		view := mgl32.Translate3D(0.38+bobX-0.15*sw, -0.42+bobY+0.05*sw, -0.7-0.2*sw).
-			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(-20 - 70*sw))).
-			Mul4(mgl32.HomogRotate3DZ(mgl32.DegToRad(10)))
-		g.modelRend.DrawHand(g.props[name], aspect, view, sky, blk)
+		a.Update(dt)
+		g.fpSkin = a.Skin(g.fpSkin)
+		view := mgl32.Translate3D(bobX, bobY, 0)
+		g.modelRend.DrawHandSkinned(g.props["fp_hand"], aspect, view, g.fpSkin, sky, blk)
+		item, ammo := "bomb", sim.AmmoExplosive
+		if g.weapon == wTNT {
+			item, ammo = "tnt", sim.AmmoTNT
+		}
+		let := a.Clip.Name == "throw" && a.Time > 0.08 || a.Clip.Name == "place" && a.Time > 0.15 // out of the hand
+		if !let && g.sim.Player.Ammo[ammo] > 0 {
+			hold := view.Mul4(g.fpSkin[g.handBone]).Mul4(g.handBind).Mul4(heldItem)
+			g.modelRend.DrawHand(g.props[item], aspect, hold, sky, blk)
+		}
 	}
+}
+
+// heldItem places a bomb or TNT in fp_hand's fist bone frame: small, its
+// base in the fingers. wickTop is each one's fuse tip, model space.
+var (
+	heldItem = mgl32.Translate3D(0, 0, 0).Mul4(mgl32.Scale3D(0.35, 0.35, 0.35))
+	wickTop  = map[string]mgl32.Vec3{"bomb": {0, 0.32, 0}, "tnt": {0, 0.36, 0}}
+)
+
+// drawArm draws the forearm from the hand frame (fist at its origin) down
+// and back towards the camera, yawed (degrees) out to the hand's side.
+func (g *game) drawArm(hand mgl32.Mat4, yaw, aspect float32, sky, blk uint8) {
+	arm := hand.Mul4(mgl32.HomogRotate3DY(mgl32.DegToRad(yaw))).Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(25)))
+	g.modelRend.DrawHand(g.props["arm"], aspect, arm, sky, blk)
 }
 
 // bowHold turns the cut-out crossbow so it points into the screen (as the
@@ -480,38 +543,43 @@ func bx(x0, y0, z0, x1, y1, z1 float32, c color.NRGBA) part {
 }
 
 var (
-	wood    = color.NRGBA{110, 74, 40, 255}
-	darkW   = color.NRGBA{70, 46, 26, 255}
-	iron    = color.NRGBA{90, 90, 96, 255}
-	brass   = color.NRGBA{190, 150, 60, 255}
-	flame   = color.NRGBA{255, 190, 60, 255}
-	flame2  = color.NRGBA{255, 110, 20, 255}
-	cold    = color.NRGBA{50, 40, 34, 255}
-	shadeOn = color.NRGBA{255, 240, 170, 255}
-	shadeOf = color.NRGBA{120, 110, 90, 255}
-	water   = color.NRGBA{60, 110, 200, 255}
-	hemp    = color.NRGBA{150, 125, 85, 255}
-	spark   = color.NRGBA{200, 230, 255, 255}
-	rugRed  = color.NRGBA{140, 30, 34, 255}
-	ash     = color.NRGBA{40, 38, 36, 255}
-	leather = color.NRGBA{60, 40, 30, 255}
-	steel   = color.NRGBA{200, 205, 215, 255}
+	wood       = color.NRGBA{110, 74, 40, 255}
+	darkW      = color.NRGBA{70, 46, 26, 255}
+	iron       = color.NRGBA{90, 90, 96, 255}
+	tntRed     = color.NRGBA{190, 40, 30, 255}
+	paper      = color.NRGBA{225, 215, 190, 255}
+	brass      = color.NRGBA{190, 150, 60, 255}
+	flame      = color.NRGBA{255, 190, 60, 255}
+	flame2     = color.NRGBA{255, 110, 20, 255}
+	cold       = color.NRGBA{50, 40, 34, 255}
+	shadeOn    = color.NRGBA{255, 240, 170, 255}
+	shadeOf    = color.NRGBA{120, 110, 90, 255}
+	electricOn = color.NRGBA{215, 232, 255, 255} // the electric lamp's blue-white panes
+	water      = color.NRGBA{60, 110, 200, 255}
+	hemp       = color.NRGBA{150, 125, 85, 255}
+	spark      = color.NRGBA{200, 230, 255, 255}
+	rugRed     = color.NRGBA{140, 30, 34, 255}
+	ash        = color.NRGBA{40, 38, 36, 255}
+	steel      = color.NRGBA{200, 205, 215, 255}
+	skin       = color.NRGBA{214, 168, 132, 255}
 )
 
 // propParts are the props, built from boxes until real models exist.
 var propParts = map[string][]part{
-	"torch":      {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), cold)},
-	"torch_lit":  {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), flame)}, // the fire is particles (fx.go)
-	"faucet":     {bx(-0.05, 1.0, -0.4, 0.05, 1.12, 0.05, brass), bx(-0.05, 0.95, -0.05, 0.05, 1.12, 0.05, brass), bx(-0.1, 1.12, -0.32, 0.1, 1.18, -0.22, brass)},
-	"stream":     {bx(-0.03, 0.02, -0.03, 0.03, 0.97, 0.03, water)},
+	"torch":     {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), cold)},
+	"torch_lit": {tipped(bx(-0.06, 0.1, -0.06, 0.06, 0.8, 0.06, wood), flame)}, // the fire is particles (fx.go)
+	// The tap stands on the basin top in the cell it faces (model +Z) and
+	// reaches back over the edge, so its stream falls to the floor in its own cell.
+	"faucet": {bx(-0.05, 1.0, 0.7, 0.05, 1.3, 0.8, brass), bx(-0.04, 1.22, -0.04, 0.04, 1.3, 0.8, brass),
+		bx(-0.05, 1.14, -0.05, 0.05, 1.24, 0.05, brass), bx(-0.12, 1.12, 0.72, 0.12, 1.17, 0.78, brass)},
+	"stream":     {bx(-0.03, 0.02, -0.03, 0.03, 1.14, 0.03, water)},
 	"rope":       {bx(-0.025, -0.025, 0, 0.025, 0.025, ropeSeg+0.02, hemp)}, // one segment, along +Z (see drawRopes)
 	"rug":        {bx(-0.9, 0, -0.6, 0.9, 0.04, 0.6, rugRed)},
 	"ash":        {bx(-0.9, 0, -0.6, 0.9, 0.02, 0.6, ash)},
-	"flames":     {bx(-0.6, 0, -0.3, -0.2, 0.7, 0.1, flame2), bx(-0.1, 0, -0.4, 0.3, 0.9, 0.0, flame), bx(0.3, 0, 0.0, 0.7, 0.6, 0.4, flame2), bx(-0.3, 0, 0.2, 0.1, 0.5, 0.5, flame)},
 	"bomb":       {bx(-0.12, 0, -0.12, 0.12, 0.24, 0.12, iron), bx(-0.02, 0.24, -0.02, 0.02, 0.32, 0.02, flame)},
+	"tnt":        {bx(-0.14, 0, -0.14, 0.14, 0.3, 0.14, tntRed), bx(-0.145, 0.1, -0.145, 0.145, 0.2, 0.145, paper), bx(-0.015, 0.3, -0.015, 0.015, 0.36, 0.015, hemp)},
 	"noisemaker": {bx(-0.08, 0, -0.08, 0.08, 0.16, 0.08, brass)},
-	"blackjack":  {bx(-0.03, -0.03, -0.1, 0.03, 0.03, 0.15, leather), bx(-0.06, -0.06, -0.35, 0.06, 0.06, -0.1, leather)},
-	"blade":      {bx(-0.03, -0.03, 0, 0.03, 0.03, 0.14, leather), bx(-0.08, -0.02, -0.02, 0.08, 0.02, 0.02, brass), bx(-0.015, -0.035, -0.45, 0.015, 0.035, -0.02, steel)},
+	"arm":        {bx(-0.065, -0.075, -0.07, 0.065, 0.075, 0.07, skin), bx(-0.1, -0.1, 0.05, 0.1, 0.1, 1.1, skin)}, // fist at the origin, forearm along +Z
 	"marker":     {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
 	"waypoint":   {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
 	"npc_mark":   {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},

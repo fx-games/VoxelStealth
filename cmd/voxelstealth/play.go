@@ -19,10 +19,11 @@ const (
 	wBlackjack
 	wBlade
 	wExplosive
+	wTNT
 	numWeapons
 )
 
-var weaponNames = [numWeapons]string{"Crossbow", "Blackjack", "Blade", "Flash bomb"}
+var weaponNames = [numWeapons]string{"Crossbow", "Blackjack", "Blade", "Flash bomb", "TNT"}
 
 // arrowTypes cycle with X.
 var arrowTypes = []string{sim.AmmoBroadhead, sim.AmmoWater, sim.AmmoNoise, sim.AmmoRope}
@@ -31,6 +32,7 @@ const (
 	reloadTicks = 24 // a hand-spanned crossbow, not the explorer's repeater
 	recoilTicks = 5
 	swingTicks  = 8
+	throwTicks  = 10 // a throw's full windup: hard, it bashes what it hits
 	crouchEye   = 1.15
 )
 
@@ -40,14 +42,15 @@ type weapons struct {
 	reload     int
 	recoil     int
 	swing      int
+	windup     bool // a melee weapon drawn back, the button held
+	throwHold  int  // ticks a throw has been wound up, up to throwTicks
+	placed     bool // TNT set down this click
 	arrows     projectile.World
 	arrowAmmo  map[*projectile.Arrow]string
 	reported   map[*projectile.Arrow]bool
 	npcTargets []*npcTarget
-	mouseLatch bool // ignore the button until released
 	useHeld    int
 	target     sim.Target
-	mouseWas   bool
 	vkeys      map[glfw.Key]bool // keys held by a -script
 	vmouse     bool
 	shotReq    bool
@@ -175,7 +178,7 @@ func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 		if s.Player.Carrying >= 0 {
 			s.DropBody()
 		} else {
-			s.ThrowTorch(g.eye(), g.viewDir(), 0)
+			s.ThrowTorch(g.eye(), g.viewDir(), 0, false)
 		}
 	}
 }
@@ -255,14 +258,23 @@ func (g *game) tickPlay() {
 		} else {
 			g.useHeld = 0
 		}
-		down := g.mouseDown()
-		if !down {
-			g.mouseLatch = false
+		held := g.mouseDown()
+		switch {
+		case s.HeldTorch() >= 0 || g.weapon == wExplosive:
+			g.windup = false
+			g.windThrow(held)
+		case g.weapon == wTNT:
+			g.windup, g.throwHold = false, 0
+			g.place(held)
+		case g.fp[g.weapon] != nil:
+			g.throwHold = 0
+			g.strike(held)
+		default:
+			g.windup, g.throwHold = false, 0
+			if held {
+				g.shoot()
+			}
 		}
-		if down && !g.mouseLatch && (!g.mouseWas || g.weapon == wCrossbow) {
-			g.useWeapon()
-		}
-		g.mouseWas = down
 	}
 	if g.reload > 0 {
 		if g.reload--; g.reload == reloadTicks-6 {
@@ -286,49 +298,78 @@ func (g *game) tickPlay() {
 	g.tickSounds()
 }
 
-// useWeapon fires, swings or throws what is in hand.
-func (g *game) useWeapon() {
-	s := g.sim
-	if s.HeldTorch() >= 0 {
-		if g.swing == 0 {
-			s.ThrowTorch(g.eye(), g.viewDir(), 9)
-			g.swing = swingTicks
-			g.mouseLatch = true // the same click must not go on to fire
-		}
-		return
+// strike draws the melee weapon back while the button is held and strikes
+// on its release; the next windup waits for the strike clip to end.
+func (g *game) strike(held bool) {
+	arm, a := fpArms[g.weapon], g.fp[g.weapon]
+	switch {
+	case held && !g.windup && g.swing == 0:
+		g.windup = true
+		a.Play("windup", true)
+	case !held && g.windup:
+		g.windup = false
+		a.Play(arm.strike, true)
+		g.swing = int(math.Ceil(float64(a.Clip.Length) / tickDur.Seconds()))
+		g.sim.Melee(arm.melee)
 	}
-	switch g.weapon {
-	case wCrossbow:
-		if g.reload > 0 {
-			return
+}
+
+// windThrow winds up a throw (the held torch, else a flash bomb) while the
+// button is held and throws on its release: the longer the windup the
+// farther, and at full windup hard, bashing the first thing it hits.
+func (g *game) windThrow(held bool) {
+	s := g.sim
+	switch {
+	case held && g.swing == 0:
+		if g.throwHold == 0 && s.HeldTorch() < 0 && s.Player.Ammo[sim.AmmoExplosive] > 0 {
+			g.fpHand.Play("windup", true)
 		}
-		if s.Player.Ammo[g.ammo] <= 0 {
-			g.reload = reloadTicks
-			g.message("No " + g.ammo + " arrows.")
-			return
-		}
-		s.Player.Ammo[g.ammo]--
-		e := g.eye()
-		a := g.arrows.Shoot(e.X, e.Y-0.1, e.Z, g.cam.Yaw, g.cam.Pitch, projectile.Speed)
-		g.arrowAmmo[a] = g.ammo
-		g.reload, g.recoil = reloadTicks, recoilTicks
-		g.playLocal("twang", 0.5)
-	case wBlackjack, wBlade:
-		if g.swing > 0 {
-			return
-		}
-		g.swing = swingTicks
-		if g.weapon == wBlackjack {
-			s.Melee("blackjack")
+		g.throwHold = min(g.throwHold+1, throwTicks)
+	case !held && g.throwHold > 0:
+		k, hard := float64(g.throwHold)/throwTicks, g.throwHold == throwTicks
+		g.throwHold, g.swing = 0, swingTicks
+		if s.HeldTorch() >= 0 {
+			s.ThrowTorch(g.eye(), g.viewDir(), 6+6*k, hard)
+		} else if s.Throw(g.eye(), g.viewDir(), 5+4*k, hard) {
+			g.fpHand.Play("throw", true)
 		} else {
-			s.Melee("blade")
-		}
-	case wExplosive:
-		if !s.Throw(g.eye(), g.viewDir()) {
 			g.message("No flash bombs left.")
 		}
-		g.swing = swingTicks
 	}
+}
+
+// place sets lit TNT down in front of the player, once per click.
+func (g *game) place(held bool) {
+	switch {
+	case !held:
+		g.placed = false
+	case !g.placed && g.swing == 0:
+		g.placed, g.swing = true, swingTicks
+		if g.sim.PlaceTNT(g.eye(), g.viewDir()) {
+			g.fpHand.Play("place", true)
+		} else {
+			g.message("No TNT left.")
+		}
+	}
+}
+
+// shoot fires the crossbow, which repeats while the button is held.
+func (g *game) shoot() {
+	s := g.sim
+	if g.reload > 0 {
+		return
+	}
+	if s.Player.Ammo[g.ammo] <= 0 {
+		g.reload = reloadTicks
+		g.message("No " + g.ammo + " arrows.")
+		return
+	}
+	s.Player.Ammo[g.ammo]--
+	e := g.eye()
+	a := g.arrows.Shoot(e.X, e.Y-0.1, e.Z, g.cam.Yaw, g.cam.Pitch, projectile.Speed)
+	g.arrowAmmo[a] = g.ammo
+	g.reload, g.recoil = reloadTicks, recoilTicks
+	g.playLocal("twang", 0.5)
 }
 
 // tickArrows flies arrows and reports where they land to the simulation.
@@ -337,17 +378,21 @@ func (g *game) tickArrows() {
 	if len(g.arrows.Arrows) == 0 {
 		return
 	}
-	// Water arrows put out torches they fly past.
+	// Water arrows put out torches and street lamps they fly past.
 	for _, a := range g.arrows.Arrows {
 		if a.Stuck || g.arrowAmmo[a] != sim.AmmoWater {
 			continue
 		}
 		for i, o := range s.Objects {
-			if o.Kind != sim.KindTorch || !o.Lit || o.Gone {
+			street := o.Kind == sim.KindLamp && o.Name == sim.StreetLamp
+			if o.Kind != sim.KindTorch && !street || !o.Lit || o.Gone {
 				continue
 			}
 			lo, hi := s.ObjectBox(i)
 			mid := lo.Add(hi).Scale(0.5)
+			if street {
+				mid = o.Pos.Add(sim.Vec3{Y: sim.StreetLampHead})
+			}
 			if mid.Dist(vec(a.X, a.Y, a.Z)) < 0.8 {
 				s.ArrowHit(sim.AmmoWater, vec(a.X, a.Y, a.Z), -1, false)
 				a.Discard()
