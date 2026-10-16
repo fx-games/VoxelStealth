@@ -31,8 +31,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/voxellib/platform/gl"
+	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/audio"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/voxel"

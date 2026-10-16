@@ -3,3 +3,10 @@
 /saves/
 /screenshots/
 /buildmanor
+/web/assets/
+/web/missions/
+/web/vlassets/
+# mirrored by build_web.sh
+web/assets/
+web/vlassets/
+web/missions/

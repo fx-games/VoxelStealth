@@ -10,7 +10,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/voxel/physics"
 	"github.com/memmaker/voxelstealth/sim"
 )
