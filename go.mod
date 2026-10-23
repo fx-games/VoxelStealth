@@ -19,3 +19,5 @@ require (
 )
 
 replace github.com/memmaker/voxellib => ../VoxelLib
+
+replace github.com/gogpu/wgpu => github.com/memmaker/wgpu v0.0.0-20261023072902-870db13ffc75
