@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/go-gl/mathgl/mgl64"
-	"github.com/memmaker/voxellib/importer/mcmodel"
+	"github.com/memmaker/voxellib/importer/bbmodel"
 	"github.com/memmaker/voxellib/model"
 	"github.com/memmaker/voxellib/projectile"
 	"github.com/memmaker/voxellib/voxel/render"
@@ -102,7 +102,7 @@ func (g *game) loadAssets(dir, texDir string) error {
 	if g.partRend, err = render.NewParticleRenderer(g.eng.Renderer); err != nil {
 		return err
 	}
-	p, err := mcmodel.Import(filepath.Join(dir, "cleannrooster"))
+	p, err := bbmodel.Import(filepath.Join(dir, "cleannrooster"))
 	if err != nil {
 		return err
 	}

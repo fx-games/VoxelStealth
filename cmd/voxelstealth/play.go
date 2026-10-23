@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/character"
+	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/projectile"
 	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxelstealth/sim"

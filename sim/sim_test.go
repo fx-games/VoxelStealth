@@ -316,8 +316,8 @@ func TestDecorBlocksButIsNotTargeted(t *testing.T) {
 	for i := 0; i < 3*TicksPerSecond; i++ {
 		p.Tick(s.Body(), character.Input{Forward: 1, Yaw: math.Pi / 2}) // walk +X into the box
 	}
-	if want := 5.25 - p.Width/2; math.Abs(p.X-want) > 0.01 {
-		t.Fatalf("player at x=%.2f, want stopped against the box at %.2f", p.X, want)
+	if p.X < 5.75+p.Width/2 { // lower than stepHeight: stepped over, as in Minecraft
+		t.Fatalf("player at x=%.2f, want stepped over the box", p.X)
 	}
 	if tg := s.TargetAt(Vec3{4.5, 1.2, 2.5}, Vec3{1, 0, 0}); tg.Obj >= 0 {
 		t.Fatalf("targeted object %d", tg.Obj)

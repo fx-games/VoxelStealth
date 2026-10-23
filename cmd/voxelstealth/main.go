@@ -31,14 +31,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memmaker/voxellib/platform/gl"
-	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/audio"
 	"github.com/memmaker/voxellib/character"
+	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/voxel"
 	"github.com/memmaker/voxellib/voxel/engine"
-	"github.com/memmaker/voxellib/voxel/mcres"
 	"github.com/memmaker/voxellib/voxel/render"
+	"github.com/memmaker/voxellib/voxel/respack"
 	"github.com/memmaker/voxelstealth/level"
 	"github.com/memmaker/voxelstealth/sim"
 )
@@ -90,7 +89,7 @@ func main() {
 	win.MakeContextCurrent()
 	glfw.SwapInterval(1)
 
-	pack, err := mcres.Open(filepath.Join(*texDir, "rpg16pack"))
+	pack, err := respack.Open(filepath.Join(*texDir, "rpg16pack"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,7 +109,7 @@ func main() {
 		WorldDir:       filepath.Join(*missionDir, "world"),
 		ReadOnly:       !*edit, // play never changes the mission on disk
 		Textures:       ownTextures{pack, *blockDir},
-		RenderOptions:  render.Options{Missing: mcres.MissingTexture, IsGreyscale: mcres.IsGreyscale},
+		RenderOptions:  render.Options{Missing: respack.MissingTexture, IsGreyscale: respack.IsGreyscale},
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -214,13 +213,15 @@ func (g *game) run(shotPath string, shotAt int) {
 		g.eng.Update(ix, iy, iz)
 
 		fw, fh := g.win.GetFramebufferSize()
-		gl.Viewport(0, 0, int32(fw), int32(fh))
+		autoShot := shotPath != "" && g.ready && g.playTick >= shotAt
+		if g.shotReq || autoShot {
+			render.CaptureNextFrame()
+		}
 		day := float32(g.eng.Renderer.Opt.Daylight)
 		if !g.ready {
 			day = 0 // loading screen: black until the level is complete
 		}
-		gl.ClearColor(0.55*day, 0.65*day, 0.85*day, 1)
-		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+		render.BeginFrame(fw, fh, 0.55*day, 0.65*day, 0.85*day)
 		g.cam.X, g.cam.Y, g.cam.Z = ix, iy+g.player.EyeHeight, iz
 		g.cam.Aspect = float64(fw) / float64(max(fh, 1))
 		if g.ready {
@@ -233,12 +234,12 @@ func (g *game) run(shotPath string, shotAt int) {
 			saveShot(filepath.Join("screenshots", time.Now().Format("2006-01-02_15-04-05")+".png"), fw, fh)
 		}
 		g.drawHUD(fw, fh)
-		if shotPath != "" && g.ready && g.playTick >= shotAt {
+		if autoShot {
 			saveShot(shotPath, fw, fh)
 			g.printStatus()
 			return
 		}
-		g.win.SwapBuffers()
+		render.EndFrame(g.win)
 	}
 }
 
@@ -366,15 +367,7 @@ func (g *game) printStatus() {
 
 func saveShot(path string, w, h int) {
 	os.MkdirAll(filepath.Dir(path), 0o755)
-	px := make([]byte, w*h*4)
-	gl.ReadPixels(0, 0, int32(w), int32(h), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(px))
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		copy(img.Pix[y*w*4:(y+1)*w*4], px[(h-1-y)*w*4:(h-y)*w*4])
-	}
-	for i := 3; i < len(img.Pix); i += 4 {
-		img.Pix[i] = 255
-	}
+	img := render.ReadFrame(w, h)
 	f, err := os.Create(path)
 	if err != nil {
 		log.Print(err)
@@ -387,7 +380,7 @@ func saveShot(path string, w, h int) {
 // ownTextures serves the "voxelstealth:<name>" block textures from dir and
 // the rest from the pack.
 type ownTextures struct {
-	*mcres.Pack
+	*respack.Pack
 	dir string
 }
 

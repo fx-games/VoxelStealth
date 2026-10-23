@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxellib/importer/mcmodel"
+	"github.com/memmaker/voxellib/importer/bbmodel"
 	"github.com/memmaker/voxellib/model"
 	"github.com/memmaker/voxellib/model/gltf"
 	"github.com/memmaker/voxelstealth/sim"
@@ -38,7 +38,7 @@ func (g *game) loadModels(dir string) error {
 	if err != nil {
 		return err
 	}
-	ms, err := mcmodel.ParseGeometry(geo, func(string) image.Image { return tex })
+	ms, err := bbmodel.ParseGeometry(geo, func(string) image.Image { return tex })
 	if err != nil {
 		return err
 	}

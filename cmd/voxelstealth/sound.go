@@ -208,7 +208,7 @@ func (g *game) sound(name string) *audio.Sound {
 // playLocal plays a sound at the player (their own crossbow and such).
 func (g *game) playLocal(name string, gain float32) {
 	if s := g.sound(name); g.mixer != nil && s != nil {
-		g.mixer.Play(s, gain)
+		g.mixer.Play(s, audio.UI(gain, 1))
 	}
 }
 
@@ -237,7 +237,12 @@ func (g *game) playWorldSound(snd *audio.Sound, pos sim.Vec3, loud float64) {
 	} else {
 		from = eye
 	}
-	g.mixer.PlayAt(snd, from.X, from.Y, from.Z, gain)
+	g.mixer.Play(snd, audio.Params{X: from.X, Y: from.Y, Z: from.Z, Volume: gain, Pitch: 1, NoAttenuation: true})
+}
+
+// loop starts a looping ambience at e; its gain is set every tick.
+func (g *game) loop(name string, e sim.Vec3, gain float32) *audio.Voice {
+	return g.mixer.Play(g.sound(name), audio.Params{X: e.X, Y: e.Y, Z: e.Z, Volume: gain, Pitch: 1, NoAttenuation: true, Loop: true})
 }
 
 func (g *game) tickSounds() {
@@ -247,24 +252,27 @@ func (g *game) tickSounds() {
 	e := g.eye()
 	g.mixer.SetListener(e.X, e.Y, e.Z, g.cam.Yaw)
 	if g.ambient == nil {
-		g.ambient = g.mixer.Loop(g.sound("ambient"), e.X, e.Y, e.Z, 0.15)
+		g.ambient = g.loop("ambient", e, 0.15)
 	}
 	if g.crickets == nil && g.sfx["crickets"] != nil {
-		g.crickets = g.mixer.Loop(g.sound("crickets"), e.X, e.Y, e.Z, 0)
+		g.crickets = g.loop("crickets", e, 0)
 	}
 	if g.roomtone == nil && g.sfx["roomtone"] != nil {
-		g.roomtone = g.mixer.Loop(g.sound("roomtone"), e.X, e.Y, e.Z, 0)
+		g.roomtone = g.loop("roomtone", e, 0)
 	}
 	gain, bugs, room := float32(0.15), float32(0.1), float32(0)
 	if g.sim != nil && g.sim.Rooms.RoomAt(e.Cell()) != 0 {
 		gain, bugs, room = 0.05, 0.01, 0.2 // indoors: the wind is muffled
 	}
-	g.ambient.Set(e.X, e.Y+2, e.Z, gain)
+	g.ambient.Move(e.X, e.Y+2, e.Z)
+	g.ambient.SetVolume(gain)
 	if g.crickets != nil {
-		g.crickets.Set(e.X, e.Y, e.Z, bugs)
+		g.crickets.Move(e.X, e.Y, e.Z)
+		g.crickets.SetVolume(bugs)
 	}
 	if g.roomtone != nil {
-		g.roomtone.Set(e.X, e.Y, e.Z, room)
+		g.roomtone.Move(e.X, e.Y, e.Z)
+		g.roomtone.SetVolume(room)
 	}
 }
 
