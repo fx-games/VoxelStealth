@@ -20,8 +20,16 @@ github.com/jfreymuth/oggvorbis v1.0.5 h1:u+Ck+R0eLSRhgq8WTmffYnrVtSztJcYrl588DM4
 github.com/jfreymuth/oggvorbis v1.0.5/go.mod h1:1U4pqWmghcoVsCJJ4fRBKv9peUJMBHixthRlBeD6uII=
 github.com/jfreymuth/vorbis v1.0.2 h1:m1xH6+ZI4thH927pgKD8JOH4eaGRm18rEE9/0WKjvNE=
 github.com/jfreymuth/vorbis v1.0.2/go.mod h1:DoftRo4AznKnShRl1GxiTFCseHr4zR9BN3TWXyuzrqQ=
+github.com/memmaker/stimres v0.1.0 h1:obJHRq2J9ckFxPkbpn0N0wU/mOkJaK1gIQJdiRJwTY8=
+github.com/memmaker/stimres v0.1.0/go.mod h1:83nI0BjwbU5jVO5zqf/D07K+aR7hebzVjCCBOxKTQ3Y=
+github.com/memmaker/stimres v0.2.0 h1:GWX30Y183rJWvx122ppa17kV59peUsSLpWo/80wO0+M=
+github.com/memmaker/stimres v0.2.0/go.mod h1:83nI0BjwbU5jVO5zqf/D07K+aR7hebzVjCCBOxKTQ3Y=
+github.com/memmaker/stimres v0.2.1 h1:nEXm01wde8mWGiAwnSAPnDi+IIyXgmyA2b3zrIrj0KA=
+github.com/memmaker/stimres v0.2.1/go.mod h1:83nI0BjwbU5jVO5zqf/D07K+aR7hebzVjCCBOxKTQ3Y=
 github.com/memmaker/wgpu v0.0.0-20261023072902-870db13ffc75 h1:PoFFlNe2dzowo1ZdxeDECo5ghHFFI3RHe8y5yTfVdMI=
 github.com/memmaker/wgpu v0.0.0-20261023072902-870db13ffc75/go.mod h1:erhaIjD9psJKjHqAhn5MWdJETcACR1NGoqLhkTAHkFM=
+github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
+github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 golang.org/x/image v0.47.0 h1:za/8gVz++PPZqmZJBNSISICN5Rrj5zixP/8K++fgmqo=
 golang.org/x/image v0.47.0/go.mod h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=
 golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=

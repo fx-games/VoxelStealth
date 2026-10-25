@@ -1,0 +1,376 @@
+# The stimulus–response rules of the world (stimres, see docs/adr/0001).
+# Every effect on objects, NPCs, the player, blocks and liquids is a
+# stimulus from here or from the sim, and every reaction is a receptron.
+# Intensity: liquids cells poured (spill) or 0 for a wetting; pierce
+# damage; noise loudness; fire >= 1 burns people, > 0 is open flame,
+# 0 heat; flash ticks blinded.
+
+[stim.impact]
+[stim.pierce]
+parent = "impact"
+[stim.bash]
+parent = "impact"
+[stim.blast]
+[stim.water]
+[stim.oil]
+[stim.fire]
+[stim.shock]
+[stim.flash]
+[stim.noise]      # sound: medium "sound", Extra sound = what it is
+[stim.visibility] # the player being seen: medium "sight"
+[stim.body]       # a body lying about being seen
+[stim.blaze]      # a fire being seen
+[stim.frob]       # deliberate use: Extra held = the use key is held down
+[stim.drip]       # a running faucet's own tick
+
+# ---- Objects ----
+
+[archetype.object]
+
+[archetype.torch]
+parent = "object"
+[[archetype.torch.receptron]]
+stim = "water"
+if = ["lit"]
+effects = ["call douse"]
+[[archetype.torch.receptron]]
+stim = "fire"
+if = ["!lit"]
+effects = ["call kindle"]
+[[archetype.torch.receptron]]
+stim = "blast"
+if = ["!held"]
+effects = ["destroy"]
+[[archetype.torch.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call take_torch"]
+[[archetype.torch.source]] # lying lit, it keeps at what it landed by
+stim = "fire"
+medium = "radius"
+intensity = 0.5
+range = 1.2
+period = 40
+if = ["lit", "fallen", "!held", "!flying"]
+
+[archetype.lantern]
+parent = "torch"
+
+[archetype.flammable]
+parent = "object"
+[[archetype.flammable.receptron]]
+stim = "water"
+if = ["burning"]
+effects = ["call douse"]
+[[archetype.flammable.receptron]]
+stim = "fire"
+if = ["!burning", "!burnt"]
+effects = ["set burning true 600", "set smoulder true 60", "call kindle"]
+[[archetype.flammable.receptron]]
+stim = "expired"
+if = ["$prop == smoulder", "burning"]
+effects = ["emit fire 0 radius 2.2"] # the heat spreads further
+[[archetype.flammable.receptron]]
+stim = "expired"
+if = ["$prop == burning"]
+effects = ["set burnt true", "call light_off"]
+[[archetype.flammable.source]]
+stim = "noise"
+medium = "sound"
+intensity = 30
+period = 30
+if = ["burning"]
+extra = { sound = "fire" }
+[[archetype.flammable.source]] # flames in view
+stim = "blaze"
+medium = "sight"
+intensity = 1
+period = 1
+if = ["burning"]
+[[archetype.flammable.source]] # flames: burn what stands in them
+stim = "fire"
+medium = "radius"
+intensity = 1
+range = 0.6
+period = 10
+if = ["burning"]
+
+[archetype.lamp]
+parent = "object"
+[[archetype.lamp.receptron]]
+stim = "water"
+if = ["lit"]
+effects = ["call short_out"]
+[[archetype.lamp.receptron]]
+stim = "blast"
+if = ["!held"]
+effects = ["destroy"]
+[[archetype.lamp.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call take_torch"]
+
+[archetype.street_lamp] # too big to carry or knock over
+parent = "lamp"
+[[archetype.street_lamp.receptron]]
+stim = "frob"
+effects = ["stop"]
+
+[archetype.door]
+parent = "object"
+[[archetype.door.receptron]]
+stim = "blast"
+effects = ["destroy"]
+[[archetype.door.receptron]]
+stim = "frob"
+if = ["locked"]
+effects = ["call pick_lock", "stop"]
+[[archetype.door.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call open_door"]
+
+[archetype.chest]
+parent = "object"
+[[archetype.chest.receptron]]
+stim = "frob"
+effects = ["call frob_chest"]
+
+[archetype.faucet]
+parent = "object"
+props = { liquid = "water" }
+[[archetype.faucet.receptron]]
+stim = "blast"
+effects = ["destroy"]
+[[archetype.faucet.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call toggle running", "emit noise 12 sound sound=squeak"]
+[[archetype.faucet.receptron]]
+stim = "drip"
+effects = ["call spill 1 0.5"]
+[[archetype.faucet.source]]
+stim = "drip"
+medium = "self"
+period = 15
+if = ["running"]
+[[archetype.faucet.source]]
+stim = "noise"
+medium = "sound"
+intensity = 14
+period = 45
+if = ["running"]
+extra = { sound = "water" }
+
+[archetype.loot]
+parent = "object"
+[[archetype.loot.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call take"]
+
+[archetype.key]
+parent = "loot"
+
+[archetype.ammo]
+parent = "loot"
+
+[archetype.decor]
+parent = "object"
+
+[archetype.barrel]
+parent = "decor"
+props = { liquid = "water" }
+[[archetype.barrel.receptron]] # punctured: it splashes out around its foot
+stim = "pierce"
+effects = ["emit noise 18 sound sound=splash", "call spill 4 1"]
+[[archetype.barrel.receptron]] # blown apart: it spills everything
+stim = "blast"
+effects = ["call spill 8 1", "destroy"]
+
+[archetype.oil_barrel]
+parent = "barrel"
+meta = ["oil_filled"]
+
+[meta.oil_filled]
+props = { liquid = "oil" }
+
+# ---- People ----
+
+[archetype.npc]
+[[archetype.npc.receptron]]
+stim = "pierce"
+effects = ["call wound"]
+[[archetype.npc.receptron]]
+stim = "bash"
+effects = ["call knock_out"]
+[[archetype.npc.receptron]]
+stim = "blast"
+effects = ["call kill player blown up"]
+[[archetype.npc.receptron]] # flames, not heat
+stim = "fire"
+min = 1
+effects = ["call kill accident burned"]
+[[archetype.npc.receptron]]
+stim = "shock"
+effects = ["call kill accident electrocuted"]
+[[archetype.npc.receptron]]
+stim = "noise"
+effects = ["call hear"]
+[[archetype.npc.receptron]]
+stim = "flash"
+effects = ["call blind"]
+[[archetype.npc.receptron]]
+stim = "visibility"
+effects = ["call see"]
+[[archetype.npc.receptron]]
+stim = "body"
+effects = ["call notice_body"]
+[[archetype.npc.receptron]]
+stim = "blaze"
+effects = ["call notice_fire"]
+[[archetype.npc.source]] # dead or out cold: whoever sees it raises the alarm
+stim = "body"
+medium = "sight"
+intensity = 1
+period = 1
+if = ["down"]
+[[archetype.npc.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call frob_body"]
+[[archetype.npc.receptron]]
+stim = "expired"
+if = ["$prop == blind"]
+effects = ["call recover"]
+
+[archetype.guard]
+parent = "npc"
+[archetype.civilian]
+parent = "npc"
+[archetype.target]
+parent = "npc"
+
+[archetype.player]
+props = { health = 20 }
+[[archetype.player.receptron]]
+stim = "shock"
+effects = ["call hurt 20 Electrocuted."]
+[[archetype.player.receptron]] # flames, not heat
+stim = "fire"
+min = 1
+effects = ["call hurt 10 You're burning!"]
+[[archetype.player.receptron]] # a guard's blade; Extra why is the epitaph
+stim = "pierce"
+effects = ["call strike"]
+[[archetype.player.receptron]]
+stim = "flash"
+effects = ["call dazzle"]
+[[archetype.player.receptron]]
+stim = "blast"
+effects = ["call caught_in_blast"]
+[[archetype.player.source]] # how lit the player is (the light gem): NPCs look
+stim = "visibility"
+medium = "sight"
+intensity = 1
+period = 1
+
+# ---- Cells ----
+
+[archetype.cell]
+[[archetype.cell.receptron]] # glass, TNT and liquids stop it first
+stim = "blast"
+effects = ["call blast_block"]
+[[archetype.cell.receptron]] # a liquid landing here pools
+stim = "water"
+min = 1
+effects = ["call pour"]
+[[archetype.cell.receptron]]
+stim = "oil"
+min = 1
+effects = ["call pour"]
+
+[archetype.solid]
+parent = "cell"
+
+[archetype.air] # air, or an invisible light: where fire burns
+parent = "cell"
+[[archetype.air.receptron]]
+stim = "water"
+if = ["burning"]
+effects = ["call douse_fire"]
+[[archetype.air.receptron]]
+stim = "fire"
+if = ["!burning"]
+effects = ["call catch_fire"]
+
+[archetype.glass]
+parent = "cell"
+[[archetype.glass.receptron]] # as loud as a bomb
+stim = "impact"
+effects = ["emit noise 95 sound sound=shatter", "destroy"]
+[[archetype.glass.receptron]]
+stim = "blast"
+effects = ["emit noise 95 sound sound=shatter", "destroy", "stop"]
+
+[archetype.flammable_block]
+parent = "cell"
+[[archetype.flammable_block.receptron]]
+stim = "fire"
+effects = ["call burn_block"]
+
+[archetype.tnt]
+parent = "cell"
+[[archetype.tnt.receptron]]
+stim = "fire"
+effects = ["call prime_tnt"]
+[[archetype.tnt.receptron]]
+stim = "blast"
+effects = ["call prime_tnt", "stop"]
+
+[archetype.water_puddle]
+parent = "cell"
+[[archetype.water_puddle.receptron]]
+stim = "shock"
+if = ["!live"]
+effects = ["call electrify"]
+[[archetype.water_puddle.source]] # live: it shocks whoever stands in it
+stim = "shock"
+medium = "radius"
+intensity = 1
+range = 0.2
+period = 1
+if = ["live"]
+[[archetype.water_puddle.source]] # what lies in it gets wet
+stim = "water"
+medium = "radius"
+period = 1
+
+[archetype.oil_puddle]
+parent = "cell"
+[[archetype.oil_puddle.receptron]]
+stim = "fire"
+if = ["!burning"]
+effects = ["set burning true 160", "call ignite_oil"]
+[[archetype.oil_puddle.receptron]]
+stim = "water"
+if = ["burning"]
+effects = ["clear burning", "call unlight_above", "emit noise 12 sound sound=hiss"]
+[[archetype.oil_puddle.receptron]] # burnt away
+stim = "expired"
+if = ["$prop == burning"]
+effects = ["destroy"]
+[[archetype.oil_puddle.source]] # flames: burn what stands in them, catch the next cell
+stim = "fire"
+medium = "radius"
+intensity = 1
+range = 0.6
+period = 10
+if = ["burning"]
+[[archetype.oil_puddle.source]]
+stim = "noise"
+medium = "sound"
+intensity = 30
+period = 30
+if = ["burning"]
+extra = { sound = "fire" }

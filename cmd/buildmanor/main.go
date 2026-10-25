@@ -313,12 +313,12 @@ func writeMission(b *builder, dir string) {
 			wp(44.5, U, 22.5, 30, 90), wp(22.5, U, 30.5, 20, 0), wp(20.5, U, 16.5, 25, 270), wp(25.5, G, 13.5, 20, 0), wp(39.5, G, 16.5, 1)}},
 	}
 	torch := func(id string, x, y, z float64) *sim.Object {
-		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Torch", Pos: v(x, y, z), Lit: true}
+		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Torch", Pos: v(x, y, z), StartLit: true}
 		o.On = sim.TorchOn(b.wall, o.Pos.Cell())
 		return o
 	}
 	lantern := func(id string, x, y, z float64) *sim.Object { // hangs from the ceiling when there is one
-		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Lantern", Pos: v(x, y, z), Lit: true}
+		o := &sim.Object{ID: id, Kind: sim.KindTorch, Name: "Lantern", Pos: v(x, y, z), StartLit: true}
 		o.On = sim.LanternOn(b.solid, o.Pos.Cell())
 		return o
 	}
@@ -334,7 +334,7 @@ func writeMission(b *builder, dir string) {
 		door("kitchen_dining", 20.5, G, 30.5), door("hall_dining", 31.5, G, 30.5), door("kitchen_hall", 26.5, G, 35.5),
 		door("dining_library", 37.5, G, 20.5), door("hall_guardroom", 37.5, G, 35.5), door("library_guardroom", 43.5, G, 30.5),
 		door("bed_bath", 22.5, U, 26.5), door("bed_gallery", 30.5, U, 18.5), door("bath_gallery", 30.5, U, 33.5), door("gallery_study", 37.5, U, 25.5),
-		{ID: "vault_door", Kind: sim.KindDoor, Name: "Vault door", Pos: v(37.5, C, 15.5), Locked: true, Key: "vault"},
+		{ID: "vault_door", Kind: sim.KindDoor, Name: "Vault door", Pos: v(37.5, C, 15.5), StartLocked: true, Key: "vault"},
 		// Torches: gate, front door, rooms. Dark corners are left on purpose.
 		torch("t_gate_w", 29.5, G+1, 65.5), torch("t_gate_e", 34.5, G+1, 65.5),
 		torch("t_front_w", 29.5, G+1, 42.5), torch("t_front_e", 33.5, G+1, 42.5),
@@ -347,17 +347,17 @@ func writeMission(b *builder, dir string) {
 		// Lanterns hang from the ceilings of the big rooms.
 		lantern("l_hall", 31.5, G+3, 35.5), lantern("l_dining", 25.5, G+3, 20.5), lantern("l_library", 43.5, G+3, 20.5),
 		lantern("l_gallery", 33.5, U+3, 25.5), lantern("l_cellar", 43.5, C+4, 20.5),
-		{ID: "study_candles", Kind: sim.KindTorch, Name: "Candles", Pos: v(46.5, U+1, 20.5), Lit: true, On: "floor"},
+		{ID: "study_candles", Kind: sim.KindTorch, Name: "Candles", Pos: v(46.5, U+1, 20.5), StartLit: true, On: "floor"},
 		// The accident kit.
 		{ID: "faucet", Kind: sim.KindFaucet, Name: "Wash basin tap", Pos: v(22.5, U, 29.5)},
-		{ID: "bath_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(24.5, U, 31.5), Lit: true},
-		{ID: "study_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(45.5, U, 21.5), Lit: true},
-		{ID: "bed_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(18.5, U, 15.5), Lit: true},
+		{ID: "bath_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(24.5, U, 31.5), StartLit: true},
+		{ID: "study_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(45.5, U, 21.5), StartLit: true},
+		{ID: "bed_lamp", Kind: sim.KindLamp, Name: "Electric lamp", Pos: v(18.5, U, 15.5), StartLit: true},
 		// Street lamps line the drive.
-		{ID: "drive_lamp_nw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 46.5), Lit: true},
-		{ID: "drive_lamp_ne", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 46.5), Lit: true},
-		{ID: "drive_lamp_sw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 58.5), Lit: true},
-		{ID: "drive_lamp_se", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 58.5), Lit: true},
+		{ID: "drive_lamp_nw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 46.5), StartLit: true},
+		{ID: "drive_lamp_ne", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 46.5), StartLit: true},
+		{ID: "drive_lamp_sw", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(29.5, G, 58.5), StartLit: true},
+		{ID: "drive_lamp_se", Kind: sim.KindLamp, Name: sim.StreetLamp, Pos: v(34.5, G, 58.5), StartLit: true},
 		{ID: "dining_rug", Kind: sim.KindFlammable, Name: "Rug", Pos: v(25.5, G, 12.5)},
 		{ID: "bed_tapestry", Kind: sim.KindFlammable, Name: "Tapestry", Pos: v(18.5, U, 23.5)},
 		{ID: "hay", Kind: sim.KindFlammable, Name: "Hay", Pos: v(47.5, G, 54.5)},
@@ -368,7 +368,7 @@ func writeMission(b *builder, dir string) {
 		loot("purse", "Coin purse", 40, 39.5, G+1, 40.5), loot("gems", "Gemstones", 150, 46.5, U+1, 19.5),
 		loot("idol", "Golden idol", 120, 35.5, U, 22.5), loot("ring", "Signet ring", 90, 47.5, U+1, 23.5),
 		loot("wine", "Vintage wine", 45, 47.5, C, 20.5), loot("necklace", "Pearl necklace", 110, 16.5, U+1, 12.5),
-		{ID: "jewel_box", Kind: sim.KindChest, Name: "Jewellery chest", Value: 200, Pos: v(28.5, U, 12.5), Locked: true, Key: "jewels"},
+		{ID: "jewel_box", Kind: sim.KindChest, Name: "Jewellery chest", Value: 200, Pos: v(28.5, U, 12.5), StartLocked: true, Key: "jewels"},
 		{ID: "vault_chest", Kind: sim.KindChest, Name: "Strongbox", Value: 150, Pos: v(28.5, C, 19.5)},
 		{ID: "footlocker", Kind: sim.KindChest, Name: "Footlocker", Pos: v(46.5, G, 32.5)},
 		{ID: "pantry", Kind: sim.KindChest, Name: "Pantry chest", Pos: v(16.5, G, 31.5)},
@@ -414,7 +414,7 @@ func writeMission(b *builder, dir string) {
 func graveyard() []*sim.Object {
 	var os []*sim.Object
 	add := func(kind, name string, x, z, yaw float64, lit bool) {
-		o := &sim.Object{ID: fmt.Sprintf("grave_%d", len(os)), Kind: kind, Name: name, Pos: v(x, G, z), Yaw: yaw, Lit: lit}
+		o := &sim.Object{ID: fmt.Sprintf("grave_%d", len(os)), Kind: kind, Name: name, Pos: v(x, G, z), Yaw: yaw, StartLit: lit}
 		if kind == sim.KindTorch {
 			o.On = "floor"
 		}

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/memmaker/stimres"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/nav"
@@ -66,10 +67,7 @@ type NPC struct {
 	Voice                 string
 	Body                  character.Character
 	Yaw                   float64
-	State                 NPCState
 	StateT                int
-	Health                int
-	Suspicion             float64
 	Alertness             float64 // grows after each alert: they see and hear better
 	Patrol                []Waypoint
 	PatrolI               int
@@ -79,7 +77,6 @@ type NPC struct {
 	Goal                  Vec3
 	Repath, Stuck         int
 	Wander                float64 // a staggering NPC's turn rate
-	Blind                 int     // ticks left dazzled by a flash: staggering, it can't see, chase or fight
 	NoPath                int     // ticks before trying again after a failed path search, whatever the goal
 	LKP                   Vec3    // last known position of whatever worries it
 	LastSeen              int     // ticks since it last saw the player
@@ -93,15 +90,44 @@ type NPC struct {
 	Moving                bool // walked this tick (animation)
 	Running               bool
 	Attacking             bool
+	Stirred               bool    // a sound or the sight of the player caught its attention this tick
+	Sight                 float64 // suspicion the sight of the player adds this tick (see)
+	R                     stimres.ID
+	b                     *Broker
 	prevPos               Vec3
 	walk                  float64 // distance since the last footstep
 }
+
+// What the rules read and write are the NPC's properties in the broker.
+
+func (n *NPC) r() Receiver { return stimres.Object[Cell](n.R) }
+
+// State is what the NPC is doing.
+func (n *NPC) State() NPCState {
+	if i := slices.Index(stateNames[:], n.b.String(n.r(), "state")); i >= 0 {
+		return NPCState(i)
+	}
+	return StatePatrol
+}
+
+func (n *NPC) setState(st NPCState) { n.b.Set(n.r(), "state", st.String()) }
+
+// Suspicion is how worried it is: 0 to AlertAt.
+func (n *NPC) Suspicion() float64     { return n.b.Float(n.r(), "suspicion") }
+func (n *NPC) setSuspicion(v float64) { n.b.Set(n.r(), "suspicion", v) }
+
+// Health is what it has left of npcHealth.
+func (n *NPC) Health() int { return int(n.b.Float(n.r(), "health")) }
+
+// Blind is how many ticks it has left dazzled by a flash: staggering, it
+// can't see, chase or fight.
+func (n *NPC) Blind() int { return n.b.Left(n.r(), "blind") }
 
 // npcHealth is every NPC's full health.
 const npcHealth = 10
 
 func newNPC(d *NPCDef) *NPC {
-	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Health: npcHealth, Alertness: 1,
+	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Alertness: 1,
 		Patrol: slices.Clone(d.Patrol), Keys: slices.Clone(d.Keys)}
 	n.Body = *character.New(d.Pos.X, d.Pos.Y, d.Pos.Z)
 	if n.Name == "" {
@@ -112,7 +138,7 @@ func newNPC(d *NPCDef) *NPC {
 
 func (n *NPC) pos() Vec3   { return Vec3{n.Body.X, n.Body.Y, n.Body.Z} }
 func (n *NPC) eye() Vec3   { return Vec3{n.Body.X, n.Body.Y + 1.62, n.Body.Z} }
-func (n *NPC) alive() bool { return n.State != StateDead && n.State != StateUnconscious }
+func (n *NPC) alive() bool { st := n.State(); return st != StateDead && st != StateUnconscious }
 
 // Pos is the NPC's feet position.
 func (n *NPC) Pos() Vec3 { return n.pos() }
@@ -185,7 +211,7 @@ func (s *Sim) newNav(k int) *nav.Graph {
 	return &nav.Graph{W: navWorld{s}, MaxDrop: 3, Passable: func(from, to nav.Pos) bool {
 		if di, ok := s.doors[Cell{to.X, to.Y, to.Z}]; ok {
 			d := s.Objects[di]
-			return !d.Locked || slices.Contains(n.Keys, d.Key)
+			return !d.Locked() || slices.Contains(n.Keys, d.Key)
 		}
 		return true
 	}}
@@ -203,10 +229,11 @@ func (s *Sim) bark(k int, text string) {
 
 func (s *Sim) setState(k int, st NPCState) {
 	n := s.NPCs[k]
-	if n.State == st {
+	if n.State() == st {
 		return
 	}
-	n.State, n.StateT = st, 0
+	n.setState(st)
+	n.StateT = 0
 	n.Path, n.Stuck, n.Repath = nil, 0, 0
 }
 
@@ -217,9 +244,10 @@ func (s *Sim) alertNPC(k int, pos Vec3) {
 	if !n.alive() {
 		return
 	}
-	n.Suspicion, n.LKP = AlertAt, pos
+	n.setSuspicion(AlertAt)
+	n.LKP = pos
 	if n.IsGuard() {
-		if n.State != StateCombat {
+		if n.State() != StateCombat {
 			s.Stats.TimesSpotted++
 			s.Seen = true
 			s.bark(k, "There you are!")
@@ -229,7 +257,7 @@ func (s *Sim) alertNPC(k int, pos Vec3) {
 		n.LastSeen = 0
 		return
 	}
-	if n.State != StateFlee && n.State != StateCower {
+	if n.State() != StateFlee && n.State() != StateCower {
 		s.bark(k, "Help! Guards!")
 		s.emit(n.eye(), 60, "alarm", k)
 		s.setState(k, StateFlee)
@@ -249,7 +277,7 @@ func (s *Sim) tickNPC(k int) {
 		return
 	}
 	n.StateT++
-	if n.Blind > 0 {
+	if n.Blind() > 0 {
 		s.stagger(k)
 		return
 	}
@@ -261,28 +289,30 @@ func (s *Sim) tickNPC(k int) {
 // hearNoise is the noise receptron: a sound loud enough where the NPC
 // stands raises its suspicion by what it was. It reports whether it caught
 // the NPC's attention.
-func (s *Sim) hearNoise(k int, snd Stimulus) bool {
-	n := s.NPCs[k]
-	if snd.Kind == "footstep" && snd.Source >= 0 { // the household's own steps: only the player's are suspicious
+func (s *Sim) hearNoise(k int, d Delivery, _ []string) bool {
+	n, snd := s.NPCs[k], d.St
+	kind, _ := snd.Extra["sound"].(string)
+	if kind == "footstep" && snd.Source != nil && s.npcIndex(*snd.Source) >= 0 { // the household's own steps: only the player's are suspicious
 		return false
 	}
 	thr := 8.0
 	if n.Kind != "guard" {
 		thr = 11
 	}
-	f := s.Rooms.spread(snd.Pos, s.doorClosed)
-	rcv, _ := s.Rooms.heard(f, snd.Amount, n.eye())
+	f := s.Rooms.spread(snd.Origin, s.doorClosed)
+	rcv, _ := s.Rooms.heard(f, snd.Intensity, n.eye())
 	if rcv <= thr {
 		return false
 	}
 	over := rcv - thr
-	switch snd.Kind {
+	n.Stirred = true
+	switch kind {
 	case "alarm", "explosion", "flash", "pain":
-		if n.State == StateCombat {
+		if n.State() == StateCombat {
 			return false
 		}
-		n.Suspicion = math.Max(n.Suspicion, 80)
-		n.LKP = snd.Pos
+		n.setSuspicion(math.Max(n.Suspicion(), 80))
+		n.LKP = snd.Origin
 		if n.IsGuard() {
 			s.setState(k, StateSearch)
 			s.bark(k, "What's going on?!")
@@ -291,18 +321,18 @@ func (s *Sim) hearNoise(k int, snd Stimulus) bool {
 		}
 		return true
 	case "footstep", "lockpick":
-		n.Suspicion += over * 0.9
+		n.setSuspicion(n.Suspicion() + over*0.9)
 	case "door", "squeak", "loot", "unlock":
-		n.Suspicion += over * 1.2
+		n.setSuspicion(n.Suspicion() + over*1.2)
 	case "noisemaker", "crash", "clatter", "arrow", "zap", "stab", "thud":
-		n.Suspicion += over * 2.5
+		n.setSuspicion(n.Suspicion() + over*2.5)
 	case "body", "fire", "ignite", "splash", "hiss":
-		n.Suspicion += over * 1.8
+		n.setSuspicion(n.Suspicion() + over*1.8)
 	default:
-		n.Suspicion += over * 0.5
+		n.setSuspicion(n.Suspicion() + over*0.5)
 	}
-	n.Suspicion = math.Min(n.Suspicion, AlertAt-1) // sound alone never confirms
-	n.LKP = snd.Pos
+	n.setSuspicion(math.Min(n.Suspicion(), AlertAt-1)) // sound alone never confirms
+	n.LKP = snd.Origin
 	return true
 }
 
@@ -310,57 +340,19 @@ func (s *Sim) hearNoise(k int, snd Stimulus) bool {
 // anything new caught the NPC's attention this tick.
 func (s *Sim) perceive(k int) bool {
 	n := s.NPCs[k]
-	got := false
-	// Sight of the player.
-	if g := s.seePlayer(k); g > 0 {
-		n.Suspicion += g * n.Alertness
+	// Sight of the player (see), bodies (noticeBody), fires (noticeFire) and
+	// sounds (hearNoise) came through the broker.
+	got := n.Stirred
+	if n.Sight > 0 {
+		n.setSuspicion(n.Suspicion() + n.Sight*n.Alertness)
 		n.LKP = s.Player.Pos
-		got = true
-		if n.Suspicion >= AlertAt {
+		if n.Suspicion() >= AlertAt {
 			n.LastSeen = 0
 		}
 	} else {
 		n.LastSeen++
 	}
-	// Sounds.
-	for _, snd := range s.sounds {
-		if snd.Source != k && s.stimNPC(k, snd) {
-			got = true
-		}
-	}
-	// Bodies and fires.
-	for j, o := range s.NPCs {
-		if j == k || o.alive() || o.Hidden || o.CarriedBy || slices.Contains(n.Known, j) {
-			continue
-		}
-		if s.canSee(k, o.pos().Add(Vec3{0, 0.3, 0}), 14, 0.1) {
-			n.Known = append(n.Known, j)
-			s.Stats.BodiesFound++
-			n.LKP = o.pos()
-			got = true
-			if o.State == StateDead {
-				s.bark(k, "Someone's been murdered!")
-			} else {
-				s.bark(k, "Wake up! Who did this?")
-			}
-			s.emit(n.eye(), 60, "alarm", k)
-			n.Alertness = math.Min(2, n.Alertness+0.5)
-			if n.IsGuard() {
-				n.Suspicion = 90
-				s.setState(k, StateSearch)
-			} else {
-				s.setState(k, StateFlee)
-			}
-		}
-	}
-	for _, o := range s.Objects {
-		if o.Burning() && n.State <= StateSuspicious && s.canSee(k, o.Pos.Add(Vec3{0, 0.5, 0}), 20, 0) {
-			n.Suspicion = math.Max(n.Suspicion, InvestigateAt+5)
-			n.LKP = o.Pos
-			s.bark(k, "Fire!")
-			got = true
-		}
-	}
+	n.Stirred, n.Sight = false, 0
 	return got
 }
 
@@ -385,7 +377,7 @@ func (s *Sim) canSee(k int, p Vec3, rng, minLight float64) bool {
 func (s *Sim) seePlayer(k int) float64 {
 	n := s.NPCs[k]
 	p := &s.Player
-	if p.Dead {
+	if p.Dead() {
 		return 0
 	}
 	e := n.eye()
@@ -424,59 +416,59 @@ func (s *Sim) seePlayer(k int) float64 {
 	return 70 * cone * math.Pow(eff, 1.4) * (0.25 + 0.75*near)
 }
 
-func (s *Sim) doorClosed(i int) bool { o := s.Objects[i]; return !o.Open && !o.Gone }
+func (s *Sim) doorClosed(i int) bool { o := s.Objects[i]; return !o.Open() && !o.Gone }
 
 // decide moves between states.
 func (s *Sim) decide(k int, stim bool) {
 	n := s.NPCs[k]
-	if !stim && n.State != StateCombat {
-		n.Suspicion = math.Max(0, n.Suspicion-0.35)
+	if !stim && n.State() != StateCombat {
+		n.setSuspicion(math.Max(0, n.Suspicion()-0.35))
 	}
-	if n.Suspicion >= AlertAt && n.LastSeen == 0 {
+	if n.Suspicion() >= AlertAt && n.LastSeen == 0 {
 		s.alertNPC(k, s.Player.Pos)
 		return
 	}
-	switch n.State {
+	switch n.State() {
 	case StatePatrol:
 		switch {
-		case n.Suspicion >= InvestigateAt:
+		case n.Suspicion() >= InvestigateAt:
 			s.setState(k, StateInvestigate)
 			s.bark(k, "I'd better check that out.")
-		case n.Suspicion >= SuspiciousAt:
+		case n.Suspicion() >= SuspiciousAt:
 			s.setState(k, StateSuspicious)
 			s.bark(k, pick(s.rng.Intn(3), "Hm? What was that?", "Is someone there?", "Who's there?"))
 		}
 	case StateSuspicious:
 		switch {
-		case n.Suspicion >= InvestigateAt:
+		case n.Suspicion() >= InvestigateAt:
 			s.setState(k, StateInvestigate)
 			s.bark(k, "I'd better check that out.")
-		case n.Suspicion < SuspiciousAt-8:
+		case n.Suspicion() < SuspiciousAt-8:
 			s.setState(k, StatePatrol)
 			s.bark(k, pick(s.rng.Intn(2), "Must have been rats.", "Just my imagination."))
 		}
 	case StateInvestigate:
-		if n.StateT > 25*TicksPerSecond || n.Suspicion < SuspiciousAt-8 {
+		if n.StateT > 25*TicksPerSecond || n.Suspicion() < SuspiciousAt-8 {
 			s.setState(k, StatePatrol)
 			s.bark(k, "Nothing here.")
 		}
 	case StateSearch:
 		if n.StateT > 30*TicksPerSecond {
 			s.setState(k, StatePatrol)
-			n.Suspicion = SuspiciousAt - 10
+			n.setSuspicion(SuspiciousAt - 10)
 			n.Alertness = math.Min(2, n.Alertness+0.25)
 			s.bark(k, "Must have gone. I'll keep my eyes open.")
 		}
 	case StateCombat:
 		if n.LastSeen > 5*TicksPerSecond {
 			s.setState(k, StateSearch)
-			n.Suspicion = 90
+			n.setSuspicion(90)
 			s.bark(k, "Where did you go?")
 		}
 	case StateCower:
 		if n.StateT > 40*TicksPerSecond {
 			s.setState(k, StatePatrol)
-			n.Suspicion = 0
+			n.setSuspicion(0)
 		}
 	}
 }
@@ -487,7 +479,7 @@ func pick(i int, s ...string) string { return s[i%len(s)] }
 func (s *Sim) act(k int) {
 	n := s.NPCs[k]
 	in := character.Input{Yaw: n.Yaw}
-	switch n.State {
+	switch n.State() {
 	case StatePatrol:
 		if len(n.Patrol) == 0 {
 			break
@@ -530,8 +522,9 @@ func (s *Sim) act(k int) {
 		gp := s.NPCs[g].pos()
 		if n.pos().DistXZ(gp) < 2.5 {
 			gd := s.NPCs[g]
-			if gd.State != StateCombat {
-				gd.LKP, gd.Suspicion = n.LKP, 90
+			if gd.State() != StateCombat {
+				gd.LKP = n.LKP
+				gd.setSuspicion(90)
 				s.setState(g, StateSearch)
 				s.bark(g, "Show me where!")
 			}
@@ -551,20 +544,79 @@ func (s *Sim) act(k int) {
 // eyes, and when its sight comes back it looks for whoever threw the flash.
 func (s *Sim) stagger(k int) {
 	n := s.NPCs[k]
-	if n.Blind--; n.Blind == 0 {
-		n.Suspicion = 90
-		if n.IsGuard() {
-			s.setState(k, StateSearch)
-			s.bark(k, "Where are you?!")
-		} else {
-			s.setState(k, StateFlee)
-		}
-	}
 	if n.StateT%15 == 0 {
 		n.Wander = s.rng.Float64()*2 - 1
 	}
 	n.Yaw += n.Wander * 0.12
 	s.move(k, character.Input{Yaw: n.Yaw, Forward: 0.2})
+}
+
+// recover is a blinded NPC's sight coming back: it looks for whoever
+// threw the flash.
+func (s *Sim) recover(k int) {
+	n := s.NPCs[k]
+	if !n.alive() {
+		return
+	}
+	n.setSuspicion(90)
+	if n.IsGuard() {
+		s.setState(k, StateSearch)
+		s.bark(k, "Where are you?!")
+	} else {
+		s.setState(k, StateFlee)
+	}
+}
+
+// see is the visibility receptron: the player in view adds suspicion
+// (perceive) by how well the NPC makes them out.
+func (s *Sim) see(k int, _ Delivery, _ []string) bool {
+	n := s.NPCs[k]
+	if n.Sight = s.seePlayer(k); n.Sight > 0 {
+		n.Stirred = true
+		return true
+	}
+	return false
+}
+
+// noticeBody is the body receptron: a body in plain view (not hidden or
+// carried off) raises the alarm, once per body.
+func (s *Sim) noticeBody(k int, d Delivery, _ []string) bool {
+	n, j := s.NPCs[k], s.npcIndex(*d.St.Source)
+	o := s.NPCs[j]
+	if o.Hidden || o.CarriedBy || slices.Contains(n.Known, j) || !s.canSee(k, o.pos().Add(Vec3{0, 0.3, 0}), 14, 0.1) {
+		return false
+	}
+	n.Known = append(n.Known, j)
+	s.Stats.BodiesFound++
+	n.LKP = o.pos()
+	n.Stirred = true
+	if o.State() == StateDead {
+		s.bark(k, "Someone's been murdered!")
+	} else {
+		s.bark(k, "Wake up! Who did this?")
+	}
+	s.emit(n.eye(), 60, "alarm", k)
+	n.Alertness = math.Min(2, n.Alertness+0.5)
+	if n.IsGuard() {
+		n.setSuspicion(90)
+		s.setState(k, StateSearch)
+	} else {
+		s.setState(k, StateFlee)
+	}
+	return true
+}
+
+// noticeFire is the blaze receptron: a fire in view worries the calm.
+func (s *Sim) noticeFire(k int, d Delivery, _ []string) bool {
+	n, at := s.NPCs[k], d.St.Origin
+	if n.State() > StateSuspicious || !s.canSee(k, at.Add(Vec3{0, 0.5, 0}), 20, 0) {
+		return false
+	}
+	n.setSuspicion(math.Max(n.Suspicion(), InvestigateAt+5))
+	n.LKP = at
+	n.Stirred = true
+	s.bark(k, "Fire!")
+	return true
 }
 
 // move steps the NPC's body by in and makes its footsteps.
@@ -603,7 +655,8 @@ func (s *Sim) fight(k int, in *character.Input) {
 		s.turn(n, yawTo(n.pos(), p.Pos), 0.3)
 		if n.AttackT == 9 && d < 2.4 && math.Abs(n.pos().Y-p.Pos.Y) < 1.6 {
 			s.emit(p.Pos, 28, "hit", k)
-			s.HurtPlayer(7, "Cut down by "+n.Name+".")
+			me := s.npcR(k)
+			s.hit(s.playerR(), Stimulus{Stim: StimPierce, Intensity: 7, Origin: n.pos(), Source: &me, Extra: map[string]any{"why": "Cut down by " + n.Name + "."}})
 		}
 		if n.AttackT > 16 {
 			n.AttackT, n.Cool = 0, 12
@@ -699,10 +752,10 @@ func (s *Sim) walkTo(k int, goal Vec3, speed float64, in *character.Input) bool 
 	next := n.Path[n.PathI]
 	// Doors: open them as we reach them.
 	for _, c := range []Cell{next, next.Add(0, 1, 0)} {
-		if di, ok := s.doors[c]; ok && !s.Objects[di].Open {
+		if di, ok := s.doors[c]; ok && !s.Objects[di].Open() {
 			if p.DistXZ(c.Center()) < 1.8 {
-				s.setDoor(di, true)
-				s.emit(c.Center(), 28, "door", k)
+				door, me := s.objR(di), s.npcR(k)
+				s.B.Stimulate(Stimulus{Stim: StimFrob, Intensity: 1, Target: &door, Source: &me, Origin: p})
 			}
 		}
 	}

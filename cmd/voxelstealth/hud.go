@@ -146,9 +146,9 @@ func (g *game) drawHUD(fbW, fbH int) {
 		}
 		g.flashOv, _ = render.NewOverlay()
 	}
-	if g.sim != nil && g.sim.Player.Blind > 0 && g.flashOv != nil { // dazzled by a flash: white, fading out
+	if g.sim != nil && g.sim.Player.Blind() > 0 && g.flashOv != nil { // dazzled by a flash: white, fading out
 		img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
-		img.Set(0, 0, color.NRGBA{255, 255, 255, uint8(min(245, g.sim.Player.Blind*12))})
+		img.Set(0, 0, color.NRGBA{255, 255, 255, uint8(min(245, g.sim.Player.Blind()*12))})
 		g.flashOv.SetImage(img)
 		g.flashOv.Draw(0, 0, max(fbW, fbH), fbW, fbH)
 	}
@@ -234,7 +234,7 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 	}
 	// Health and loot next to it.
 	c.rect(56, h-46, 56+100, h-38, color.NRGBA{40, 10, 10, 220})
-	c.rect(56, h-46, 56+p.Health*5, h-38, red)
+	c.rect(56, h-46, 56+p.Health()*5, h-38, red)
 	c.text(fmt.Sprintf("Loot %d / %d", p.Loot, s.Mission.LootQuota), 56, h-20, gold)
 
 	// Weapon and ammo, bottom right.
@@ -259,7 +259,7 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 	if d := s.Describe(g.target); d != "" && s.Outcome == sim.Running {
 		c.text(d, (w-c.width(d))/2, h/2+30, cyan)
 		if g.target.Obj >= 0 {
-			if o := s.Objects[g.target.Obj]; o.Locked && o.Pick > 0 {
+			if o := s.Objects[g.target.Obj]; o.Locked() && o.Pick > 0 {
 				f := float64(o.Pick) / (3 * sim.TicksPerSecond)
 				c.rect(w/2-40, h/2+36, w/2+40, h/2+42, color.NRGBA{30, 30, 30, 220})
 				c.rect(w/2-40, h/2+36, w/2-40+int(80*f), h/2+42, gold)
@@ -268,7 +268,7 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 	}
 
 	switch {
-	case s.Outcome != sim.Running || p.Dead:
+	case s.Outcome != sim.Running || p.Dead():
 		g.paintEnd(c)
 	case g.showObjectives:
 		lines := append([]string{s.Mission.Title, ""}, s.ObjectiveLines()...)

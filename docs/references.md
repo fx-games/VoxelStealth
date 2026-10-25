@@ -10,7 +10,7 @@
 ## Code copied and adapted (our own projects)
 | Origin | What | Destination |
 |---|---|---|
-| ~/Projects/TerminalAssassin/src/game/stimuli | stimulus/property system | (planned) |
+| ~/Projects/TerminalAssassin/src/game/stimuli | stimulus/property system | superseded by stimres |
 | ~/Projects/TerminalAssassin/src/game/ai, core | AI state stack, observation tables | (planned) |
 | ~/Projects/TerminalAssassin/src/game/director, services/challengeparser.go | script DSL, challenges | (planned, if cheap) |
 | ~/Projects/TerminalAssassin/src/gridmap/schedules.go | schedules | (planned) |

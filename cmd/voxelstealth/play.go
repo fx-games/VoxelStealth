@@ -227,7 +227,7 @@ func axis(pos, neg bool) float64 {
 func (g *game) tickPlay() {
 	s := g.sim
 	p := g.player
-	running := s.Outcome == sim.Running && !s.Player.Dead
+	running := s.Outcome == sim.Running && !s.Player.Dead()
 	in := character.Input{Yaw: g.cam.Yaw, Pitch: g.cam.Pitch}
 	if running {
 		in = g.movementInput()
@@ -385,7 +385,7 @@ func (g *game) tickArrows() {
 		}
 		for i, o := range s.Objects {
 			street := o.Kind == sim.KindLamp && o.Name == sim.StreetLamp
-			if o.Kind != sim.KindTorch && !street || !o.Lit || o.Gone {
+			if o.Kind != sim.KindTorch && !street || !o.Lit() || o.Gone {
 				continue
 			}
 			lo, hi := s.ObjectBox(i)

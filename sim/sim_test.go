@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/memmaker/stimres"
 	"github.com/memmaker/voxellib/character"
 )
 
@@ -100,7 +101,7 @@ func TestSoundThroughDoor(t *testing.T) {
 
 func TestVisibilityAndWaterArrow(t *testing.T) {
 	w, m := twoRooms()
-	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 2, 2.5}, Lit: true})
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 2, 2.5}, StartLit: true})
 	s := New(w, m)
 	s.Tick()
 	lit := s.Visibility
@@ -119,16 +120,16 @@ func TestGuardSeesLitPlayerNotDark(t *testing.T) {
 	for _, lit := range []bool{true, false} {
 		w, m := twoRooms()
 		m.NPCs = []*NPCDef{guard(Vec3{2.5, 1, 9.5}, 0)} // facing -Z, toward the player
-		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{2.5, 2, 1.5}, Lit: lit})
+		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{2.5, 2, 1.5}, StartLit: lit})
 		s := New(w, m)
 		s.Player.OnGround = true
 		run(s, 60)
-		st := s.NPCs[0].State
+		st := s.NPCs[0].State()
 		if lit && st != StateCombat {
 			t.Fatalf("lit: guard state %v, want combat", st)
 		}
 		if !lit && st != StatePatrol {
-			t.Fatalf("dark: guard state %v (suspicion %.1f), want patrol", st, s.NPCs[0].Suspicion)
+			t.Fatalf("dark: guard state %v (suspicion %.1f), want patrol", st, s.NPCs[0].Suspicion())
 		}
 	}
 }
@@ -142,8 +143,8 @@ func TestNoisemakerDrawsGuard(t *testing.T) {
 	s.ArrowHit(AmmoNoise, Vec3{7.5, 1, 5.5}, -1, false)
 	run(s, 12*TicksPerSecond)
 	g := s.NPCs[0]
-	if g.State != StateInvestigate && g.State != StateSuspicious || g.pos().X > 11 {
-		t.Fatalf("guard %v at %.1f,%.1f; want investigating in room A", g.State, g.pos().X, g.pos().Z)
+	if g.State() != StateInvestigate && g.State() != StateSuspicious || g.pos().X > 11 {
+		t.Fatalf("guard %v at %.1f,%.1f; want investigating in room A", g.State(), g.pos().X, g.pos().Z)
 	}
 }
 
@@ -151,21 +152,21 @@ func TestLampInPuddleAccident(t *testing.T) {
 	w, m := twoRooms()
 	m.NPCs = []*NPCDef{{ID: "lord", Kind: "target", Pos: Vec3{5.5, 1, 5.5}, Yaw: math.Pi}}
 	m.Objects = append(m.Objects,
-		&Object{ID: "f", Kind: KindFaucet, Pos: Vec3{5.5, 1, 6.5}, Running: true},
-		&Object{ID: "l", Kind: KindLamp, Pos: Vec3{7.5, 1, 5.5}, Lit: true})
+		&Object{ID: "f", Kind: KindFaucet, Pos: Vec3{5.5, 1, 6.5}, StartRunning: true},
+		&Object{ID: "l", Kind: KindLamp, Pos: Vec3{7.5, 1, 5.5}, StartLit: true})
 	m.Objectives = []Objective{{Kind: "accident", Target: "lord"}}
 	s := New(w, m)
 	s.Player.Pos = Vec3{8.5, 1, 5.5} // pick the lamp up and toss it toward -X, into the water
 	s.Player.Ammo = map[string]int{}
 	run(s, 15*TicksPerSecond)
-	if _, wet := s.Puddles[Cell{5, 1, 5}]; !wet {
+	if s.Liquid[Cell{5, 1, 5}] != StimWater {
 		t.Fatal("no puddle under the target")
 	}
-	if _, wet := s.Puddles[Cell{6, 1, 5}]; !wet {
-		s.Puddles[Cell{6, 1, 5}] = 0 // make sure the lamp lands in water
+	if s.Liquid[Cell{6, 1, 5}] != StimWater {
+		s.Liquid[Cell{6, 1, 5}] = StimWater // make sure the lamp lands in water
 	}
 	s.Frob(Target{Obj: 2, NPC: -1}, false)
-	if !s.Objects[2].Held {
+	if !s.Objects[2].Held() {
 		t.Fatal("lamp not picked up")
 	}
 	s.ThrowTorch(Vec3{8.5, 2.6, 5.5}, Vec3{-1, 0, 0}, 2, false)
@@ -173,8 +174,8 @@ func TestLampInPuddleAccident(t *testing.T) {
 	if o := s.Objects[2]; o.Flight > 0 || o.Pos.Cell() != (Cell{6, 1, 5}) {
 		t.Fatalf("lamp not landed in the water: %v", o.Pos)
 	}
-	if s.NPCs[0].State != StateDead || s.NPCs[0].Death != "accident" || !s.Done[0] {
-		t.Fatalf("target %v (%s), objective %v", s.NPCs[0].State, s.NPCs[0].Death, s.Done[0])
+	if s.NPCs[0].State() != StateDead || s.NPCs[0].Death != "accident" || !s.Done[0] {
+		t.Fatalf("target %v (%s), objective %v", s.NPCs[0].State(), s.NPCs[0].Death, s.Done[0])
 	}
 }
 
@@ -182,14 +183,14 @@ func TestTorchOnRugFire(t *testing.T) {
 	w, m := twoRooms()
 	m.NPCs = []*NPCDef{guard(Vec3{3.5, 1, 9.5}, 0)}
 	m.Objects = append(m.Objects,
-		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 2, 3.5}, Lit: true},
+		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 2, 3.5}, StartLit: true},
 		&Object{ID: "rug", Kind: KindFlammable, Pos: Vec3{3.5, 1, 3.5}})
 	s := New(w, m)
 	s.Player.Pos = Vec3{6.5, 1, 3.5}
 	s.Frob(Target{Obj: 1, NPC: -1}, false) // take it: its light comes along
 	run(s, 2)
-	if o := s.Objects[1]; !o.Held || o.LightCell != (Cell{6, 2, 3}) {
-		t.Fatalf("torch not carried: held %v light %v", o.Held, o.LightCell)
+	if o := s.Objects[1]; !o.Held() || o.LightCell != (Cell{6, 2, 3}) {
+		t.Fatalf("torch not carried: held %v light %v", o.Held(), o.LightCell)
 	}
 	s.ThrowTorch(s.Player.Eye(), Vec3{-1, 0, 0}, 3, false) // onto the rug
 	s.Player.Pos = Vec3{18.5, 1, 9.5}
@@ -205,8 +206,8 @@ func TestTorchOnRugFire(t *testing.T) {
 		t.Fatal("rug not burning")
 	}
 	run(s, 3*TicksPerSecond)
-	if g := s.NPCs[0]; g.State != StateInvestigate {
-		t.Fatalf("guard %v; want investigating the fire", g.State)
+	if g := s.NPCs[0]; g.State() != StateInvestigate {
+		t.Fatalf("guard %v; want investigating the fire", g.State())
 	}
 }
 
@@ -216,17 +217,17 @@ func TestBlackjackAndBodyFound(t *testing.T) {
 	b := guard(Vec3{5.5, 1, 9.5}, math.Pi) // facing +Z, away from a
 	b.ID = "g2"
 	m.NPCs = []*NPCDef{a, b}
-	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{6.5, 2, 6.5}, Lit: true})
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{6.5, 2, 6.5}, StartLit: true})
 	s := New(w, m)
 	s.Player.Pos, s.Player.Yaw = Vec3{5.5, 1, 7}, 0 // behind a, facing -Z
-	if !s.Melee("blackjack") || s.NPCs[0].State != StateUnconscious {
-		t.Fatalf("knockout failed: %v", s.NPCs[0].State)
+	if !s.Melee("blackjack") || s.NPCs[0].State() != StateUnconscious {
+		t.Fatalf("knockout failed: %v", s.NPCs[0].State())
 	}
 	s.Player.Pos = Vec3{18.5, 1, 1.5}
 	s.NPCs[1].Yaw = 0 // turns around
 	run(s, 10)
-	if s.NPCs[1].State != StateSearch || s.Stats.BodiesFound != 1 {
-		t.Fatalf("guard 2 %v, bodies %d", s.NPCs[1].State, s.Stats.BodiesFound)
+	if s.NPCs[1].State() != StateSearch || s.Stats.BodiesFound != 1 {
+		t.Fatalf("guard 2 %v, bodies %d", s.NPCs[1].State(), s.Stats.BodiesFound)
 	}
 }
 
@@ -269,11 +270,11 @@ func TestGuardSeesThroughGlassAndHearsItBreak(t *testing.T) {
 		}
 	}
 	m.NPCs = []*NPCDef{guard(Vec3{15.5, 1, 2.5}, -math.Pi/2)} // facing -X, at the window
-	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{6.5, 2, 2.5}, Lit: true})
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{6.5, 2, 2.5}, StartLit: true})
 	s := New(w, m)
 	s.Player.Pos, s.Player.OnGround = Vec3{7.5, 1, 2.5}, true
 	run(s, 60)
-	if st := s.NPCs[0].State; st != StateCombat {
+	if st := s.NPCs[0].State(); st != StateCombat {
 		t.Fatalf("guard behind glass: %v, want combat", st)
 	}
 	if s.TargetAt(Vec3{9.5, 2.5, 2.5}, Vec3{1, 0, 0}).NPC >= 0 {
@@ -290,8 +291,8 @@ func TestGuardSeesThroughGlassAndHearsItBreak(t *testing.T) {
 		t.Fatal("glass not broken")
 	}
 	run(s, 2)
-	if g := s.NPCs[0]; g.State == StatePatrol {
-		t.Fatalf("guard didn't react to breaking glass (suspicion %.1f)", g.Suspicion)
+	if g := s.NPCs[0]; g.State() == StatePatrol {
+		t.Fatalf("guard didn't react to breaking glass (suspicion %.1f)", g.Suspicion())
 	}
 }
 
@@ -328,34 +329,34 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 	w, m := twoRooms()
 	m.Objects = append(m.Objects,
 		&Object{ID: "barrel", Kind: KindDecor, Name: "Barrel", Pos: Vec3{5.5, 1, 2.5}},
-		&Object{ID: "torch", Kind: KindTorch, Lit: true, On: "floor", Pos: Vec3{6.5, 1, 2.5}})
+		&Object{ID: "torch", Kind: KindTorch, StartLit: true, On: "floor", Pos: Vec3{6.5, 1, 2.5}})
 	s := New(w, m)
 	torch := s.Objects[len(s.Objects)-1]
 	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false)
 	spread(s)
-	if n := len(s.Puddles); n != 5 {
+	if n := len(s.LiquidCells(StimWater)); n != 5 {
 		t.Fatalf("water arrow: %d puddle cells, want its own 5", n)
 	}
-	torch.Lit = true
-	clear(s.Puddles)
+	s.B.Set(stimres.Object[Cell](torch.R), "lit", true)
+	clear(s.Liquid)
 	s.Player.Pos, s.Player.Yaw, s.Player.Pitch = Vec3{4.5, 1, 2.5}, math.Pi/2, -0.6 // looking at it
 	s.Melee("blackjack")
-	if len(s.Puddles) != 0 {
-		t.Fatalf("blackjack leaked %d cells", len(s.Puddles))
+	if len(s.LiquidCells(StimWater)) != 0 {
+		t.Fatalf("blackjack leaked %d cells", len(s.LiquidCells(StimWater)))
 	}
 	s.Melee("blade")
 	spread(s)
-	if len(s.Puddles) < 2 {
-		t.Fatalf("stabbed: puddle of %d cells, want a few", len(s.Puddles))
+	if len(s.LiquidCells(StimWater)) < 2 {
+		t.Fatalf("stabbed: puddle of %d cells, want a few", len(s.LiquidCells(StimWater)))
 	}
-	if torch.Lit {
+	if torch.Lit() {
 		t.Fatal("the leak didn't douse the torch beside the barrel")
 	}
-	clear(s.Puddles)
+	clear(s.Liquid)
 	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
 	spread(s)
-	if len(s.Puddles) < 2 {
-		t.Fatalf("shot: puddle of %d cells, want a few", len(s.Puddles))
+	if len(s.LiquidCells(StimWater)) < 2 {
+		t.Fatalf("shot: puddle of %d cells, want a few", len(s.LiquidCells(StimWater)))
 	}
 }
 
@@ -388,31 +389,27 @@ func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
 	s := New(w, m)
 	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
 	spread(s)
-	if len(s.Oil) < 3 || len(s.Puddles) != 0 {
-		t.Fatalf("oil %d cells, water %d", len(s.Oil), len(s.Puddles))
+	if len(s.LiquidCells(StimOil)) < 3 || len(s.LiquidCells(StimWater)) != 0 {
+		t.Fatalf("oil %d cells, water %d", len(s.LiquidCells(StimOil)), len(s.LiquidCells(StimWater)))
 	}
-	s.NPCs[0].Body.Teleport(5.5, 1, 2.5)                                         // standing in it
-	s.Player.Pos, s.Player.Health = Vec3{5.5, 1, 3.5}, 1000                      // and the player
-	s.Stimulate(Stimulus{Stim: StimFire, Pos: Vec3{5.5, 1.1, 2.5}, Radius: 0.3}) // a spark
+	s.NPCs[0].Body.Teleport(5.5, 1, 2.5) // standing in it
+	s.Player.Pos = Vec3{5.5, 1, 3.5}     // and the player
+	s.B.Set(s.playerR(), "health", 1000)
+	s.Stimulate(at(StimFire, Vec3{5.5, 1.1, 2.5}, 0.3, 0)) // a spark
 	run(s, 2*TicksPerSecond)
-	if s.Player.Health == 1000 {
+	if s.Player.Health() == 1000 {
 		t.Fatal("player unhurt standing in burning oil")
 	}
-	if s.NPCs[0].State != StateDead || s.NPCs[0].Death != "accident" {
-		t.Fatalf("guard %v (%s), want burned", s.NPCs[0].State, s.NPCs[0].Death)
+	if s.NPCs[0].State() != StateDead || s.NPCs[0].Death != "accident" {
+		t.Fatalf("guard %v (%s), want burned", s.NPCs[0].State(), s.NPCs[0].Death)
 	}
-	burning := 0
-	for _, f := range s.Oil {
-		if f > 0 {
-			burning++
-		}
-	}
+	burning := burningOil(s)
 	if burning < 3 {
-		t.Fatalf("fire spread to %d of %d oil cells", burning, len(s.Oil))
+		t.Fatalf("fire spread to %d of %d oil cells", burning, len(s.LiquidCells(StimOil)))
 	}
-	s.Stimulate(Stimulus{Stim: StimWater, Pos: Vec3{5.5, 1.1, 2.5}, Radius: 3})
-	for c, f := range s.Oil {
-		if f > 0 {
+	s.Stimulate(at(StimWater, Vec3{5.5, 1.1, 2.5}, 3, 0))
+	for _, c := range s.LiquidCells(StimOil) {
+		if s.OilBurning(c) {
 			t.Fatalf("%v still burning after water", c)
 		}
 	}
@@ -423,14 +420,9 @@ func TestBombBurstsOilBarrelIntoFire(t *testing.T) {
 	m.Objects = append(m.Objects, &Object{ID: "oil", Kind: KindDecor, Name: "Oil barrel", Pos: Vec3{8.5, 1, 2.5}})
 	s := New(w, m)
 	s.Explode(Vec3{5.5, 1.2, 2.5})
-	burning := 0
-	for _, f := range s.Oil {
-		if f > 0 {
-			burning++
-		}
-	}
+	burning := burningOil(s)
 	if !s.Objects[len(s.Objects)-1].Gone || burning == 0 {
-		t.Fatalf("barrel gone %v, %d of %d oil cells burning", s.Objects[len(s.Objects)-1].Gone, burning, len(s.Oil))
+		t.Fatalf("barrel gone %v, %d of %d oil cells burning", s.Objects[len(s.Objects)-1].Gone, burning, len(s.LiquidCells(StimOil)))
 	}
 }
 
@@ -439,18 +431,18 @@ func TestWaterArrowPuddle(t *testing.T) {
 		w, m := twoRooms()
 		s := New(w, m)
 		s.ArrowHit(AmmoWater, hit, -1, false)
-		if len(s.Puddles) != 1 {
-			t.Fatalf("hit at %v: %d puddle cells at once, want 1", hit, len(s.Puddles))
+		if len(s.LiquidCells(StimWater)) != 1 {
+			t.Fatalf("hit at %v: %d puddle cells at once, want 1", hit, len(s.LiquidCells(StimWater)))
 		}
 		run(s, 2*spillEvery)
-		if len(s.Puddles) != 3 {
-			t.Fatalf("hit at %v: %d puddle cells after 2 steps, want 3", hit, len(s.Puddles))
+		if len(s.LiquidCells(StimWater)) != 3 {
+			t.Fatalf("hit at %v: %d puddle cells after 2 steps, want 3", hit, len(s.LiquidCells(StimWater)))
 		}
 		spread(s)
-		if len(s.Puddles) != 5 {
-			t.Fatalf("hit at %v: %d puddle cells, want 5", hit, len(s.Puddles))
+		if len(s.LiquidCells(StimWater)) != 5 {
+			t.Fatalf("hit at %v: %d puddle cells, want 5", hit, len(s.LiquidCells(StimWater)))
 		}
-		for c := range s.Puddles {
+		for _, c := range s.LiquidCells(StimWater) {
 			if c.Y != 1 {
 				t.Fatalf("hit at %v: puddle cell %v off the floor", hit, c)
 			}
@@ -488,11 +480,12 @@ func testTorchLights(t *testing.T, fuel string) {
 		for z := 2; z <= 6; z++ {
 			w.b[Cell{4, 1, z}] = fuel
 		}
-		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{5.5, 1, 4.5}, Lit: true, Fallen: true})
+		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{5.5, 1, 4.5}, StartLit: true})
 		s := New(w, m)
+		s.B.Set(s.objR(len(s.Objects)-1), "fallen", true)
 		s.rng = rand.New(rand.NewSource(int64(seed)))
 		run(s, 20*TicksPerSecond)
-		if len(s.Fire) > 0 || w.Block(4, 1, 4) != fuel {
+		if len(s.FireCells()) > 0 || w.Block(4, 1, 4) != fuel {
 			caught++
 		}
 	}
@@ -505,12 +498,14 @@ func testTorchLights(t *testing.T, fuel string) {
 func TestLyingTorchOutlastsRug(t *testing.T) {
 	w, m := twoRooms()
 	m.Objects = append(m.Objects,
-		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 1, 3.5}, Lit: true, Fallen: true},
-		&Object{ID: "rug", Kind: KindFlammable, Pos: Vec3{3.5, 1, 3.5}, Burn: 30 * TicksPerSecond})
+		&Object{ID: "t", Kind: KindTorch, Pos: Vec3{3.5, 1, 3.5}, StartLit: true},
+		&Object{ID: "rug", Kind: KindFlammable, Pos: Vec3{3.5, 1, 3.5}})
 	s := New(w, m)
+	s.B.Set(s.objR(len(s.Objects)-2), "fallen", true)
+	s.B.SetFor(s.objR(len(s.Objects)-1), "burning", true, 1) // about to burn out
 	s.setLight(len(s.Objects)-1, true)
 	run(s, 2)
-	if !s.Objects[len(s.Objects)-1].Burnt {
+	if !s.Objects[len(s.Objects)-1].Burnt() {
 		t.Fatal("rug didn't burn out")
 	}
 	if b := w.Block(3, 1, 3); b != BlockLight {
@@ -525,13 +520,13 @@ func TestBroadheadDamage(t *testing.T) {
 	m.NPCs = []*NPCDef{guard(Vec3{3.5, 1, 9.5}, 0), guard(Vec3{5.5, 1, 9.5}, 0)}
 	s := New(w, m)
 	s.ArrowHit(AmmoBroadhead, Vec3{3.5, 2.7, 9.5}, 0, true)
-	if s.NPCs[0].State != StateDead {
+	if s.NPCs[0].State() != StateDead {
 		t.Fatal("head shot didn't kill")
 	}
 	for i := 1; i <= 4; i++ {
 		s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 9.5}, 1, false)
-		if dead := s.NPCs[1].State == StateDead; dead != (i == 4) {
-			t.Fatalf("body shot %d: dead %v, health %d", i, dead, s.NPCs[1].Health)
+		if dead := s.NPCs[1].State() == StateDead; dead != (i == 4) {
+			t.Fatalf("body shot %d: dead %v, health %d", i, dead, s.NPCs[1].Health())
 		}
 	}
 }
@@ -552,7 +547,7 @@ func TestFireSpreads(t *testing.T) {
 	most := 0
 	for range 3 * 60 * TicksPerSecond {
 		s.Tick()
-		most = max(most, len(s.Fire))
+		most = max(most, len(s.FireCells()))
 	}
 	planks := 0
 	for _, b := range w.b {
@@ -561,8 +556,8 @@ func TestFireSpreads(t *testing.T) {
 		}
 	}
 	t.Logf("at most %d cells burning, %d of 110 planks left", most, planks)
-	if most < 5 || planks > 100 || len(s.Fire) > 0 {
-		t.Fatalf("at most %d cells burning, %d of 110 planks left, %d still burning", most, planks, len(s.Fire))
+	if most < 5 || planks > 100 || len(s.FireCells()) > 0 {
+		t.Fatalf("at most %d cells burning, %d of 110 planks left, %d still burning", most, planks, len(s.FireCells()))
 	}
 	if w.Block(15, 0, 4) != "minecraft:stone" || w.Block(10, 1, 4) != "minecraft:stone_bricks" {
 		t.Fatal("fire ate stone")
@@ -572,8 +567,8 @@ func TestFireSpreads(t *testing.T) {
 	}
 
 	s.ignite(Cell{15, 1, 4}, 0)
-	s.Stimulate(Stimulus{Stim: StimWater, Pos: Vec3{15.5, 1.2, 4.5}, Radius: 0.9})
-	if len(s.Fire) != 0 {
+	s.Stimulate(at(StimWater, Vec3{15.5, 1.2, 4.5}, 0.9, 0))
+	if len(s.FireCells()) != 0 {
 		t.Fatal("water didn't put the fire out")
 	}
 }
@@ -598,13 +593,14 @@ func TestTorchStartsBlockFire(t *testing.T) {
 				w.b[Cell{x, 0, z}] = "minecraft:oak_planks"
 			}
 		}
-		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, Lit: true, Held: true})
+		m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, StartLit: true})
 		s := New(w, m)
+		s.B.Set(s.objR(len(s.Objects)-1), "held", true)
 		s.rng.Seed(int64(seed))
 		s.Player.Pos = Vec3{4.5, 1, 4.5}
 		s.ThrowTorch(Vec3{4.5, 2.6, 4.5}, Vec3{0, 0, 1}, 0, false)
 		run(s, TicksPerSecond)
-		if len(s.Fire) > 0 {
+		if len(s.FireCells()) > 0 {
 			caught++
 		}
 	}
@@ -613,11 +609,12 @@ func TestTorchStartsBlockFire(t *testing.T) {
 	}
 	t.Logf("%d of 200 torches started a fire", caught)
 	w, m := twoRooms()
-	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, Lit: true, Held: true})
+	m.Objects = append(m.Objects, &Object{ID: "t", Kind: KindTorch, Pos: Vec3{4.5, 1, 4.5}, StartLit: true})
 	s := New(w, m)
+	s.B.Set(s.objR(len(s.Objects)-1), "held", true)
 	s.ThrowTorch(Vec3{4.5, 2.6, 4.5}, Vec3{0, 0, 1}, 0, false)
 	run(s, TicksPerSecond)
-	if len(s.Fire) > 0 {
+	if len(s.FireCells()) > 0 {
 		t.Fatal("a torch set stone alight")
 	}
 }
@@ -658,12 +655,12 @@ func TestNPCFootstepsDontSpook(t *testing.T) {
 		}
 		s.Events = s.Events[:0]
 	}
-	if steps < 5 || s.NPCs[1].Suspicion > 0 {
-		t.Fatalf("%d NPC footsteps, guard suspicion %.1f", steps, s.NPCs[1].Suspicion)
+	if steps < 5 || s.NPCs[1].Suspicion() > 0 {
+		t.Fatalf("%d NPC footsteps, guard suspicion %.1f", steps, s.NPCs[1].Suspicion())
 	}
 	s.emit(Vec3{4.5, 1, 4.5}, 40, "footstep", -1)
 	s.Tick()
-	if s.NPCs[1].Suspicion == 0 {
+	if s.NPCs[1].Suspicion() == 0 {
 		t.Fatal("the guard didn't hear the player's step")
 	}
 }
@@ -692,7 +689,7 @@ func TestHardThrowBashes(t *testing.T) {
 		s.Frob(Target{Obj: len(s.Objects) - 1, NPC: -1}, false)
 		s.ThrowTorch(s.Player.Eye(), Vec3{-1, 0, 0}, 8, hard) // at the guard's head
 		run(s, TicksPerSecond)
-		if out := s.NPCs[0].State == StateUnconscious; out != hard {
+		if out := s.NPCs[0].State() == StateUnconscious; out != hard {
 			t.Errorf("hard %v: guard knocked out %v", hard, out)
 		}
 	}
@@ -710,22 +707,22 @@ func TestFlashBombBlinds(t *testing.T) {
 		t.Fatal("no bomb thrown")
 	}
 	run(s, 3*TicksPerSecond+1) // the fuse; it lands by the wall, in front of guard 1
-	if s.NPCs[0].Blind == 0 || s.NPCs[1].Blind != 0 {
-		t.Fatalf("blind: facing %d, facing away %d", s.NPCs[0].Blind, s.NPCs[1].Blind)
+	if s.NPCs[0].Blind() == 0 || s.NPCs[1].Blind() != 0 {
+		t.Fatalf("blind: facing %d, facing away %d", s.NPCs[0].Blind(), s.NPCs[1].Blind())
 	}
 	if !w.Solid(10, 1, 2) || !s.NPCs[0].alive() {
 		t.Fatal("a flash bomb broke the wall or hurt the guard")
 	}
 	s.NPCs[1].Hidden = true                       // heard the bang and would come running: out of the way
 	s.NPCs[0].Body.X, s.NPCs[0].Body.Z = 7.5, 6.5 // right beside the player, still in combat
-	hp := s.Player.Health
+	hp := s.Player.Health()
 	run(s, 2*TicksPerSecond)
-	if s.Player.Health != hp || s.NPCs[0].Attacking || s.NPCs[0].Blind == 0 {
-		t.Fatalf("blinded guard fought: health %d -> %d, blind %d", hp, s.Player.Health, s.NPCs[0].Blind)
+	if s.Player.Health() != hp || s.NPCs[0].Attacking || s.NPCs[0].Blind() == 0 {
+		t.Fatalf("blinded guard fought: health %d -> %d, blind %d", hp, s.Player.Health(), s.NPCs[0].Blind())
 	}
 	s.Player.Yaw = yawTo(s.Player.Pos, s.NPCs[0].pos())
-	if !s.Melee("blackjack") || s.NPCs[0].State != StateUnconscious {
-		t.Fatalf("blinded guard in combat not knocked out: %v", s.NPCs[0].State)
+	if !s.Melee("blackjack") || s.NPCs[0].State() != StateUnconscious {
+		t.Fatalf("blinded guard in combat not knocked out: %v", s.NPCs[0].State())
 	}
 }
 
@@ -770,35 +767,30 @@ func TestFlashBombFlies(t *testing.T) {
 
 func TestStreetLampDoused(t *testing.T) {
 	w, m := twoRooms()
-	m.Objects = append(m.Objects, &Object{ID: "l", Kind: KindLamp, Name: StreetLamp, Pos: Vec3{7.5, 1, 5.5}, Lit: true})
+	m.Objects = append(m.Objects, &Object{ID: "l", Kind: KindLamp, Name: StreetLamp, Pos: Vec3{7.5, 1, 5.5}, StartLit: true})
 	s := New(w, m)
 	s.Player.Pos = Vec3{8.5, 1, 5.5}
 	s.Frob(Target{Obj: 1, NPC: -1}, false)
-	if o := s.Objects[1]; o.Fallen || !o.Lit {
+	if o := s.Objects[1]; o.Fallen() || !o.Lit() {
 		t.Fatal("street lamp knocked over")
 	}
 	s.ArrowHit(AmmoWater, Vec3{7.5, 1 + StreetLampHead, 5.5}, -1, false)
-	if o := s.Objects[1]; o.Lit || o.HasLight {
+	if o := s.Objects[1]; o.Lit() || o.HasLight {
 		t.Fatal("water left the street lamp lit")
 	}
 }
 
 func TestThrownLanternSpillsBurningOil(t *testing.T) {
 	w, m := twoRooms()
-	m.Objects = append(m.Objects, &Object{ID: "l", Kind: KindTorch, Name: "Lantern", Pos: Vec3{6.5, 1, 3.5}, Lit: true, On: "floor"})
+	m.Objects = append(m.Objects, &Object{ID: "l", Kind: KindTorch, Name: "Lantern", Pos: Vec3{6.5, 1, 3.5}, StartLit: true, On: "floor"})
 	s := New(w, m)
 	s.Player.Pos = Vec3{6.5, 1, 3.5}
 	s.Frob(Target{Obj: 1, NPC: -1}, false)
 	s.ThrowTorch(Vec3{6.5, 2.6, 3.5}, Vec3{-1, 0, 0}, 3, false)
 	run(s, 30)
-	burning := 0
-	for _, f := range s.Oil {
-		if f > 0 {
-			burning++
-		}
-	}
-	if len(s.Oil) < 2 || burning == 0 {
-		t.Fatalf("lantern spilled %d oil cells, %d burning", len(s.Oil), burning)
+	burning := burningOil(s)
+	if len(s.LiquidCells(StimOil)) < 2 || burning == 0 {
+		t.Fatalf("lantern spilled %d oil cells, %d burning", len(s.LiquidCells(StimOil)), burning)
 	}
 }
 
@@ -815,4 +807,15 @@ func TestDoorSwings(t *testing.T) {
 	if b := w.Block(10, 2, 5); !strings.Contains(b, "half=upper") {
 		t.Fatalf("upper half = %q", b)
 	}
+}
+
+// burningOil counts the oil cells alight.
+func burningOil(s *Sim) int {
+	n := 0
+	for _, c := range s.LiquidCells(StimOil) {
+		if s.OilBurning(c) {
+			n++
+		}
+	}
+	return n
 }

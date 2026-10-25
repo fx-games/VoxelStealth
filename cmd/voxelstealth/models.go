@@ -306,7 +306,7 @@ func torchModel(o *sim.Object) string {
 	if m := ownModel[o.Name]; m != "" {
 		name = m
 	}
-	if o.Lit {
+	if o.Lit() {
 		name += "_lit"
 	}
 	return name

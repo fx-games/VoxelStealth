@@ -2,7 +2,6 @@ package sim
 
 import (
 	"cmp"
-	"maps"
 	"slices"
 	"strings"
 )
@@ -11,13 +10,45 @@ import (
 // difficulty, no rain): a burning cell ages 0..15 on fire ticks 30..39
 // ticks apart, dies without fuel beside it, eats flammable blocks on its
 // faces and leaps to empty cells beside fuel, from 1 below to 4 above.
-// Each reach is a fire stimulus From the burning cell; the blocks and
-// empty cells answer through their receptrons (burnBlock, catchFire).
+// Each reach is a fire stimulus whose Source is the burning cell; the
+// blocks and empty cells answer through their receptrons (burnBlock,
+// catchFire). A burning cell is an air cell with the properties burning,
+// fire_age (0..15) and fire_next (ticks to its next fire tick).
 
-// fire is a burning cell.
+// fire is a burning cell's state.
 type fire struct {
 	Age  int // 0..15
 	Next int // ticks to its next fire tick
+}
+
+// fireAt is the fire burning in c, if any.
+func (s *Sim) fireAt(c Cell) (fire, bool) {
+	r := cellR(c)
+	if _, ok := s.B.Get(r, "fire_age"); !ok || !s.B.Bool(r, "burning") {
+		return fire{}, false
+	}
+	return fire{Age: int(s.B.Float(r, "fire_age")), Next: int(s.B.Float(r, "fire_next"))}, true
+}
+
+func (s *Sim) setFire(c Cell, f fire) {
+	r := cellR(c)
+	s.B.Set(r, "burning", true)
+	s.B.Set(r, "fire_age", f.Age)
+	s.B.Set(r, "fire_next", f.Next)
+}
+
+// FireCells are the burning cells, in a fixed order (same seed, same fire).
+func (s *Sim) FireCells() []Cell {
+	var out []Cell
+	for _, c := range s.B.Addresses() {
+		if _, ok := s.fireAt(c); ok {
+			out = append(out, c)
+		}
+	}
+	slices.SortFunc(out, func(a, b Cell) int {
+		return cmp.Or(cmp.Compare(a.X, b.X), cmp.Compare(a.Y, b.Y), cmp.Compare(a.Z, b.Z))
+	})
+	return out
 }
 
 var faces = [6]Cell{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}}
@@ -85,37 +116,37 @@ func (s *Sim) fireDelay() int { return 30 + s.rng.Intn(10) }
 
 // ignite sets the empty cell c burning.
 func (s *Sim) ignite(c Cell, age int) {
-	if _, ok := s.Fire[c]; ok || !s.empty(c) {
+	if _, ok := s.fireAt(c); ok || !s.empty(c) {
 		return
 	}
-	s.Fire[c] = fire{Age: min(age, 15), Next: s.fireDelay()}
+	s.setFire(c, fire{Age: min(age, 15), Next: s.fireDelay()})
 	s.W.SetBlock(c.X, c.Y, c.Z, BlockLight)
 }
 
 func (s *Sim) extinguish(c Cell) {
-	delete(s.Fire, c)
+	r := cellR(c)
+	s.B.Clear(r, "burning")
+	s.B.Clear(r, "fire_age")
+	s.B.Clear(r, "fire_next")
 	s.unlight(c)
 }
 
 func (s *Sim) tickFire() {
-	cells := slices.SortedFunc(maps.Keys(s.Fire), func(a, b Cell) int { // same seed, same fire
-		return cmp.Or(cmp.Compare(a.X, b.X), cmp.Compare(a.Y, b.Y), cmp.Compare(a.Z, b.Z))
-	})
-	for _, c := range cells {
-		f, ok := s.Fire[c]
+	for _, c := range s.FireCells() {
+		f, ok := s.fireAt(c)
 		if !ok { // put out this tick
 			continue
 		}
 		if s.Now%10 == 0 { // flames: burn what stands in the cell
-			s.Stimulate(Stimulus{Stim: StimFire, Pos: c.Center(), Radius: 0.45, Amount: 1, From: &c})
+			s.Stimulate(s.fireStim(c, c.Center(), 0.45, 1))
 		}
 		if f.Next--; f.Next > 0 {
-			s.Fire[c] = f
+			s.setFire(c, f)
 			continue
 		}
 		f.Next = s.fireDelay()
 		f.Age = min(15, f.Age+s.rng.Intn(3)/2)
-		s.Fire[c] = f
+		s.setFire(c, f)
 		below := c.Add(0, -1, 0)
 		fuel := false
 		for _, d := range faces {
@@ -129,14 +160,14 @@ func (s *Sim) tickFire() {
 		s.emit(c.Floor(), 30, "fire", -1)
 		for _, d := range faces { // eat the blocks around
 			if n := c.Add(d.X, d.Y, d.Z); !s.empty(n) {
-				s.Stimulate(Stimulus{Stim: StimFire, Pos: n.Center(), Radius: 0.01, From: &c})
+				s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
 			}
 		}
 		for dx := -1; dx <= 1; dx++ { // leap to fuel nearby
 			for dz := -1; dz <= 1; dz++ {
 				for dy := -1; dy <= 4; dy++ {
 					if n := c.Add(dx, dy, dz); n != c && s.igniteOdds(n) > 0 {
-						s.Stimulate(Stimulus{Stim: StimFire, Pos: n.Center(), Radius: 0.01, From: &c})
+						s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
 					}
 				}
 			}
@@ -148,17 +179,25 @@ func (s *Sim) tickFire() {
 	}
 }
 
+// fireStim is fire from the burning cell c reaching around pos.
+func (s *Sim) fireStim(c Cell, pos Vec3, radius, intensity float64) Stimulus {
+	st := at(StimFire, pos, radius, intensity)
+	from := cellR(c)
+	st.Source = &from
+	return st
+}
+
 // Cell responses.
 
 // burnBlock: a fire on a face eats the block, which may catch in turn.
-func burnBlock(s *Sim, c Cell, st Stimulus) bool {
-	f, ok := s.fireFrom(st)
+func burnBlock(s *Sim, c Cell, d Delivery) bool {
+	f, from, ok := s.fireFrom(d)
 	if !ok {
 		return false
 	}
 	_, burn := flammability(s.W.Block(c.X, c.Y, c.Z))
 	spread := 300
-	if c.Y != st.From.Y {
+	if c.Y != from.Y {
 		spread = 250
 	}
 	if s.rng.Intn(spread) >= burn {
@@ -174,14 +213,14 @@ func burnBlock(s *Sim, c Cell, st Stimulus) bool {
 
 // primeTNT: TNT that burns (as burnBlock eats it) or is caught in a blast
 // is lit like Minecraft's: 4 s of fuse, half a second to 1.5 s in a blast.
-func primeTNT(s *Sim, c Cell, st Stimulus) bool {
+func primeTNT(s *Sim, c Cell, d Delivery) bool {
 	fuse := 4 * TicksPerSecond
 	switch {
-	case st.Stim == StimBlast:
+	case d.St.Stim == StimBlast:
 		s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
 		s.reroom = true
 		fuse = 10 + s.rng.Intn(20)
-	case !burnBlock(s, c, st):
+	case !burnBlock(s, c, d):
 		return false
 	}
 	s.Bombs = append(s.Bombs, bomb{Pos: c.Center(), Fuse: fuse})
@@ -191,22 +230,20 @@ func primeTNT(s *Sim, c Cell, st Stimulus) bool {
 
 // catchFire: an empty cell beside fuel catches from a fire nearby (the
 // higher above it, the less likely) or from open flame (burning oil, a rug, a torch).
-func catchFire(s *Sim, c Cell, st Stimulus) bool {
-	if _, burning := s.Fire[c]; burning {
-		return false
-	}
+func catchFire(s *Sim, c Cell, d Delivery) bool {
 	odds := s.igniteOdds(c)
 	age, k := 0, 100
-	if f, ok := s.fireFrom(st); ok {
+	f, from, fromFire := s.fireFrom(d)
+	if fromFire {
 		age = f.Age
-		if dy := c.Y - st.From.Y; dy > 1 {
+		if dy := c.Y - from.Y; dy > 1 {
 			k += (dy - 1) * 100
 		}
-	} else if st.From != nil || st.Amount <= 0 { // heat, or a dead fire
+	} else if d.St.Intensity <= 0 { // heat, or a dead fire
 		return false
 	}
 	o := (odds + 40 + 2*7) / (age + 30)
-	if st.From == nil { // flame touching fuel: its ignite odds straight, so a torch lights a hedge, rarely planks
+	if !fromFire { // flame touching fuel: its ignite odds straight, so a torch lights a hedge, rarely planks
 		o = odds
 	}
 	if odds == 0 || o <= 0 || s.rng.Intn(k) > o {
@@ -217,17 +254,17 @@ func catchFire(s *Sim, c Cell, st Stimulus) bool {
 }
 
 // douseFire: water puts a burning cell out.
-func douseFire(s *Sim, c Cell, _ Stimulus) bool {
+func douseFire(s *Sim, c Cell, _ Delivery) bool {
 	s.extinguish(c)
 	s.emit(c.Floor(), 12, "hiss", -1)
 	return true
 }
 
 // fireFrom is the burning cell a fire stimulus comes from.
-func (s *Sim) fireFrom(st Stimulus) (fire, bool) {
-	if st.From == nil {
-		return fire{}, false
+func (s *Sim) fireFrom(d Delivery) (fire, Cell, bool) {
+	if src := d.St.Source; src != nil && src.Obj == 0 {
+		f, ok := s.fireAt(src.Addr)
+		return f, src.Addr, ok
 	}
-	f, ok := s.Fire[*st.From]
-	return f, ok
+	return fire{}, Cell{}, false
 }

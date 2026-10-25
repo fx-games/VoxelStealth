@@ -40,8 +40,9 @@ built on VoxelLib (`../VoxelLib`, via `replace` in go.mod).
 - All sense tunables are per NPC type and live in mission data.
 
 ## Systemic core (immersive sim)
-- Property/stimulus system (adapted from TerminalAssassin `stimuli`): objects and voxels carry tags
-  (flammable, conductive, wet, lit, noisy…); actions emit stimuli that NPCs and objects react to.
+- Stimulus system: the `github.com/memmaker/stimres` broker (ADR 0001, `sim/stimuli.toml`). Objects, NPCs,
+  the player and voxel cells have archetypes with properties, Sources and Receptrons; every effect is a
+  Stimulus carried by a Medium (radius, sound, sight) to the Receptrons it reaches.
   **No scripted interactions**: everything emerges from this system.
 - v1 interactions: light sources that can be doused or relit, water (a leaking faucet), electricity (a lamp in a puddle,
   giving an accident kill), fire (a torch knocked onto something flammable), noise, doors/locks/keys.

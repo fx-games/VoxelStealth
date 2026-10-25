@@ -24,10 +24,10 @@ func (g *game) savePath() string {
 }
 
 func (g *game) quicksave() {
-	if g.sim == nil || g.sim.Player.Dead || g.sim.Outcome != sim.Running {
+	if g.sim == nil || g.sim.Player.Dead() || g.sim.Outcome != sim.Running {
 		return
 	}
-	sv := saveGame{State: g.sim.State, Blocks: g.world.changes(), Yaw: g.cam.Yaw, Pitch: g.cam.Pitch, Weapon: g.weapon, Ammo: g.ammo}
+	sv := saveGame{State: g.sim.Snapshot(), Blocks: g.world.changes(), Yaw: g.cam.Yaw, Pitch: g.cam.Pitch, Weapon: g.weapon, Ammo: g.ammo}
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(&sv); err != nil {
 		g.message("Quicksave failed: " + err.Error())
@@ -56,7 +56,10 @@ func (g *game) quickload() {
 		return
 	}
 	g.world.revert(sv.Blocks)
-	g.sim.Restore(sv.State)
+	if err := g.sim.Restore(sv.State); err != nil {
+		g.message("Quickload failed: " + err.Error())
+		return
+	}
 	p := g.sim.Player.Pos
 	g.player.Teleport(p.X, p.Y, p.Z)
 	g.cam.Yaw, g.cam.Pitch = sv.Yaw, sv.Pitch

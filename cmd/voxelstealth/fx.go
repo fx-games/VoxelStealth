@@ -74,7 +74,7 @@ func (g *game) tickFX() {
 		}
 		if o.Kind == sim.KindChest { // the lid swings over a third of a second
 			t := g.lids[o.ID]
-			if o.Open {
+			if o.Open() {
 				t = min(1, t+0.15)
 			} else {
 				t = max(0, t-0.15)
@@ -88,11 +88,11 @@ func (g *game) tickFX() {
 			if s.Now%3 == 0 {
 				g.burst("wisp", o.Pos.Add(sim.Vec3{Y: 1}))
 			}
-		case o.Kind == sim.KindLamp && o.Lit && !o.Fallen && lampModel(o) == "lamp_electric":
+		case o.Kind == sim.KindLamp && o.Lit() && !o.Fallen() && lampModel(o) == "lamp_electric":
 			g.burst("glow", o.Pos.Add(sim.Vec3{Y: 0.25})) // around the panes
-		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen && ownModel[o.Name] == "":
+		case o.Kind == sim.KindTorch && o.Lit() && !o.Held() && !o.Fallen() && ownModel[o.Name] == "":
 			g.burst("flame", g.torchTip(o))
-		case o.Kind == sim.KindTorch && o.Lit && !o.Held && !o.Fallen:
+		case o.Kind == sim.KindTorch && o.Lit() && !o.Held() && !o.Fallen():
 			// Candles: a spark or two over each wick, turned with the model.
 			sin, cos := math.Sincos(math.Pi - o.Yaw)
 			for i, w := range g.wicks[torchModel(o)] {
@@ -101,7 +101,7 @@ func (g *game) tickFX() {
 					g.burst("wick", o.Pos.Add(sim.Vec3{X: x*cos + z*sin, Y: float64(w[1]), Z: -x*sin + z*cos}))
 				}
 			}
-		case o.Kind == sim.KindTorch && o.Lit && o.Fallen && ownModel[o.Name] == "":
+		case o.Kind == sim.KindTorch && o.Lit() && o.Fallen() && ownModel[o.Name] == "":
 			_, _, tip := lyingTorch(o, 1)
 			g.burst("flame", tip)
 		}
@@ -113,7 +113,7 @@ func (g *game) tickFX() {
 	}
 	// The held torch: its tip in view space (see drawHand) mapped through
 	// the camera basis; the hand's walk bob is ignored.
-	if i := s.HeldTorch(); i >= 0 && s.Objects[i].Lit && ownModel[s.Objects[i].Name] == "" {
+	if i := s.HeldTorch(); i >= 0 && s.Objects[i].Lit() && ownModel[s.Objects[i].Name] == "" {
 		fwd := g.cam.Forward()
 		right := fwd.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
 		up := right.Cross(fwd)
@@ -123,22 +123,22 @@ func (g *game) tickFX() {
 		g.handParts.Emit(eye.X+float64(p[0]), eye.Y+float64(p[1]), eye.Z+float64(p[2]), small)
 	}
 	g.handParts.Tick(tickDur.Seconds(), nil)
-	for c, live := range s.Puddles {
-		if live > 0 && s.Now%2 == 0 && c.Floor().Dist(eye) < 24 {
+	for _, c := range s.LiquidCells(sim.StimWater) {
+		if s.Live(c) && s.Now%2 == 0 && c.Floor().Dist(eye) < 24 {
 			g.parts.Emit(float64(c.X)+0.5, float64(c.Y)+0.05, float64(c.Z)+0.5, particles.Props{Count: 1, Spread: 0.4,
 				Vel: [3]float64{0, 1.5, 0}, VelVar: 1.5, Gravity: 18, Life: 0.2, Size0: 0.04, Size1: 0.02,
 				Col0: fx["sparks"].Col0, Col1: fx["sparks"].Col1, Additive: true})
 		}
 	}
-	for c, fire := range s.Oil {
-		if f := c.Floor(); fire > 0 && f.Dist(eye) < 24 {
+	for _, c := range s.LiquidCells(sim.StimOil) {
+		if f := c.Floor(); s.OilBurning(c) && f.Dist(eye) < 24 {
 			g.burst("flame", f.Add(sim.Vec3{Y: 0.15}))
 			if s.Now%4 == 0 {
 				g.burst("wisp", f.Add(sim.Vec3{Y: 0.8}))
 			}
 		}
 	}
-	for c := range s.Fire {
+	for _, c := range s.FireCells() {
 		if f := c.Floor(); f.Dist(eye) < 24 {
 			g.burst("flame", f.Add(sim.Vec3{Y: 0.2}))
 			g.burst("flame", f.Add(sim.Vec3{Y: 0.5}))

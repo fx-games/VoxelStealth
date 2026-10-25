@@ -228,7 +228,7 @@ func (g *game) drawWorld(alpha float64) {
 	if g.sim != nil {
 		g.partRend.Draw(&g.cam, g.parts.P, alpha, g.light)
 	}
-	if g.sim != nil && !g.sim.Player.Dead {
+	if g.sim != nil && !g.sim.Player.Dead() {
 		g.drawHand(alpha, dt)
 		g.partRend.Draw(&g.cam, g.handParts.P, alpha, nil) // after the hand's depth clear
 	}
@@ -363,14 +363,14 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 // drawObjects draws props as box models and loot as item sprites.
 func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 	for _, o := range objs {
-		if o.Gone || o.Held {
+		if o.Gone || o.Held() {
 			continue
 		}
 		p := o.Pos
 		switch o.Kind {
 		case sim.KindTorch:
 			name := torchModel(o)
-			if o.Fallen {
+			if o.Fallen() {
 				mp, tilt, _ := lyingTorch(o, alpha)
 				g.prop(name, mp, o.Yaw, tilt)
 			} else {
@@ -382,10 +382,10 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 			}
 		case sim.KindLamp:
 			name := lampModel(o)
-			if o.Lit {
+			if o.Lit() {
 				name += "_lit"
 			}
-			if o.Fallen { // the small lamp, dropped or thrown like a torch
+			if o.Fallen() { // the small lamp, dropped or thrown like a torch
 				mp, tilt, _ := lyingTorch(o, alpha)
 				g.prop(name, mp, o.Yaw, tilt)
 			} else {
@@ -395,7 +395,7 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 			g.prop(decor[o.Name], p, o.Yaw, 0)
 		case sim.KindFaucet:
 			g.prop("faucet", p, o.Yaw, 0)
-			if o.Running {
+			if o.Running() {
 				g.prop("stream", p, o.Yaw, 0)
 			}
 		case sim.KindChest:
@@ -404,7 +404,7 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 				Skin: g.chestSkin(g.lids[o.ID]), Sky: sky, Block: blk})
 		case sim.KindFlammable:
 			switch {
-			case o.Burnt:
+			case o.Burnt():
 				g.prop("ash", p, o.Yaw, 0)
 			default: // burning or not: the fire is particles (fx.go)
 				g.prop("rug", p, o.Yaw, 0)
@@ -458,7 +458,7 @@ func (g *game) drawHand(alpha float64, dt float32) {
 	pull := float32(g.throwHold) / throwTicks // a throw wound up: the hand drawn back
 	if i := g.sim.HeldTorch(); i >= 0 {
 		name := torchModel(g.sim.Objects[i])
-		if g.sim.Objects[i].Lit {
+		if g.sim.Objects[i].Lit() {
 			blk = 15
 		}
 		hand := mgl32.Translate3D(-0.35+bobX, -0.45+bobY+0.2*sw+0.25*pull, -0.85-0.3*sw+0.2*pull).

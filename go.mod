@@ -1,6 +1,6 @@
 module github.com/memmaker/voxelstealth
 
-go 1.26.0
+go 1.27.2
 
 require (
 	github.com/go-gl/mathgl v1.2.0
@@ -20,6 +20,8 @@ require (
 	github.com/gogpu/naga v0.19.0 // indirect
 	github.com/gogpu/wgpu v0.34.5 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
+	github.com/memmaker/stimres v0.2.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 )
 

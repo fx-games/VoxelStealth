@@ -338,24 +338,24 @@ func (g *game) printStatus() {
 	s := g.sim
 	h, mi := s.Clock()
 	fmt.Printf("shot saved | tick %d | %02d:%02d | player %.1f %.1f %.1f hp %d vis %.2f loot %d | outcome %d %s\n",
-		s.Now, h, mi, s.Player.Pos.X, s.Player.Pos.Y, s.Player.Pos.Z, s.Player.Health, s.Visibility, s.Player.Loot, s.Outcome, s.FailReason)
+		s.Now, h, mi, s.Player.Pos.X, s.Player.Pos.Y, s.Player.Pos.Z, s.Player.Health(), s.Visibility, s.Player.Loot, s.Outcome, s.FailReason)
 	for _, n := range s.NPCs {
 		p := n.Pos()
-		fmt.Printf("  %-16s %-11s susp %5.1f at %.1f %.1f %.1f\n", n.Name, n.State, n.Suspicion, p.X, p.Y, p.Z)
+		fmt.Printf("  %-16s %-11s susp %5.1f at %.1f %.1f %.1f\n", n.Name, n.State(), n.Suspicion(), p.X, p.Y, p.Z)
 	}
 	for i, r := range s.Ropes {
 		fmt.Printf("  rope %d top %.2f %.2f %.2f len %.2f held %v\n", i, r.Top.X, r.Top.Y, r.Top.Z, r.Len, g.onRope != nil && g.onRope == g.ropes[i])
 	}
-	count := func(m map[sim.Cell]int) (n, active int) {
-		for _, t := range m {
-			if n++; t > 0 {
-				active++
+	count := func(l sim.Stim, active func(sim.Cell) bool) (n, on int) {
+		for _, c := range s.LiquidCells(l) {
+			if n++; active(c) {
+				on++
 			}
 		}
 		return
 	}
-	w, live := count(s.Puddles)
-	o, burning := count(s.Oil)
+	w, live := count(sim.StimWater, s.Live)
+	o, burning := count(sim.StimOil, s.OilBurning)
 	fmt.Printf("  puddles: water %d (%d live), oil %d (%d burning)\n", w, live, o, burning)
 	for _, a := range g.arrows.Arrows {
 		fmt.Printf("  arrow %s at %.2f %.2f %.2f stuck %v in %T\n", g.arrowAmmo[a], a.X, a.Y, a.Z, a.Stuck, a.In)

@@ -1,12 +1,14 @@
 package sim
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/rand"
 	"slices"
 	"sort"
 
+	"github.com/memmaker/stimres"
 	"github.com/memmaker/voxellib/voxel/nav"
 )
 
@@ -47,35 +49,51 @@ const (
 
 // Object is anything in the world the player or the stimulus system can
 // act on. Pos is the floor centre of the cell it stands in (wall torches:
-// the cell in front of the wall).
+// the cell in front of the wall). What the rules read and write (lit,
+// open, burning...) are its properties in the broker (Lit, Open...); the
+// Start fields are the mission's values for them.
 type Object struct {
-	ID, Kind, Name string
-	Pos            Vec3
-	Yaw            float64
-	Value          int    // loot value
-	Key            string // lock id (doors, chests) or the id a key opens
-	Count          int    // ammo
-	Locked, Open   bool
-	Lit            bool // torches, lamps (powered and on)
-	Fallen         bool
+	ID, Kind, Name         string
+	Pos                    Vec3
+	Yaw                    float64
+	Value                  int    // loot value
+	Key                    string // lock id (doors, chests) or the id a key opens
+	Count                  int    // ammo
+	StartLocked, StartOpen bool
+	StartLit               bool // torches, lamps (powered and on)
+	StartRunning           bool // faucets
 	// On is what a torch is attached to, like Minecraft: "floor" (the block
 	// below) or the wall in that direction: north (-Z), south, east (+X),
 	// west. Lanterns (Name) stand on floors or hang from the "ceiling".
 	// Empty is resolved by TorchOn/LanternOn when the sim starts.
 	On        string
-	Held      bool // torch in the player's hand
-	Vel, Prev Vec3 // a thrown torch in flight: blocks/tick, last tick's Pos
-	Flight    int  // ticks in the air; 0 at rest
-	Hard      bool // thrown at full windup: bashes the first thing it hits
-	Running   bool // faucets
-	Gone      bool // taken or destroyed
-	Burn      int  // ticks burning; 0 = not burning
-	Burnt     bool
+	Vel, Prev Vec3  // a thrown torch in flight: blocks/tick, last tick's Pos
+	Flight    int   // ticks in the air; 0 at rest
+	Hard      bool  // thrown at full windup: bashes the first thing it hits
+	Gone      bool  // taken or destroyed
 	Pick      int   // lockpicking progress
 	Hidden    []int // NPC indices of bodies stored inside
 	LightCell Cell  // where its light block is, when lit
 	HasLight  bool
+	R         stimres.ID // in the broker
+	b         *Broker
 }
+
+// is reads property prop; a mission's object, in no sim, has its Start values.
+func (o *Object) is(prop string) bool {
+	if o.b == nil {
+		return map[string]bool{"lit": o.StartLit, "open": o.StartOpen, "locked": o.StartLocked, "running": o.StartRunning}[prop]
+	}
+	return o.b.Bool(stimres.Object[Cell](o.R), prop)
+}
+
+func (o *Object) Lit() bool     { return o.is("lit") }     // torches, lamps (powered and on)
+func (o *Object) Open() bool    { return o.is("open") }    // doors, chests
+func (o *Object) Locked() bool  { return o.is("locked") }  // doors, chests
+func (o *Object) Running() bool { return o.is("running") } // faucets
+func (o *Object) Fallen() bool  { return o.is("fallen") }  // a torch or lamp lying on the floor
+func (o *Object) Held() bool    { return o.is("held") }    // torch in the player's hand
+func (o *Object) Burnt() bool   { return o.is("burnt") }
 
 // Cells occupied by a door.
 func (o *Object) doorCells() [2]Cell {
@@ -120,7 +138,7 @@ func LanternOn(solid func(x, y, z int) bool, c Cell) string {
 }
 
 // Burning reports whether the object is on fire.
-func (o *Object) Burning() bool { return o.Burn > 0 }
+func (o *Object) Burning() bool { return o.is("burning") }
 
 // Player is the player's state as the game reports it each tick, plus
 // what the simulation tracks for them.
@@ -129,17 +147,28 @@ type Player struct {
 	Yaw, Pitch  float64
 	Crouch, Run bool
 	OnGround    bool
-	Health      int
 	Carrying    int // NPC index, -1 = none
 	Keys        []string
 	Ammo        map[string]int
 	Loot        int
-	Dead        bool
-	Blind       int // ticks left dazzled by a flash (the screen whites out)
+	R           stimres.ID // in the broker
+	b           *Broker
 	walk        float64
 	last        Vec3
 	lastInit    bool
 }
+
+func (p *Player) r() Receiver { return stimres.Object[Cell](p.R) }
+
+// Health is what the player has left of 20.
+func (p *Player) Health() int { return int(p.b.Float(p.r(), "health")) }
+
+// Dead reports whether the player died.
+func (p *Player) Dead() bool { return p.b.Bool(p.r(), "dead") }
+
+// Blind is how many ticks the player has left dazzled by a flash (the
+// screen whites out).
+func (p *Player) Blind() int { return p.b.Left(p.r(), "blind") }
 
 // Eye is the player's eye position.
 func (p *Player) Eye() Vec3 {
@@ -210,9 +239,7 @@ type State struct {
 	Player      Player
 	NPCs        []*NPC
 	Objects     []*Object
-	Puddles     map[Cell]int  // wet floor cells (feet cells); value = ticks of electricity left
-	Oil         map[Cell]int  // oily floor cells; value = ticks of fire left
-	Fire        map[Cell]fire // burning cells (fire.go)
+	Liquid      map[Cell]Stim // puddles (feet cells): water or oil; whether live or alight is in the broker
 	Spills      []spill
 	Bombs       []bomb
 	Noisemakers []noisemaker
@@ -223,6 +250,7 @@ type State struct {
 	Visibility  float64      // player's light gem, 0..1
 	Done        map[int]bool // objective index → complete
 	Seen        bool         // ever fought
+	Broker      []byte       // the broker's state (Snapshot)
 }
 
 // Sim is a running mission.
@@ -232,10 +260,11 @@ type Sim struct {
 	Mission *Mission
 	Rooms   *RoomMap
 	Events  []Event
+	B       *Broker // every stimulus goes through it (stim.go)
 
 	doors  map[Cell]int // door cell → object index
 	decor  map[Cell]bool
-	sounds []Stimulus // noise emitted this tick, for NPCs to hear
+	byID   map[stimres.ID]int // broker ID -> object index, or -NPC-1
 	navs   []*nav.Graph
 	rng    *rand.Rand
 	reroom bool // blocks burnt away: rebuild the rooms
@@ -246,9 +275,10 @@ type Sim struct {
 func New(w World, m *Mission) *Sim {
 	s := &Sim{W: w, Mission: m, rng: rand.New(rand.NewSource(1))}
 	s.Time = m.StartTime
-	s.Puddles, s.Oil, s.Fire = map[Cell]int{}, map[Cell]int{}, map[Cell]fire{}
+	s.Liquid = map[Cell]Stim{}
 	s.Done = map[int]bool{}
-	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Health: 20, Carrying: -1, Ammo: map[string]int{}}
+	s.B = s.newBroker()
+	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Carrying: -1, Ammo: map[string]int{}, R: s.B.NewObject("player")}
 	for k, v := range m.Ammo {
 		s.Player.Ammo[k] = v
 	}
@@ -265,18 +295,28 @@ func New(w World, m *Mission) *Sim {
 				o.Pos.Y = float64(g.Y)
 			}
 		}
+		o.R = s.B.NewObject(archetypeOf(&o))
+		r := stimres.Object[Cell](o.R)
+		for prop, v := range map[string]bool{"lit": o.StartLit, "open": o.StartOpen, "locked": o.StartLocked, "running": o.StartRunning} {
+			if v {
+				s.B.Set(r, prop, true)
+			}
+		}
 		s.Objects = append(s.Objects, &o)
 	}
 	for _, d := range m.NPCs {
-		s.NPCs = append(s.NPCs, newNPC(d))
+		n := newNPC(d)
+		n.R = s.B.NewObject(npcArchetype(n.Kind))
+		s.B.Set(stimres.Object[Cell](n.R), "health", npcHealth)
+		s.NPCs = append(s.NPCs, n)
 	}
 	s.init()
 	for i, o := range s.Objects {
 		switch o.Kind {
 		case KindTorch, KindLamp:
-			s.setLight(i, o.Lit)
+			s.setLight(i, o.Lit())
 		case KindDoor:
-			s.setDoor(i, o.Open)
+			s.setDoor(i, o.Open())
 		}
 	}
 	return s
@@ -285,7 +325,13 @@ func New(w World, m *Mission) *Sim {
 // init builds the derived, unsaved structures.
 func (s *Sim) init() {
 	s.doors, s.decor = map[Cell]int{}, map[Cell]bool{}
+	s.byID = map[stimres.ID]int{}
+	s.Player.b = s.B
+	for k, n := range s.NPCs {
+		n.b, s.byID[n.R] = s.B, -k-1
+	}
 	for i, o := range s.Objects {
+		o.b, s.byID[o.R] = s.B, i
 		if o.Kind == KindDoor && !o.Gone {
 			for _, c := range o.doorCells() {
 				s.doors[c] = i
@@ -305,24 +351,41 @@ func (s *Sim) init() {
 	}
 }
 
+// Snapshot is the state to save (quicksave), the broker's included.
+func (s *Sim) Snapshot() State {
+	var buf bytes.Buffer
+	if err := s.B.Save(&buf, codec{}); err != nil {
+		panic(err) // our own types: cannot fail
+	}
+	st := s.State
+	st.Broker = buf.Bytes()
+	return st
+}
+
 // Restore replaces the state with a saved one (quickload). The world must
 // already hold the saved blocks.
-func (s *Sim) Restore(st State) {
+func (s *Sim) Restore(st State) error {
 	s.State = st
-	if s.Puddles == nil {
-		s.Puddles = map[Cell]int{}
-	}
-	if s.Oil == nil {
-		s.Oil = map[Cell]int{}
-	}
-	if s.Fire == nil {
-		s.Fire = map[Cell]fire{}
+	if s.Liquid == nil {
+		s.Liquid = map[Cell]Stim{}
 	}
 	if s.Done == nil {
 		s.Done = map[int]bool{}
 	}
-	s.sounds, s.Events = nil, nil
+	s.Events = nil
 	s.init()
+	return s.B.Restore(bytes.NewReader(st.Broker), codec{})
+}
+
+// codec writes cells and positions into broker saves.
+type codec struct{}
+
+func (codec) EncodeAddr(c Cell) string         { return fmtCell(c) }
+func (codec) EncodePos(p Vec3) string          { return fmtVec(p) }
+func (codec) DecodePos(t string) (Vec3, error) { return parseVec(t) }
+func (codec) DecodeAddr(t string) (Cell, error) {
+	v, err := parseVec(t)
+	return Cell{int(v.X), int(v.Y), int(v.Z)}, err
 }
 
 // Daylight is the sky light factor for the time of day: moonlight at
@@ -355,9 +418,14 @@ func (s *Sim) event(e Event) { s.Events = append(s.Events, e) }
 
 func (s *Sim) message(text string) { s.event(Event{Kind: EvMessage, Text: text}) }
 
-// emit makes a sound: NPCs hear it this tick, the game plays it.
+// emit makes a sound: the game plays it, NPCs hear it (but not their own).
 func (s *Sim) emit(pos Vec3, loud float64, kind string, byNPC int) {
-	s.Stimulate(Stimulus{Stim: StimNoise, Pos: pos, Amount: loud, Kind: kind, Source: byNPC})
+	st := Stimulus{Stim: StimNoise, Origin: pos, Medium: "sound", Intensity: loud, Extra: map[string]any{"sound": kind}}
+	if byNPC >= 0 {
+		r := s.npcR(byNPC)
+		st.Source = &r
+	}
+	s.Stimulate(st)
 }
 
 // Tick advances the simulation one 50 ms step.
@@ -369,18 +437,14 @@ func (s *Sim) Tick() {
 	s.Stats.Ticks++
 	s.Time += s.Mission.TimeScale / TicksPerSecond
 	s.tickPlayer()
-	if s.Player.Blind > 0 {
-		s.Player.Blind--
-	}
 	s.tickObjects()
+	s.B.Step() // timed properties run out, sources emit (sight among them)
 	s.tickSpills()
-	s.tickPuddles()
 	s.tickFire()
 	s.tickBombs()
 	for i := range s.NPCs {
 		s.tickNPC(i)
 	}
-	s.sounds = s.sounds[:0]
 	s.checkObjectives()
 }
 
@@ -422,7 +486,7 @@ func (s *Sim) tickPlayer() {
 	if i := s.HeldTorch(); i >= 0 {
 		o := s.Objects[i]
 		o.Pos = p.Pos.Add(Vec3{0, 0.6, 0}) // its light sits at chest height
-		if o.Lit && (!o.HasLight || o.LightCell != o.Pos.Add(Vec3{0, 0.5, 0}).Cell()) {
+		if o.Lit() && (!o.HasLight || o.LightCell != o.Pos.Add(Vec3{0, 0.5, 0}).Cell()) {
 			s.setLight(i, true)
 		}
 	}
@@ -463,13 +527,14 @@ func (s *Sim) visibility() float64 {
 // HurtPlayer damages the player; at 0 health the mission fails.
 func (s *Sim) HurtPlayer(dmg int, why string) {
 	p := &s.Player
-	if p.Dead {
+	if p.Dead() {
 		return
 	}
-	p.Health -= dmg
+	h := max(0, p.Health()-dmg)
+	s.B.Set(p.r(), "health", h)
 	s.event(Event{Kind: EvHurt, Loud: float64(dmg)})
-	if p.Health <= 0 {
-		p.Health, p.Dead = 0, true
+	if h == 0 {
+		s.B.Set(p.r(), "dead", true)
 		s.fail("You died. " + why)
 	}
 }
@@ -491,10 +556,10 @@ func (s *Sim) setLight(i int, on bool) {
 		return
 	}
 	c := o.Pos.Cell()
-	if (o.Kind == KindTorch || o.Kind == KindLamp) && !o.Fallen {
+	if (o.Kind == KindTorch || o.Kind == KindLamp) && !o.Fallen() {
 		c = o.Pos.Add(Vec3{0, 0.5, 0}).Cell()
 	}
-	if o.Kind == KindLamp && o.Name == StreetLamp && !o.Fallen { // the post's head
+	if o.Kind == KindLamp && o.Name == StreetLamp && !o.Fallen() { // the post's head
 		c = o.Pos.Add(Vec3{Y: StreetLampHead}).Cell()
 	}
 	if b := s.W.Block(c.X, c.Y, c.Z); b == BlockAir || b == BlockLight {
@@ -511,7 +576,7 @@ func (s *Sim) unlight(c Cell) {
 			return
 		}
 	}
-	if _, burning := s.Fire[c]; burning || s.Oil[c.Add(0, -1, 0)] > 0 {
+	if _, burning := s.fireAt(c); burning || s.OilBurning(c.Add(0, -1, 0)) {
 		return
 	}
 	if s.W.Block(c.X, c.Y, c.Z) == BlockLight {
@@ -523,7 +588,7 @@ func (s *Sim) unlight(c Cell) {
 // wall around it: walls east and west hang it across X, else across Z.
 func (s *Sim) setDoor(i int, open bool) {
 	o := s.Objects[i]
-	o.Open = open
+	s.B.Set(s.objR(i), "open", open)
 	c := o.doorCells()[0]
 	facing := "east"
 	if s.W.Solid(c.X-1, c.Y, c.Z) && s.W.Solid(c.X+1, c.Y, c.Z) {
@@ -546,43 +611,12 @@ func (s *Sim) DoorAt(c Cell) int {
 	return -1
 }
 
-// tickObjects: fire, faucets, noisemakers, fallen lamps in water.
+// tickObjects: thrown torches in flight, noisemakers. (Fire, faucets and
+// what lies in water are the broker's sources: stimuli.toml.)
 func (s *Sim) tickObjects() {
 	for i, o := range s.Objects {
-		if o.Gone {
-			continue
-		}
-		if o.Flight > 0 {
+		if !o.Gone && o.Flight > 0 {
 			s.flyTorch(i)
-			continue
-		}
-		if o.Burning() {
-			o.Burn++
-			if o.Burn%30 == 1 {
-				s.emit(o.Pos, 30, "fire", -1)
-			}
-			if o.Burn%10 == 0 { // flames: burn what stands in them
-				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 0.6, Amount: 1})
-			}
-			if o.Burn == 60 { // heat spreads further
-				s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 2.2})
-			}
-			if o.Burn > 30*TicksPerSecond {
-				o.Burn, o.Burnt = 0, true
-				s.setLight(i, false)
-			}
-		}
-		if o.Kind == KindTorch && o.Fallen && o.Lit && !o.Held && s.Now%(2*TicksPerSecond) == 0 { // lying lit, it keeps at what it landed by
-			s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2, Amount: 0.5})
-		}
-		if o.Kind == KindFaucet && o.Running && s.Now%15 == 0 {
-			s.Stimulate(Stimulus{Stim: StimWater, Pos: o.Pos, Radius: 0.5, Amount: 1})
-			if s.Now%45 == 0 {
-				s.emit(o.Pos, 14, "water", -1)
-			}
-		}
-		if _, wet := s.Puddles[o.Pos.Cell()]; wet && !o.Held { // lying in water
-			s.Stimulate(Stimulus{Stim: StimWater, Pos: o.Pos})
 		}
 	}
 	for i := 0; i < len(s.Noisemakers); i++ {
@@ -625,60 +659,6 @@ func (s *Sim) floorBelow(c Cell, depth int) (Cell, bool) {
 	return c, false
 }
 
-// electrify puts current into the puddle containing c.
-func (s *Sim) electrify(c Cell) {
-	if _, ok := s.Puddles[c]; !ok {
-		return
-	}
-	seen := map[Cell]bool{c: true}
-	queue := []Cell{c}
-	for len(queue) > 0 {
-		x := queue[0]
-		queue = queue[1:]
-		s.Puddles[x] = 3 * TicksPerSecond
-		for _, d := range []Cell{{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}} {
-			n := x.Add(d.X, 0, d.Z)
-			if _, wet := s.Puddles[n]; wet && !seen[n] {
-				seen[n] = true
-				queue = append(queue, n)
-			}
-		}
-	}
-	s.emit(c.Floor(), 55, "zap", -1)
-	s.event(Event{Kind: EvSpark, Pos: c.Floor()})
-}
-
-// tickPuddles runs electricity down in water, which shocks whoever stands
-// in it, and burns oil.
-func (s *Sim) tickPuddles() {
-	for c, t := range s.Puddles {
-		if t > 0 {
-			s.Puddles[c] = t - 1
-			s.Stimulate(Stimulus{Stim: StimShock, Pos: c.Floor(), Radius: 0.2})
-		}
-	}
-	for c, t := range s.Oil {
-		if t <= 0 {
-			continue
-		}
-		if t%10 == 0 { // flames: burn what stands in them, catch the next cell
-			s.Stimulate(Stimulus{Stim: StimFire, Pos: c.Floor().Add(Vec3{0, 0.1, 0}), Radius: 0.6, Amount: 1})
-		}
-		if t%30 == 0 {
-			s.emit(c.Floor(), 30, "fire", -1)
-		}
-		if t > 1 {
-			s.Oil[c] = t - 1
-			continue
-		}
-		delete(s.Oil, c) // burnt away
-		s.unlightAbove(c)
-		if s.W.Block(c.X, c.Y, c.Z) == BlockOil {
-			s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
-		}
-	}
-}
-
 func (s *Sim) tickBombs() {
 	for i := 0; i < len(s.Bombs); i++ {
 		b := &s.Bombs[i]
@@ -706,54 +686,19 @@ func (s *Sim) tickBombs() {
 // whoever sees it and a sharp bang. Nothing breaks or burns.
 func (s *Sim) Flash(pos Vec3) {
 	pos = pos.Add(Vec3{Y: 0.5})
-	s.Stimulate(Stimulus{Stim: StimFlash, Pos: pos, Radius: 14, Amount: 8 * TicksPerSecond})
+	s.Stimulate(at(StimFlash, pos, 14, 8*TicksPerSecond))
 	s.emit(pos, 45, "flash", -1)
 	s.event(Event{Kind: EvFlash, Pos: pos})
 }
 
-// Explode is TNT going off: it destroys blocks, objects and people around
-// pos, the one way to break voxels.
+// Explode is TNT going off: its blast destroys blocks (blastBlock), objects
+// and people around pos.
 func (s *Sim) Explode(pos Vec3) {
-	const r = 2.6
-	c := pos.Cell()
-	for x := -3; x <= 3; x++ {
-		for y := -3; y <= 3; y++ {
-			for z := -3; z <= 3; z++ {
-				b := c.Add(x, y, z)
-				if b.Center().Dist(pos) > r {
-					continue
-				}
-				name := s.W.Block(b.X, b.Y, b.Z)
-				if name == BlockAir || name == "minecraft:bedrock" || name == "minecraft:obsidian" || IsGlass(name) || name == BlockTNT { // glass, TNT: the blast stim shatters, primes them
-					continue
-				}
-				if _, door := s.doors[b]; door {
-					continue // handled with the objects
-				}
-				s.W.SetBlock(b.X, b.Y, b.Z, BlockAir)
-				delete(s.Puddles, b)
-				delete(s.Oil, b)
-				delete(s.Fire, b)
-			}
-		}
-	}
-	s.Stimulate(Stimulus{Stim: StimBlast, Pos: pos, Radius: 3})
-	s.Stimulate(Stimulus{Stim: StimFire, Pos: pos, Radius: 4.5})
+	s.Stimulate(at(StimBlast, pos, 3, 1))
+	s.Stimulate(at(StimFire, pos, 4.5, 0))
 	s.emit(pos, 95, "explosion", -1)
 	s.event(Event{Kind: EvBlast, Pos: pos})
 	s.init() // doors and walls changed: rebuild the room graph
-}
-
-// Shatter breaks the glass block at c, if it is glass: very loud. It
-// reports whether it did.
-func (s *Sim) Shatter(c Cell) bool {
-	if !IsGlass(s.W.Block(c.X, c.Y, c.Z)) {
-		return false
-	}
-	s.W.SetBlock(c.X, c.Y, c.Z, BlockAir)
-	s.emit(c.Center(), 95, "shatter", -1) // as loud as a bomb
-	s.init()                              // the window is an opening now: rebuild the room graph
-	return true
 }
 
 // Target is what the player points at: an object or an NPC body.
@@ -774,14 +719,14 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 		c := p.Cell()
 		return Vec3{float64(c.X), float64(c.Y), float64(c.Z)}, Vec3{float64(c.X + 1), float64(c.Y + 2), float64(c.Z + 1)}
 	case KindTorch:
-		if !o.Fallen {
+		if !o.Fallen() {
 			dx, dz := o.WallDir() // a wall torch hangs 0.5 toward its wall
 			p = p.Add(Vec3{0.3 * float64(dx), 0, 0.3 * float64(dz)})
 			return p.Add(Vec3{-0.25, 0.1, -0.25}), p.Add(Vec3{0.25, 0.9, 0.25})
 		}
 		return p.Add(Vec3{-0.4, 0, -0.4}), p.Add(Vec3{0.4, 0.25, 0.4})
 	case KindLamp:
-		if o.Fallen {
+		if o.Fallen() {
 			return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.35, 0.5})
 		}
 		if o.Name == StreetLamp {
@@ -832,7 +777,7 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 	best := NoTarget
 	best.Dist = Reach
 	for i, o := range s.Objects {
-		if o.Gone || o.Held || o.Kind == KindDecor {
+		if o.Gone || o.Held() || o.Kind == KindDecor {
 			continue
 		}
 		lo, hi := s.ObjectBox(i)
@@ -879,11 +824,11 @@ func (s *Sim) Describe(t Target) string {
 	switch o.Kind {
 	case KindDoor:
 		switch {
-		case o.Locked && s.hasKey(o.Key):
+		case o.Locked() && s.hasKey(o.Key):
 			return name + " (locked - you have the key)"
-		case o.Locked:
+		case o.Locked():
 			return name + " (locked - hold E to pick)"
-		case o.Open:
+		case o.Open():
 			return name + " (close)"
 		}
 		return name + " (open)"
@@ -893,7 +838,7 @@ func (s *Sim) Describe(t Target) string {
 		switch {
 		case s.Player.Carrying >= 0:
 			return name + " (hide body)"
-		case o.Locked && !s.hasKey(o.Key):
+		case o.Locked() && !s.hasKey(o.Key):
 			return name + " (locked - hold E to pick)"
 		case o.Value > 0:
 			return name + " (" + itoa(o.Value) + " inside)"
@@ -904,7 +849,7 @@ func (s *Sim) Describe(t Target) string {
 			return name + " (take)"
 		}
 	case KindFaucet:
-		if o.Running {
+		if o.Running() {
 			return name + " (turn off)"
 		}
 		return name + " (turn on)"
@@ -926,96 +871,146 @@ func itoa(n int) string {
 
 func (s *Sim) hasKey(k string) bool { return k != "" && slices.Contains(s.Player.Keys, k) }
 
-// Frob uses the target. held is true on the ticks after the first while
-// the use key stays down (lockpicking).
+// Frob uses the target: a frob stimulus to it (or, with nothing in reach,
+// to the body on the player's shoulder: drop it). held is true on the
+// ticks after the first while the use key stays down (lockpicking).
 func (s *Sim) Frob(t Target, held bool) {
-	p := &s.Player
-	if t.NPC >= 0 {
+	var r Receiver
+	switch {
+	case t.NPC >= 0:
+		r = s.npcR(t.NPC)
+	case t.Obj >= 0:
+		r = s.objR(t.Obj)
+	case s.Player.Carrying >= 0:
+		r = s.npcR(s.Player.Carrying)
+	default:
+		return
+	}
+	pr := s.playerR()
+	s.B.Stimulate(Stimulus{Stim: StimFrob, Intensity: 1, Target: &r, Source: &pr, Origin: s.Player.Pos, Extra: map[string]any{"held": held}})
+}
+
+// Frob responses (stimuli.toml).
+
+// pickLock: the key opens it, else held use picks it. An NPC only comes
+// to doors it has the key of (newNav) and goes through.
+func (s *Sim) pickLock(i int, d Delivery, _ []string) bool {
+	o := s.Objects[i]
+	if d.St.Source != nil && s.npcIndex(*d.St.Source) >= 0 {
+		return o.Kind == KindDoor && !o.Open() && s.openDoor(i, d, nil)
+	}
+	if held, _ := d.St.Extra["held"].(bool); s.hasKey(o.Key) {
 		if !held {
-			s.pickUpBody(t.NPC)
+			s.B.Set(s.objR(i), "locked", false)
+			s.emit(o.Pos, 12, "unlock", -1)
+			s.message("Unlocked with the key.")
 		}
-		return
+		return true
 	}
-	if t.Obj < 0 {
-		if p.Carrying >= 0 && !held {
-			s.DropBody()
-		}
-		return
+	o.Pick++
+	if o.Pick%10 == 1 {
+		s.emit(o.Pos, 14, "lockpick", -1)
 	}
-	o := s.Objects[t.Obj]
-	if o.Locked && (o.Kind == KindDoor || o.Kind == KindChest) && !(o.Kind == KindChest && p.Carrying >= 0) {
-		if s.hasKey(o.Key) {
-			if !held {
-				o.Locked = false
-				s.emit(o.Pos, 12, "unlock", -1)
-				s.message("Unlocked with the key.")
-			}
-			return
+	if o.Pick >= 3*TicksPerSecond {
+		s.B.Set(s.objR(i), "locked", false)
+		s.emit(o.Pos, 14, "unlock", -1)
+		s.message("Lock picked.")
+	}
+	return true
+}
+
+// openDoor swings a door; whoever frobbed it makes the noise.
+func (s *Sim) openDoor(i int, d Delivery, _ []string) bool {
+	o := s.Objects[i]
+	if o.Open() && s.doorBlocked(i) {
+		return false
+	}
+	by := -1
+	if d.St.Source != nil {
+		by = s.npcIndex(*d.St.Source)
+	}
+	s.setDoor(i, !o.Open())
+	s.emit(o.Pos.Add(Vec3{0, 1, 0}), 28, "door", by)
+	return true
+}
+
+// frobChest hides the carried body in it, else unlocks, loots or opens it.
+func (s *Sim) frobChest(i int, d Delivery, _ []string) bool {
+	o, p, r := s.Objects[i], &s.Player, s.objR(i)
+	held, _ := d.St.Extra["held"].(bool)
+	if p.Carrying >= 0 {
+		if held {
+			return false
 		}
-		o.Pick++
-		if o.Pick%10 == 1 {
-			s.emit(o.Pos, 14, "lockpick", -1)
-		}
-		if o.Pick >= 3*TicksPerSecond {
-			o.Locked = false
-			s.emit(o.Pos, 14, "unlock", -1)
-			s.message("Lock picked.")
-		}
-		return
+		n := s.NPCs[p.Carrying]
+		n.Hidden, n.CarriedBy = true, false
+		o.Hidden = append(o.Hidden, p.Carrying)
+		p.Carrying = -1
+		s.B.Set(r, "open", true)
+		s.emit(o.Pos, 16, "body", -1)
+		s.message("Body hidden.")
+		return true
+	}
+	if o.Locked() {
+		return s.pickLock(i, d, nil)
 	}
 	if held {
-		return
+		return false
 	}
+	if o.Value > 0 {
+		p.Loot += o.Value
+		s.message("Took " + itoa(o.Value) + " in valuables")
+		o.Value = 0
+		s.B.Set(r, "open", true)
+		s.emit(o.Pos, 8, "loot", -1)
+	} else {
+		s.B.Set(r, "open", !o.Open())
+		s.emit(o.Pos, 6, "door", -1)
+	}
+	return true
+}
+
+// take picks up loot, a key or ammo.
+func (s *Sim) take(i int, _ Delivery, _ []string) bool {
+	o, p := s.Objects[i], &s.Player
 	switch o.Kind {
-	case KindDoor:
-		if o.Open && s.doorBlocked(t.Obj) {
-			return
-		}
-		s.setDoor(t.Obj, !o.Open)
-		s.emit(o.Pos.Add(Vec3{0, 1, 0}), 28, "door", -1)
 	case KindLoot:
-		o.Gone = true
 		p.Loot += o.Value
 		s.emit(o.Pos, 8, "loot", -1)
 		s.message("Took " + o.Name + " (" + itoa(o.Value) + ")")
 	case KindKey:
-		o.Gone = true
 		p.Keys = append(p.Keys, o.Key)
 		s.message("Took " + o.Name)
 	case KindAmmo:
-		o.Gone = true
 		p.Ammo[o.Name] += o.Count
 		s.message("Took " + itoa(o.Count) + " " + o.Name)
-	case KindChest:
-		if p.Carrying >= 0 {
-			n := s.NPCs[p.Carrying]
-			n.Hidden, n.CarriedBy = true, false
-			o.Hidden = append(o.Hidden, p.Carrying)
-			p.Carrying = -1
-			o.Open = true
-			s.emit(o.Pos, 16, "body", -1)
-			s.message("Body hidden.")
-			return
-		}
-		if o.Value > 0 {
-			p.Loot += o.Value
-			s.message("Took " + itoa(o.Value) + " in valuables")
-			o.Value = 0
-			o.Open = true
-			s.emit(o.Pos, 8, "loot", -1)
-		} else {
-			o.Open = !o.Open
-			s.emit(o.Pos, 6, "door", -1)
-		}
-	case KindTorch, KindLamp: // a street lamp is too big to carry
-		if o.Name != StreetLamp && s.HeldTorch() < 0 {
-			o.Held, o.Fallen, o.Flight = true, false, 0
-			s.emit(o.Pos, 6, "swish", -1)
-		}
-	case KindFaucet:
-		o.Running = !o.Running
-		s.emit(o.Pos, 12, "squeak", -1)
 	}
+	s.B.Destroy(s.objR(i))
+	return true
+}
+
+// takeTorch takes a torch or small lamp in hand (one at a time).
+func (s *Sim) takeTorch(i int, _ Delivery, _ []string) bool {
+	if s.HeldTorch() >= 0 {
+		return false
+	}
+	o, r := s.Objects[i], s.objR(i)
+	s.B.Set(r, "held", true)
+	s.B.Set(r, "fallen", false)
+	s.B.Set(r, "flying", false)
+	o.Flight = 0
+	s.emit(o.Pos, 6, "swish", -1)
+	return true
+}
+
+// frobBody picks up an unconscious or dead NPC, or drops the one carried.
+func (s *Sim) frobBody(k int, _ Delivery, _ []string) bool {
+	if s.Player.Carrying == k {
+		s.DropBody()
+		return true
+	}
+	s.pickUpBody(k)
+	return true
 }
 
 // doorBlocked reports whether someone stands in a door's cells.
@@ -1036,7 +1031,7 @@ func (s *Sim) doorBlocked(i int) bool {
 // HeldTorch is the index of the torch in the player's hand, or -1.
 func (s *Sim) HeldTorch() int {
 	for i, o := range s.Objects {
-		if o.Held && !o.Gone {
+		if !o.Gone && o.Held() {
 			return i
 		}
 	}
@@ -1052,12 +1047,15 @@ func (s *Sim) ThrowTorch(eye, dir Vec3, dist float64, hard bool) {
 	if i < 0 {
 		return
 	}
-	o := s.Objects[i]
-	o.Held, o.Fallen, o.Flight, o.Hard = false, true, 1, hard
+	o, r := s.Objects[i], s.objR(i)
+	s.B.Set(r, "held", false)
+	s.B.Set(r, "fallen", true)
+	s.B.Set(r, "flying", true)
+	o.Flight, o.Hard = 1, hard
 	o.Yaw = math.Atan2(dir.X, -dir.Z)
 	o.Pos, o.Vel = s.launch(eye, dir, dist)
 	o.Prev = o.Pos
-	s.setLight(i, o.Lit)
+	s.setLight(i, o.Lit())
 }
 
 // launch is where and how fast something thrown dist blocks along dir
@@ -1083,10 +1081,10 @@ func (s *Sim) fly(pos, prev, vel *Vec3, hard *bool) bool {
 	impact := func(p Vec3) {
 		if *hard {
 			*hard = false
-			s.Stimulate(Stimulus{Stim: StimBash, Pos: p})
+			s.Stimulate(at(StimBash, p, 0, 1))
 		}
 	}
-	if *hard && s.Stimulate(Stimulus{Stim: StimBash, Pos: *pos}) { // struck someone or something: drops off it
+	if *hard && s.Stimulate(at(StimBash, *pos, 0, 1)) { // struck someone or something: drops off it
 		*hard = false
 		vel.X, vel.Z = vel.X*-0.3, vel.Z*-0.3
 	}
@@ -1127,14 +1125,15 @@ func (s *Sim) flyTorch(i int) {
 	o.Flight++
 	if s.fly(&o.Pos, &o.Prev, &o.Vel, &o.Hard) {
 		o.Flight = 0
+		s.B.Set(s.objR(i), "flying", false)
 		if o.Kind == KindTorch && o.Name == "Lantern" { // it cracks: its oil runs out over the floor
-			s.Stimulate(Stimulus{Stim: StimOil, Pos: o.Pos, Radius: 1, Amount: 3})
+			s.Stimulate(at(StimOil, o.Pos, 1, 3))
 		}
-		if o.Lit && o.Kind == KindTorch { // a small flame: catches rugs and fuel, doesn't burn people
-			s.Stimulate(Stimulus{Stim: StimFire, Pos: o.Pos, Radius: 1.2, Amount: 0.5})
+		if o.Lit() && o.Kind == KindTorch { // a small flame: catches rugs and fuel, doesn't burn people
+			s.Stimulate(at(StimFire, o.Pos, 1.2, 0.5))
 		}
 	}
-	if o.Lit && (!o.HasLight || o.LightCell != o.Pos.Cell()) {
+	if o.Lit() && (!o.HasLight || o.LightCell != o.Pos.Cell()) {
 		s.setLight(i, true)
 	}
 }
@@ -1174,17 +1173,19 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 	switch ammo {
 	case AmmoBroadhead:
 		if npc >= 0 {
-			s.stimNPC(npc, Stimulus{Stim: StimPierce, Pos: pos, Amount: math.Ceil(npcHealth / 4.0), Kind: "shot", Head: head})
+			if s.reachable(npc) {
+				s.hit(s.npcR(npc), Stimulus{Stim: StimPierce, Origin: pos, Intensity: math.Ceil(npcHealth / 4.0), Extra: map[string]any{"how": "shot", "head": head}})
+			}
 			return
 		}
-		if !s.Stimulate(Stimulus{Stim: StimPierce, Pos: pos, Radius: 0.01}) {
+		if !s.Stimulate(at(StimPierce, pos, 0.01, 1)) {
 			s.emit(pos, 26, "arrow", -1)
 		}
 	case AmmoWater:
 		s.emit(pos, 18, "splash", -1)
 		// The water runs down whatever it hit and pools on the floor below:
 		// nine cells, hugging the wall when it struck one.
-		s.Stimulate(Stimulus{Stim: StimWater, Pos: pos, Radius: 0.9, Amount: 5})
+		s.Stimulate(at(StimWater, pos, 0.9, 5))
 	case AmmoNoise:
 		s.Noisemakers = append(s.Noisemakers, noisemaker{Pos: pos})
 	case AmmoRope:
@@ -1274,9 +1275,9 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 // player, else at decoration or a window. It reports whether it hit.
 func (s *Sim) Melee(tool string) bool {
 	p := &s.Player
-	st := Stimulus{Stim: StimBash}
+	st := Stimulus{Stim: StimBash, Intensity: 1, Medium: "radius"}
 	if tool == "blade" {
-		st = Stimulus{Stim: StimPierce, Amount: 4, Kind: "stabbed"}
+		st = Stimulus{Stim: StimPierce, Intensity: 4, Medium: "radius", Extra: map[string]any{"how": "stabbed"}}
 	}
 	best, bestD := -1, 2.4
 	for k, n := range s.NPCs {
@@ -1293,8 +1294,8 @@ func (s *Sim) Melee(tool string) bool {
 		if tool == "blade" {
 			s.emit(n.pos(), 24, "stab", -1)
 		}
-		st.Pos = n.pos()
-		return s.stimNPC(best, st)
+		st.Origin = n.pos()
+		return s.hit(s.npcR(best), st)
 	}
 	s.emit(p.Pos, 6, "swish", -1)
 	// Else the swing hits the first decoration or block within reach.
@@ -1303,11 +1304,11 @@ func (s *Sim) Melee(tool string) bool {
 	cp := math.Cos(p.Pitch)
 	dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
 	for t := 0.2; t < 2.2; t += 0.1 {
-		st.Pos = eye.Add(dir.Scale(t))
-		c := st.Pos.Cell()
+		st.Origin = eye.Add(dir.Scale(t))
+		c := st.Origin.Cell()
 		hit := s.W.Solid(c.X, c.Y, c.Z)
 		for i, o := range s.Objects {
-			if lo, hi := s.ObjectBox(i); o.Kind == KindDecor && boxDist(st.Pos, lo, hi) == 0 {
+			if lo, hi := s.ObjectBox(i); o.Kind == KindDecor && boxDist(st.Origin, lo, hi) == 0 {
 				hit = true
 			}
 		}
@@ -1321,8 +1322,7 @@ func (s *Sim) Melee(tool string) bool {
 // hurtNPC damages an NPC and makes it fight back or run.
 func (s *Sim) hurtNPC(k, dmg int, how string) {
 	n := s.NPCs[k]
-	n.Health -= dmg
-	if n.Health <= 0 {
+	if s.B.Add(s.npcR(k), "health", -float64(dmg)); n.Health() <= 0 {
 		s.killNPC(k, "player", how)
 		return
 	}
@@ -1333,10 +1333,12 @@ func (s *Sim) hurtNPC(k, dmg int, how string) {
 // killNPC kills an NPC; by is "player" or "accident".
 func (s *Sim) killNPC(k int, by, how string) {
 	n := s.NPCs[k]
-	if n.State == StateDead {
+	if n.State() == StateDead {
 		return
 	}
-	n.State, n.Path, n.Death = StateDead, nil, by
+	n.setState(StateDead)
+	s.B.Set(s.npcR(k), "down", true)
+	n.Path, n.Death = nil, by
 	if by == "accident" {
 		s.Stats.Accidents++
 	} else {
@@ -1373,13 +1375,13 @@ func (s *Sim) checkObjectives() {
 			done = s.Player.Loot >= m.LootQuota
 		case "kill":
 			for _, n := range s.NPCs {
-				if n.ID == ob.Target && n.State == StateDead {
+				if n.ID == ob.Target && n.State() == StateDead {
 					done = true
 				}
 			}
 		case "accident":
 			for _, n := range s.NPCs {
-				if n.ID == ob.Target && n.State == StateDead && n.Death == "accident" {
+				if n.ID == ob.Target && n.State() == StateDead && n.Death == "accident" {
 					done = true
 				}
 			}
