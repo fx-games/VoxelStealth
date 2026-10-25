@@ -31,6 +31,7 @@ var arrowTypes = []string{sim.AmmoBroadhead, sim.AmmoWater, sim.AmmoNoise, sim.A
 const (
 	reloadTicks = 24 // a hand-spanned crossbow, not the explorer's repeater
 	recoilTicks = 5
+	kickTicks   = 12 // between kicks
 	swingTicks  = 8
 	throwTicks  = 10 // a throw's full windup: hard, it bashes what it hits
 	crouchEye   = 1.15
@@ -41,6 +42,7 @@ type weapons struct {
 	ammo       string
 	reload     int
 	recoil     int
+	kickWait   int // ticks to the next kick
 	swing      int
 	windup     bool // a melee weapon drawn back, the button held
 	throwHold  int  // ticks a throw has been wound up, up to throwTicks
@@ -68,7 +70,7 @@ func (g *game) resetPlay() {
 	for k := range g.sim.NPCs {
 		t := &npcTarget{g: g, k: k}
 		if n := g.sim.NPCs[k]; !n.Alive() { // already down (quickload)
-			t.dying, t.fallYaw = deathTicks+1, n.Yaw+math.Pi
+			t.dying, t.fallYaw = 1, n.Yaw+math.Pi // the ragdoll slumps again
 		}
 		g.npcTargets = append(g.npcTargets, t)
 	}
@@ -174,6 +176,9 @@ func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 			}
 		}
 		g.weapon = wCrossbow
+	case k == glfw.KeyQ && g.kickWait == 0 && s.Player.Carrying < 0:
+		s.Kick()
+		g.kickWait = kickTicks
 	case k == glfw.KeyG:
 		if s.Player.Carrying >= 0 {
 			s.DropBody()
@@ -287,7 +292,10 @@ func (g *game) tickPlay() {
 	if g.swing > 0 {
 		g.swing--
 	}
-	for _, t := range g.npcTargets { // NPCs going down topple, arrows or not
+	if g.kickWait > 0 {
+		g.kickWait--
+	}
+	for _, t := range g.npcTargets { // NPCs going down or kicked ragdoll, arrows or not
 		t.tickFall()
 	}
 	g.tickArrows()

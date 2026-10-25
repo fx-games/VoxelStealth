@@ -3,8 +3,8 @@ package main
 // Exact arrow hits on NPCs and their deaths, copied and adapted from VoxelLib
 // cmd/explorer/crossbow.go: arrows test the NPC's animated triangles in the
 // pose last drawn, stick in the bone they hit and ride it. A killed (or
-// knocked out) NPC freezes in its pose and topples over the way the arrow
-// was flying, 90° over a second. Unlike the explorer, bodies stay: they can
+// knocked out) NPC goes limp as a ragdoll pushed the way the arrow was
+// flying, and a kicked one flies as one (tickFall). Unlike the explorer, bodies stay: they can
 // be carried and hidden.
 
 import (
@@ -14,11 +14,10 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/memmaker/voxellib/model"
+	"github.com/memmaker/voxellib/ragdoll"
 	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/render"
 )
-
-const deathTicks = 20 // falling over
 
 // shapeInfo is per-model data for exact hits.
 type shapeInfo struct {
@@ -44,8 +43,9 @@ type npcTarget struct {
 	g *game
 	k int
 
-	dying   int     // ticks since the NPC went down (0 = standing)
-	fallYaw float64 // direction it falls
+	dying   int           // ticks since the NPC went down (0 = standing)
+	fallYaw float64       // direction it falls
+	doll    *ragdoll.Doll // down or kicked: its limbs
 
 	// As last drawn, for exact hits and arrows riding bones.
 	drawn                        bool
@@ -178,37 +178,47 @@ func (t *npcTarget) isHead(part int) bool {
 	return part >= 0 && part < len(h) && h[part]
 }
 
-// fall starts the NPC toppling over toward yaw.
+// fall starts the NPC falling over toward yaw.
 func (t *npcTarget) fall(yaw float64) {
 	if t.dying == 0 {
 		t.dying, t.fallYaw = 1, yaw
 	}
 }
 
-// tickFall advances the fall; NPCs that went down without an arrow topple
-// away from the player who struck them (blade, blackjack), or backwards
-// when nobody is near (fire).
+// tickFall ragdolls an NPC that went down or was kicked: a VoxelLib Doll
+// that follows its body. NPCs that went down without an arrow fall away
+// from the player who struck them (blade, blackjack), or backwards when
+// nobody is near (fire); kicked ones fly as their body does.
 func (t *npcTarget) tickFall() {
-	n := t.g.sim.NPCs[t.k]
+	s := t.g.sim
+	n := s.NPCs[t.k]
+	flying := s.Airborne(t.k)
 	switch {
-	case n.Alive():
-		t.dying = 0
+	case n.Alive() && !flying:
+		t.dying, t.doll = 0, nil
+		return
 	case t.dying == 0:
 		yaw := n.Yaw + math.Pi
-		if d := n.Pos().Sub(t.g.sim.Player.Pos); d.X*d.X+d.Z*d.Z < 9 {
+		if d := n.Pos().Sub(s.Player.Pos); d.X*d.X+d.Z*d.Z < 9 {
 			yaw = math.Atan2(d.X, -d.Z) // yaw convention: 0 faces -Z
 		}
 		t.fall(yaw)
-	case t.dying <= deathTicks:
+	default:
 		t.dying++
 	}
+	b := &n.Body
+	if t.doll == nil {
+		t.doll = ragdoll.New(t.skin().model, creatureMatrix(b.X, b.Y, b.Z, n.Yaw, 0, 0))
+		v := mgl32.Vec3{float32(b.VX), float32(b.VY), float32(b.VZ)}
+		if !flying { // a shove the way it falls
+			v = mgl32.Vec3{float32(math.Sin(t.fallYaw)) * 0.08, 0, -float32(math.Cos(t.fallYaw)) * 0.08}
+		}
+		t.doll.Push(v, 0.6)
+	}
+	t.doll.Follow(b.X, b.Y, b.Z, 0.3)
+	t.doll.Step(collide.SolidsFunc(s.W.Solid))
 }
 
-// deathTilt is how far the NPC has fallen over (radians).
-func (t *npcTarget) deathTilt(alpha float64) float64 {
-	if t.dying == 0 {
-		return 0
-	}
-	f := math.Min(1, (float64(t.dying-1)+alpha)/deathTicks)
-	return math.Sqrt(f) * math.Pi / 2
-}
+// deathTilt is how far the NPC model is tipped over (radians): never,
+// now that the fallen ragdoll.
+func (t *npcTarget) deathTilt(alpha float64) float64 { return 0 }

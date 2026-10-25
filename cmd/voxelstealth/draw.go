@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"github.com/memmaker/voxellib/particles"
 	"image"
 	"image/color"
 	"image/png"
@@ -13,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/memmaker/voxellib/particles"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/go-gl/mathgl/mgl64"
 	"github.com/memmaker/voxellib/importer/bbmodel"
@@ -21,15 +21,6 @@ import (
 	"github.com/memmaker/voxellib/voxel/render"
 	"github.com/memmaker/voxelstealth/sim"
 )
-
-// npcModels maps a mission's NPC model names to cleannrooster models
-// (placeholders until our own art; see ASSETS.md).
-var npcModels = map[string]string{
-	"guard":   "templarmob",
-	"captain": "cityguardian",
-	"servant": "peasant",
-	"lord":    "archmagefire",
-}
 
 // crossbowGroup is the bone holding the crossbow in the pack's artmob.
 const crossbowGroup = "repeater_crossbow_arrow"
@@ -106,26 +97,13 @@ func (g *game) loadAssets(dir, texDir string) error {
 	if err != nil {
 		return err
 	}
-	g.skins = map[string]*npcSkin{}
 	g.bowModel = -1
 	for _, m := range p.Models {
-		for key, name := range npcModels {
-			if m.Name == name {
-				h, err := g.modelRend.Add(m)
-				if err != nil {
-					return err
-				}
-				g.skins[key] = &npcSkin{model: m, handle: h}
-			}
-		}
 		if bow := m.Subtree(crossbowGroup); bow != nil && g.bowModel < 0 {
 			if g.bowModel, err = g.modelRend.Add(bow); err != nil {
 				return err
 			}
 		}
-	}
-	if len(g.skins) == 0 {
-		return fmt.Errorf("no NPC models found in %s", dir)
 	}
 	g.props, g.wicks, g.fp = map[string]int{}, map[string][]mgl32.Vec3{}, map[int]*model.Animator{}
 	for name, parts := range propParts {
@@ -339,7 +317,9 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		tilt := t.deathTilt(alpha)
 		t.drawn, t.drawX, t.drawY, t.drawZ, t.drawYaw, t.drawTilt = true, x, y, z, n.Yaw, tilt
 		t.drawFrame++
-		if n.Alive() { // the dead keep their last pose
+		if t.doll != nil { // down or kicked: limp
+			a.skin = t.doll.Skin(creatureMatrix(x, y, z, n.Yaw, 0, 0), float32(alpha), a.skin)
+		} else if n.Alive() {
 			if clip := clipFor(sk.model, n.Moving); clip != a.clip {
 				a.clip = clip
 				a.anim.Play(clip, false)

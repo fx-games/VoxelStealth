@@ -73,10 +73,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer glfw.Terminate()
-	glfw.WindowHint(glfw.ContextVersionMajor, 3)
-	glfw.WindowHint(glfw.ContextVersionMinor, 3)
-	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
-	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
+	render.WindowHints()
 	if *shot != "" {
 		// Automated run: don't take focus from whatever the user is doing.
 		glfw.WindowHint(glfw.Focused, glfw.False)
@@ -86,8 +83,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.MakeContextCurrent()
-	glfw.SwapInterval(1)
+	if err := render.Init(win, true); err != nil {
+		log.Fatal(err)
+	}
 
 	pack, err := respack.Open(filepath.Join(*texDir, "rpg16pack"))
 	if err != nil {

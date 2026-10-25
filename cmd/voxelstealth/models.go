@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxellib/importer/bbmodel"
@@ -23,8 +24,11 @@ import (
 	"github.com/memmaker/voxelstealth/sim"
 )
 
-// loadModels adds the file-based props to g.props.
+// loadModels adds the NPCs (loadNPCs) and the file-based props to g.props.
 func (g *game) loadModels(dir string) error {
+	if err := g.loadNPCs(dir); err != nil {
+		return err
+	}
 	geo, err := os.ReadFile(filepath.Join(dir, "chest.geo.json"))
 	if err != nil {
 		return err
@@ -310,4 +314,42 @@ func torchModel(o *sim.Object) string {
 		name += "_lit"
 	}
 	return name
+}
+
+// loadNPCs dresses the Minecraft player model (player.gltf, made by
+// cmd/buildplayer) in each NPC model's skin, ../skins/<model>.png beside
+// the models (64×64 Minecraft skins); a model without one wears the
+// placeholder, which is also "guard", the fallback.
+func (g *game) loadNPCs(dir string) error {
+	base, err := gltf.LoadFile(filepath.Join(dir, "player.gltf"))
+	if err != nil {
+		return err
+	}
+	g.skins = map[string]*npcSkin{}
+	add := func(name string, m *model.Model) error {
+		h, err := g.modelRend.Add(m)
+		g.skins[name] = &npcSkin{model: m, handle: h}
+		return err
+	}
+	if err := add("guard", base); err != nil {
+		return err
+	}
+	pngs, _ := filepath.Glob(filepath.Join(dir, "..", "skins", "*.png"))
+	for _, p := range pngs {
+		f, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		img, err := png.Decode(f)
+		f.Close()
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		m := *base
+		m.Textures = []image.Image{img}
+		if err := add(strings.TrimSuffix(filepath.Base(p), ".png"), &m); err != nil {
+			return err
+		}
+	}
+	return nil
 }

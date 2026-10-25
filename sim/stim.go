@@ -36,6 +36,8 @@ const (
 	StimShock  Stim = "shock"  // electricity: live in water, kills
 	StimPierce Stim = "pierce" // broadheads, the blade (Intensity: damage)
 	StimBash   Stim = "bash"   // the blackjack
+	StimKick   Stim = "kick"   // the player's kick (Extra "yaw": the way it sends things)
+	StimSlam   Stim = "slam"   // a thrown body striking something (Intensity: m/s; Source: the body)
 	StimBlast  Stim = "blast"  // explosions
 	StimFlash  Stim = "flash"  // flash bombs: blinds whoever sees it (Intensity: ticks)
 	StimNoise  Stim = "noise"  // sound through the room graph (Intensity: loudness, Extra "sound")
@@ -138,6 +140,8 @@ func (w simWorld) ArchetypeAt(c Cell) string {
 		return "air"
 	case b == BlockTNT:
 		return "tnt"
+	case IsSpikes(b):
+		return "spikes"
 	case s.burnable(c):
 		return "flammable_block"
 	}
@@ -310,6 +314,8 @@ func init() { // in init: responses stimulate in turn
 		"notice_body": npc((*Sim).noticeBody),
 		"notice_fire": npc((*Sim).noticeFire),
 		"blast_block": cell(blastBlock),
+		"shove":       npc((*Sim).shove),
+		"impale":      impale,
 		"strike": func(s *Sim, d Delivery, _ []string) bool {
 			why, _ := d.St.Extra["why"].(string)
 			s.HurtPlayer(int(d.Intensity), why)
@@ -455,9 +461,13 @@ func dazzled(s *Sim, e Vec3, yaw float64, p Vec3) bool {
 }
 
 // knockOut is a bash: the unaware (or blinded) drop, the fighting only notice.
-func (s *Sim) knockOut(k int, _ Delivery, _ []string) bool {
+// "knock_out hard" drops even the fighting (a slam into a wall).
+func (s *Sim) knockOut(k int, _ Delivery, args []string) bool {
 	n := s.NPCs[k]
-	if n.State() == StateCombat && n.Blind() == 0 {
+	if !n.alive() {
+		return false
+	}
+	if n.State() == StateCombat && n.Blind() == 0 && len(args) == 0 {
 		s.emit(n.pos(), 20, "thud", -1)
 		s.alertNPC(k, s.Player.Pos)
 		return true

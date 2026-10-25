@@ -828,3 +828,41 @@ func burningOil(s *Sim) int {
 	}
 	return n
 }
+
+// A kick sends a guard flying into the wall, which knocks it out; onto
+// spikes, which impale it; and kicks a door in.
+func TestKick(t *testing.T) {
+	w, m := twoRooms()
+	m.NPCs = []*NPCDef{guard(Vec3{8, 1, 3.5}, 0)}
+	s := New(w, m)
+	s.Player.Pos, s.Player.Yaw = Vec3{6.5, 1, 3.5}, math.Pi/2 // facing +X, the wall at x 10
+	if !s.Kick() || !s.Airborne(0) {
+		t.Fatal("kick missed")
+	}
+	run(s, 2*TicksPerSecond)
+	if g := s.NPCs[0]; g.State() != StateUnconscious || s.Airborne(0) {
+		t.Fatalf("guard %v at %v, airborne %v; want knocked out against the wall", g.State(), g.pos(), s.Airborne(0))
+	}
+
+	w, m = twoRooms()
+	for x := 5; x <= 9; x++ {
+		for z := 1; z <= 6; z++ {
+			w.b[Cell{x, 1, z}] = "minecraft:pointed_dripstone[thickness=tip,vertical_direction=up]"
+		}
+	}
+	m.NPCs = []*NPCDef{guard(Vec3{4, 1, 3.5}, 0)}
+	s = New(w, m)
+	s.Player.Pos, s.Player.Yaw = Vec3{2.5, 1, 3.5}, math.Pi/2
+	s.Kick()
+	run(s, 2*TicksPerSecond)
+	if g := s.NPCs[0]; g.State() != StateDead {
+		t.Fatalf("guard %v at %v; want impaled on the spikes", g.State(), g.pos())
+	}
+
+	w, m = twoRooms()
+	s = New(w, m)
+	s.Player.Pos, s.Player.Yaw = Vec3{9, 1, 5.5}, math.Pi/2
+	if !s.Kick() || !s.Objects[0].Open() {
+		t.Fatal("door not kicked in")
+	}
+}

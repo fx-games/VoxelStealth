@@ -7,6 +7,7 @@ import (
 
 	"github.com/memmaker/stimres"
 	"github.com/memmaker/voxellib/character"
+	"github.com/memmaker/voxellib/ragdoll"
 	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/nav"
 )
@@ -66,6 +67,7 @@ type NPC struct {
 	ID, Name, Kind, Model string
 	Voice                 string
 	Body                  character.Character
+	Flight                ragdoll.Flight // kicked: in the air (airborne)
 	Yaw                   float64
 	StateT                int
 	Patrol                []Waypoint
@@ -273,6 +275,10 @@ func (s *Sim) tickNPC(k int) {
 		n.BarkT--
 	}
 	n.Moving, n.Running, n.Attacking = false, false, false
+	if s.Airborne(k) {
+		s.tumble(k)
+		return
+	}
 	if !n.alive() || n.CarriedBy || n.Hidden {
 		if !n.CarriedBy && !n.Hidden {
 			n.Body.Tick(bodyWorld{s}, character.Input{Yaw: n.Yaw}) // fall

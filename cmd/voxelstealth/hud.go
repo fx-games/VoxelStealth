@@ -48,6 +48,7 @@ var helpText = []string{
 	"Shift (or C)      crouch: slow, quiet, harder to see",
 	"Ctrl              run: fast and loud",
 	"E (hold)          use: doors, loot, pick locks, carry bodies, take torches, knock lamps",
+	"Q                 kick: sends people flying (into walls, onto spikes), kicks doors in",
 	"G                 drop the body or torch you carry (E on a chest hides a body)",
 	"1 2 3 4 5         crossbow, blackjack, blade, flash bomb, TNT",
 	"X                 next arrow type: broadhead, water, noisemaker, rope",

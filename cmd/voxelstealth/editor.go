@@ -6,9 +6,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/memmaker/voxellib/voxel"
 	"math"
 	"strings"
+
+	"github.com/memmaker/voxellib/voxel"
 
 	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/voxel/physics"

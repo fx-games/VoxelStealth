@@ -12,7 +12,7 @@ Patrol: 10.5,64,58.5 3; 9.5,64,8.5 4 90; 53.5,64,8.5 3; 53.5,64,47.5 4 270; 40.5
 ID: bertram
 Name: Guard Bertram
 Kind: guard
-Model: guard
+Model: guard_green
 Voice: generic-guard-b
 Pos: 31.5,64,36.5
 Yaw: 0
@@ -21,7 +21,7 @@ Patrol: 31.5,64,36.5 6 180; 31.5,64,26.5 1; 20.5,64,15.5 4 0; 34.5,64,15.5 4 90;
 ID: cuthbert
 Name: Guard Cuthbert
 Kind: guard
-Model: guard
+Model: guard_militia
 Voice: generic-guard-a
 Pos: 33.5,69,13.5
 Yaw: 0

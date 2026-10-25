@@ -59,6 +59,11 @@ func yawTo(from, to Vec3) float64        { return math.Atan2(to.X-from.X, -(to.Z
 func angleDiff(a, b float64) float64     { return math.Abs(math.Remainder(a-b, 2*math.Pi)) }
 func forward(yaw float64) (x, z float64) { return math.Sin(yaw), -math.Cos(yaw) }
 
+// IsSpikes reports whether block b is spikes: dripstone pointing up.
+func IsSpikes(b string) bool {
+	return strings.HasPrefix(b, "minecraft:pointed_dripstone") && !strings.Contains(b, "vertical_direction=down")
+}
+
 // Cell is an integer block position.
 type Cell struct{ X, Y, Z int }
 

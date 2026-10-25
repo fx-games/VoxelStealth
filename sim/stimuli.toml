@@ -10,6 +10,10 @@
 parent = "impact"
 [stim.bash]
 parent = "impact"
+[stim.kick]
+parent = "impact"
+[stim.slam]
+parent = "impact"
 [stim.blast]
 [stim.water]
 [stim.oil]
@@ -123,6 +127,10 @@ parent = "object"
 [[archetype.door.receptron]]
 stim = "blast"
 effects = ["destroy"]
+[[archetype.door.receptron]] # kicked in
+stim = "kick"
+if = ["!locked", "!open"]
+effects = ["call open_door", "emit noise 40 sound sound=crash"]
 [[archetype.door.receptron]]
 stim = "frob"
 if = ["locked"]
@@ -204,6 +212,17 @@ props = { alertness = 1 }
 [[archetype.npc.receptron]]
 stim = "pierce"
 effects = ["call wound"]
+[[archetype.npc.receptron]] # kicked: alive, out cold or dead, it flies
+stim = "kick"
+effects = ["call shove"]
+[[archetype.npc.receptron]] # slammed into a wall or the floor: the hardest kills,
+stim = "slam"               # the hard knock out
+min = 22
+effects = ["call kill player slammed", "stop"]
+[[archetype.npc.receptron]]
+stim = "slam"
+min = 10
+effects = ["call knock_out hard"]
 [[archetype.npc.receptron]]
 stim = "bash"
 effects = ["call knock_out"]
@@ -337,6 +356,12 @@ parent = "cell"
 [[archetype.flammable_block.receptron]]
 stim = "fire"
 effects = ["call burn_block"]
+
+[archetype.spikes] # pointed dripstone: impales whatever is thrown onto it
+parent = "cell"
+[[archetype.spikes.receptron]]
+stim = "slam"
+effects = ["call impale"]
 
 [archetype.tnt]
 parent = "cell"
