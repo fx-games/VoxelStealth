@@ -3,7 +3,6 @@ package sim
 import (
 	_ "embed"
 	"math"
-	"slices"
 	"strings"
 
 	"github.com/memmaker/stimres"
@@ -338,6 +337,8 @@ func init() { // in init: responses stimulate in turn
 		"catch_fire":    cell(catchFire),
 		"burn_block":    cell(burnBlock),
 		"prime_tnt":     cell(primeTNT),
+		"fire_tick":     cell(fireTick),
+		"seep":          cell(seep),
 		"electrify":     cell(func(s *Sim, c Cell, _ Delivery) bool { s.electrify(c); return true }),
 		"ignite_oil":    cell((*Sim).igniteOil),
 		"unlight_above": cell(func(s *Sim, c Cell, _ Delivery) bool { s.unlightAbove(c); return true }),
@@ -537,32 +538,27 @@ func (s *Sim) Live(c Cell) bool { return s.B.Bool(cellR(c), "live") }
 func (s *Sim) OilBurning(c Cell) bool { return s.Liquid[c] == StimOil && s.B.Bool(cellR(c), "burning") }
 
 // pourOut pools amount cells of liquid from c: a wet spot at once, the
-// rest spreads (tickSpills).
+// rest seeps out a cell at a time (seep).
 func (s *Sim) pourOut(liquid Stim, c Cell, amount int) {
 	s.pour(liquid, c, 14)
 	if n := amount - 1; n > 0 {
-		s.Spills = append(s.Spills, spill{Liquid: liquid, At: c, Left: n, Next: spillEvery})
+		r := cellR(c)
+		s.B.Set(r, "spill", liquid)
+		s.B.Add(r, "spill_left", float64(n))
 	}
 }
 
-// spill is liquid still spreading from where it was poured.
-type spill struct {
-	Liquid     Stim
-	At         Cell
-	Left, Next int // cells to come; ticks to the next one
-}
+const spillEvery = TicksPerSecond / 3 // a puddle grows a cell at a time: the seep period in stimuli.toml
 
-const spillEvery = TicksPerSecond / 3 // a puddle grows a cell at a time
-
-func (s *Sim) tickSpills() {
-	for i := range s.Spills {
-		sp := &s.Spills[i]
-		if sp.Next--; sp.Next <= 0 {
-			s.pour(sp.Liquid, sp.At, 14)
-			sp.Left, sp.Next = sp.Left-1, spillEvery
-		}
+// seep pours the next cell of a spill still spreading from c.
+func seep(s *Sim, c Cell, _ Delivery) bool {
+	r := cellR(c)
+	s.pour(s.B.String(r, "spill"), c, 14)
+	if s.B.Add(r, "spill_left", -1); s.B.Float(r, "spill_left") <= 0 {
+		s.B.Clear(r, "spill")
+		s.B.Clear(r, "spill_left")
 	}
-	s.Spills = slices.DeleteFunc(s.Spills, func(sp spill) bool { return sp.Left <= 0 })
+	return true
 }
 
 var liquidBlock = map[Stim]string{StimWater: BlockPuddle, StimOil: BlockOil}

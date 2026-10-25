@@ -10,7 +10,7 @@ import (
 // difficulty, no rain): a burning cell ages 0..15 on fire ticks 30..39
 // ticks apart, dies without fuel beside it, eats flammable blocks on its
 // faces and leaps to empty cells beside fuel, from 1 below to 4 above.
-// Each reach is a fire stimulus whose Source is the burning cell; the
+// A burning cell flickers every tick (fireTick). Each reach is a fire stimulus whose Source is the burning cell; the
 // blocks and empty cells answer through their receptrons (burnBlock,
 // catchFire). A burning cell is an air cell with the properties burning,
 // fire_age (0..15) and fire_next (ticks to its next fire tick).
@@ -131,52 +131,50 @@ func (s *Sim) extinguish(c Cell) {
 	s.unlight(c)
 }
 
-func (s *Sim) tickFire() {
-	for _, c := range s.FireCells() {
-		f, ok := s.fireAt(c)
-		if !ok { // put out this tick
-			continue
-		}
-		if s.Now%10 == 0 { // flames: burn what stands in the cell
-			s.Stimulate(s.fireStim(c, c.Center(), 0.45, 1))
-		}
-		if f.Next--; f.Next > 0 {
-			s.setFire(c, f)
-			continue
-		}
-		f.Next = s.fireDelay()
-		f.Age = min(15, f.Age+s.rng.Intn(3)/2)
+// fireTick is a burning cell's flicker (a self source every tick): its
+// flames burn what stands in it, and on its fire tick it ages, dies out
+// or spreads.
+func fireTick(s *Sim, c Cell, _ Delivery) bool {
+	f, ok := s.fireAt(c)
+	if !ok { // put out this tick, or burning oil
+		return false
+	}
+	if s.Now%10 == 0 { // flames: burn what stands in the cell
+		s.Stimulate(s.fireStim(c, c.Center(), 0.45, 1))
+	}
+	if f.Next--; f.Next > 0 {
 		s.setFire(c, f)
-		below := c.Add(0, -1, 0)
-		fuel := false
-		for _, d := range faces {
-			fuel = fuel || s.burnable(c.Add(d.X, d.Y, d.Z))
+		return true
+	}
+	f.Next = s.fireDelay()
+	f.Age = min(15, f.Age+s.rng.Intn(3)/2)
+	s.setFire(c, f)
+	below := c.Add(0, -1, 0)
+	fuel := false
+	for _, d := range faces {
+		fuel = fuel || s.burnable(c.Add(d.X, d.Y, d.Z))
+	}
+	if !fuel && (!s.W.Solid(below.X, below.Y, below.Z) || f.Age > 3) ||
+		f.Age == 15 && s.rng.Intn(4) == 0 && !s.burnable(below) {
+		s.extinguish(c)
+		return true
+	}
+	s.emit(c.Floor(), 30, "fire", -1)
+	for _, d := range faces { // eat the blocks around
+		if n := c.Add(d.X, d.Y, d.Z); !s.empty(n) {
+			s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
 		}
-		if !fuel && (!s.W.Solid(below.X, below.Y, below.Z) || f.Age > 3) ||
-			f.Age == 15 && s.rng.Intn(4) == 0 && !s.burnable(below) {
-			s.extinguish(c)
-			continue
-		}
-		s.emit(c.Floor(), 30, "fire", -1)
-		for _, d := range faces { // eat the blocks around
-			if n := c.Add(d.X, d.Y, d.Z); !s.empty(n) {
-				s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
-			}
-		}
-		for dx := -1; dx <= 1; dx++ { // leap to fuel nearby
-			for dz := -1; dz <= 1; dz++ {
-				for dy := -1; dy <= 4; dy++ {
-					if n := c.Add(dx, dy, dz); n != c && s.igniteOdds(n) > 0 {
-						s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
-					}
+	}
+	for dx := -1; dx <= 1; dx++ { // leap to fuel nearby
+		for dz := -1; dz <= 1; dz++ {
+			for dy := -1; dy <= 4; dy++ {
+				if n := c.Add(dx, dy, dz); n != c && s.igniteOdds(n) > 0 {
+					s.Stimulate(s.fireStim(c, n.Center(), 0.01, 0))
 				}
 			}
 		}
 	}
-	if s.reroom { // burnt walls and floors open new ways
-		s.reroom = false
-		s.init()
-	}
+	return true
 }
 
 // fireStim is fire from the burning cell c reaching around pos.

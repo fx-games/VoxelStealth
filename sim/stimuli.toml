@@ -21,6 +21,8 @@ parent = "impact"
 [stim.body]       # a body lying about being seen
 [stim.blaze]      # a fire being seen
 [stim.frob]       # deliberate use: Extra held = the use key is held down
+[stim.flicker]    # a burning cell's own tick
+[stim.seep]       # a spill's own tick: the next cell pours
 [stim.drip]       # a running faucet's own tick
 
 # ---- Objects ----
@@ -198,6 +200,7 @@ props = { liquid = "oil" }
 # ---- People ----
 
 [archetype.npc]
+props = { alertness = 1 }
 [[archetype.npc.receptron]]
 stim = "pierce"
 effects = ["call wound"]
@@ -281,6 +284,22 @@ period = 1
 [[archetype.cell.receptron]] # glass, TNT and liquids stop it first
 stim = "blast"
 effects = ["call blast_block"]
+[[archetype.cell.receptron]]
+stim = "flicker"
+effects = ["call fire_tick"]
+[[archetype.cell.source]] # a fire burning here: it ages and spreads
+stim = "flicker"
+medium = "self"
+period = 1
+if = ["burning"]
+[[archetype.cell.receptron]]
+stim = "seep"
+effects = ["call seep"]
+[[archetype.cell.source]] # a spill spreading from here, a cell at a time
+stim = "seep"
+medium = "self"
+period = 6
+if = ["spill_left > 0"]
 [[archetype.cell.receptron]] # a liquid landing here pools
 stim = "water"
 min = 1

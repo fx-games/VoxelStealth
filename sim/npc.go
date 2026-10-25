@@ -68,7 +68,6 @@ type NPC struct {
 	Body                  character.Character
 	Yaw                   float64
 	StateT                int
-	Alertness             float64 // grows after each alert: they see and hear better
 	Patrol                []Waypoint
 	PatrolI               int
 	Wait                  int
@@ -116,6 +115,10 @@ func (n *NPC) setState(st NPCState) { n.b.Set(n.r(), "state", st.String()) }
 func (n *NPC) Suspicion() float64     { return n.b.Float(n.r(), "suspicion") }
 func (n *NPC) setSuspicion(v float64) { n.b.Set(n.r(), "suspicion", v) }
 
+// Alertness grows after each alert, up to 2: they see and hear better.
+func (n *NPC) Alertness() float64 { return n.b.Float(n.r(), "alertness") }
+func (n *NPC) alert(by float64)   { n.b.Set(n.r(), "alertness", math.Min(2, n.Alertness()+by)) }
+
 // Health is what it has left of npcHealth.
 func (n *NPC) Health() int { return int(n.b.Float(n.r(), "health")) }
 
@@ -127,7 +130,7 @@ func (n *NPC) Blind() int { return n.b.Left(n.r(), "blind") }
 const npcHealth = 10
 
 func newNPC(d *NPCDef) *NPC {
-	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw, Alertness: 1,
+	n := &NPC{ID: d.ID, Name: d.Name, Kind: d.Kind, Model: d.Model, Voice: d.Voice, Yaw: d.Yaw,
 		Patrol: slices.Clone(d.Patrol), Keys: slices.Clone(d.Keys)}
 	n.Body = *character.New(d.Pos.X, d.Pos.Y, d.Pos.Z)
 	if n.Name == "" {
@@ -344,7 +347,7 @@ func (s *Sim) perceive(k int) bool {
 	// sounds (hearNoise) came through the broker.
 	got := n.Stirred
 	if n.Sight > 0 {
-		n.setSuspicion(n.Suspicion() + n.Sight*n.Alertness)
+		n.setSuspicion(n.Suspicion() + n.Sight*n.Alertness())
 		n.LKP = s.Player.Pos
 		if n.Suspicion() >= AlertAt {
 			n.LastSeen = 0
@@ -456,7 +459,7 @@ func (s *Sim) decide(k int, stim bool) {
 		if n.StateT > 30*TicksPerSecond {
 			s.setState(k, StatePatrol)
 			n.setSuspicion(SuspiciousAt - 10)
-			n.Alertness = math.Min(2, n.Alertness+0.25)
+			n.alert(0.25)
 			s.bark(k, "Must have gone. I'll keep my eyes open.")
 		}
 	case StateCombat:
@@ -596,7 +599,7 @@ func (s *Sim) noticeBody(k int, d Delivery, _ []string) bool {
 		s.bark(k, "Wake up! Who did this?")
 	}
 	s.emit(n.eye(), 60, "alarm", k)
-	n.Alertness = math.Min(2, n.Alertness+0.5)
+	n.alert(0.5)
 	if n.IsGuard() {
 		n.setSuspicion(90)
 		s.setState(k, StateSearch)

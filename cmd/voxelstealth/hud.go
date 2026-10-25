@@ -259,8 +259,8 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 	if d := s.Describe(g.target); d != "" && s.Outcome == sim.Running {
 		c.text(d, (w-c.width(d))/2, h/2+30, cyan)
 		if g.target.Obj >= 0 {
-			if o := s.Objects[g.target.Obj]; o.Locked() && o.Pick > 0 {
-				f := float64(o.Pick) / (3 * sim.TicksPerSecond)
+			if o := s.Objects[g.target.Obj]; o.Locked() && o.Pick() > 0 {
+				f := float64(o.Pick()) / (3 * sim.TicksPerSecond)
 				c.rect(w/2-40, h/2+36, w/2+40, h/2+42, color.NRGBA{30, 30, 30, 220})
 				c.rect(w/2-40, h/2+36, w/2-40+int(80*f), h/2+42, gold)
 			}

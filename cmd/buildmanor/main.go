@@ -323,7 +323,7 @@ func writeMission(b *builder, dir string) {
 		return o
 	}
 	loot := func(id, name string, value int, x, y, z float64) *sim.Object {
-		return &sim.Object{ID: id, Kind: sim.KindLoot, Name: name, Value: value, Pos: v(x, y, z)}
+		return &sim.Object{ID: id, Kind: sim.KindLoot, Name: name, StartValue: value, Pos: v(x, y, z)}
 	}
 	door := func(id string, x, y, z float64) *sim.Object {
 		return &sim.Object{ID: id, Kind: sim.KindDoor, Name: "Door", Pos: v(x, y, z)}
@@ -362,14 +362,14 @@ func writeMission(b *builder, dir string) {
 		{ID: "bed_tapestry", Kind: sim.KindFlammable, Name: "Tapestry", Pos: v(18.5, U, 23.5)},
 		{ID: "hay", Kind: sim.KindFlammable, Name: "Hay", Pos: v(47.5, G, 54.5)},
 		// Loot.
-		{ID: "chalice", Kind: sim.KindLoot, Name: "Ashworth Chalice", Value: 300, Pos: v(31.5, C+1, 15.5)},
+		{ID: "chalice", Kind: sim.KindLoot, Name: "Ashworth Chalice", StartValue: 300, Pos: v(31.5, C+1, 15.5)},
 		loot("plate1", "Silver plate", 50, 21.5, G+1, 20.5), loot("plate2", "Silver plate", 50, 26.5, G+1, 20.5),
 		loot("candelabrum", "Gold candelabrum", 75, 30.5, G+1, 20.5), loot("silverware", "Silverware", 60, 17.5, G+1, 40.5),
 		loot("purse", "Coin purse", 40, 39.5, G+1, 40.5), loot("gems", "Gemstones", 150, 46.5, U+1, 19.5),
 		loot("idol", "Golden idol", 120, 35.5, U, 22.5), loot("ring", "Signet ring", 90, 47.5, U+1, 23.5),
 		loot("wine", "Vintage wine", 45, 47.5, C, 20.5), loot("necklace", "Pearl necklace", 110, 16.5, U+1, 12.5),
-		{ID: "jewel_box", Kind: sim.KindChest, Name: "Jewellery chest", Value: 200, Pos: v(28.5, U, 12.5), StartLocked: true, Key: "jewels"},
-		{ID: "vault_chest", Kind: sim.KindChest, Name: "Strongbox", Value: 150, Pos: v(28.5, C, 19.5)},
+		{ID: "jewel_box", Kind: sim.KindChest, Name: "Jewellery chest", StartValue: 200, Pos: v(28.5, U, 12.5), StartLocked: true, Key: "jewels"},
+		{ID: "vault_chest", Kind: sim.KindChest, Name: "Strongbox", StartValue: 150, Pos: v(28.5, C, 19.5)},
 		{ID: "footlocker", Kind: sim.KindChest, Name: "Footlocker", Pos: v(46.5, G, 32.5)},
 		{ID: "pantry", Kind: sim.KindChest, Name: "Pantry chest", Pos: v(16.5, G, 31.5)},
 		// Keys and supplies.

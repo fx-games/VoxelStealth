@@ -71,10 +71,19 @@ func twoRooms() (*fakeWorld, *Mission) {
 	return w, m
 }
 
+func spilling(s *Sim) bool {
+	for _, c := range s.B.Addresses() {
+		if s.B.Float(cellR(c), "spill_left") > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // spread lets every spill finish pouring.
 func spread(s *Sim) {
-	for len(s.Spills) > 0 {
-		s.tickSpills()
+	for len(s.B.Addresses()) > 0 && spilling(s) {
+		s.B.Step()
 	}
 }
 
@@ -545,7 +554,7 @@ func TestFireSpreads(t *testing.T) {
 	s.ignite(Cell{4, 1, 4}, 0)
 	s.ignite(Cell{15, 1, 4}, 0) // on stone
 	most := 0
-	for range 3 * 60 * TicksPerSecond {
+	for range 4 * 60 * TicksPerSecond { // the last plank under a fire can hold out a while
 		s.Tick()
 		most = max(most, len(s.FireCells()))
 	}

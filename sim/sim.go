@@ -56,7 +56,7 @@ type Object struct {
 	ID, Kind, Name         string
 	Pos                    Vec3
 	Yaw                    float64
-	Value                  int    // loot value
+	StartValue             int    // loot value at the start (Value)
 	Key                    string // lock id (doors, chests) or the id a key opens
 	Count                  int    // ammo
 	StartLocked, StartOpen bool
@@ -71,7 +71,6 @@ type Object struct {
 	Flight    int   // ticks in the air; 0 at rest
 	Hard      bool  // thrown at full windup: bashes the first thing it hits
 	Gone      bool  // taken or destroyed
-	Pick      int   // lockpicking progress
 	Hidden    []int // NPC indices of bodies stored inside
 	LightCell Cell  // where its light block is, when lit
 	HasLight  bool
@@ -94,6 +93,17 @@ func (o *Object) Running() bool { return o.is("running") } // faucets
 func (o *Object) Fallen() bool  { return o.is("fallen") }  // a torch or lamp lying on the floor
 func (o *Object) Held() bool    { return o.is("held") }    // torch in the player's hand
 func (o *Object) Burnt() bool   { return o.is("burnt") }
+
+// num reads number property prop; a mission's object has its Start value.
+func (o *Object) num(prop string) int {
+	if o.b == nil {
+		return map[string]int{"value": o.StartValue}[prop]
+	}
+	return int(o.b.Float(stimres.Object[Cell](o.R), prop))
+}
+
+func (o *Object) Value() int { return o.num("value") } // loot value; a chest's what is left inside
+func (o *Object) Pick() int  { return o.num("pick") }  // lockpicking progress, in ticks
 
 // Cells occupied by a door.
 func (o *Object) doorCells() [2]Cell {
@@ -240,7 +250,6 @@ type State struct {
 	NPCs        []*NPC
 	Objects     []*Object
 	Liquid      map[Cell]Stim // puddles (feet cells): water or oil; whether live or alight is in the broker
-	Spills      []spill
 	Bombs       []bomb
 	Noisemakers []noisemaker
 	Ropes       []Rope
@@ -301,6 +310,9 @@ func New(w World, m *Mission) *Sim {
 			if v {
 				s.B.Set(r, prop, true)
 			}
+		}
+		if o.StartValue != 0 {
+			s.B.Set(r, "value", o.StartValue)
 		}
 		s.Objects = append(s.Objects, &o)
 	}
@@ -438,9 +450,11 @@ func (s *Sim) Tick() {
 	s.Time += s.Mission.TimeScale / TicksPerSecond
 	s.tickPlayer()
 	s.tickObjects()
-	s.B.Step() // timed properties run out, sources emit (sight among them)
-	s.tickSpills()
-	s.tickFire()
+	s.B.Step()    // timed properties run out, sources emit (sight among them)
+	if s.reroom { // burnt walls and floors open new ways
+		s.reroom = false
+		s.init()
+	}
 	s.tickBombs()
 	for i := range s.NPCs {
 		s.tickNPC(i)
@@ -833,15 +847,15 @@ func (s *Sim) Describe(t Target) string {
 		}
 		return name + " (open)"
 	case KindLoot:
-		return name + " (" + itoa(o.Value) + ")"
+		return name + " (" + itoa(o.Value()) + ")"
 	case KindChest:
 		switch {
 		case s.Player.Carrying >= 0:
 			return name + " (hide body)"
 		case o.Locked() && !s.hasKey(o.Key):
 			return name + " (locked - hold E to pick)"
-		case o.Value > 0:
-			return name + " (" + itoa(o.Value) + " inside)"
+		case o.Value() > 0:
+			return name + " (" + itoa(o.Value()) + " inside)"
 		}
 		return name + " (empty)"
 	case KindTorch, KindLamp:
@@ -907,11 +921,11 @@ func (s *Sim) pickLock(i int, d Delivery, _ []string) bool {
 		}
 		return true
 	}
-	o.Pick++
-	if o.Pick%10 == 1 {
+	s.B.Add(s.objR(i), "pick", 1)
+	if o.Pick()%10 == 1 {
 		s.emit(o.Pos, 14, "lockpick", -1)
 	}
-	if o.Pick >= 3*TicksPerSecond {
+	if o.Pick() >= 3*TicksPerSecond {
 		s.B.Set(s.objR(i), "locked", false)
 		s.emit(o.Pos, 14, "unlock", -1)
 		s.message("Lock picked.")
@@ -957,10 +971,10 @@ func (s *Sim) frobChest(i int, d Delivery, _ []string) bool {
 	if held {
 		return false
 	}
-	if o.Value > 0 {
-		p.Loot += o.Value
-		s.message("Took " + itoa(o.Value) + " in valuables")
-		o.Value = 0
+	if o.Value() > 0 {
+		p.Loot += o.Value()
+		s.message("Took " + itoa(o.Value()) + " in valuables")
+		s.B.Clear(s.objR(i), "value")
 		s.B.Set(r, "open", true)
 		s.emit(o.Pos, 8, "loot", -1)
 	} else {
@@ -975,9 +989,9 @@ func (s *Sim) take(i int, _ Delivery, _ []string) bool {
 	o, p := s.Objects[i], &s.Player
 	switch o.Kind {
 	case KindLoot:
-		p.Loot += o.Value
+		p.Loot += o.Value()
 		s.emit(o.Pos, 8, "loot", -1)
-		s.message("Took " + o.Name + " (" + itoa(o.Value) + ")")
+		s.message("Took " + o.Name + " (" + itoa(o.Value()) + ")")
 	case KindKey:
 		p.Keys = append(p.Keys, o.Key)
 		s.message("Took " + o.Name)

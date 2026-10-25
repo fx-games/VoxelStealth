@@ -238,7 +238,7 @@ func LoadMission(dir string) (*Mission, error) {
 	}
 	for _, r := range recs {
 		o := &Object{ID: r.get("ID"), Kind: r.get("Kind"), Name: r.get("Name"), Yaw: deg(r.get("Yaw")),
-			Value: atoi(r.get("Value")), Key: r.get("Key"), Count: atoi(r.get("Count")),
+			StartValue: atoi(r.get("Value")), Key: r.get("Key"), Count: atoi(r.get("Count")),
 			StartLocked: yes(r.get("Locked")), StartOpen: yes(r.get("Open")), StartLit: yes(r.get("Lit")), StartRunning: yes(r.get("Running")), On: r.get("On")}
 		if o.Pos, err = parseVec(r.get("Pos")); err != nil {
 			return nil, fmt.Errorf("object %s Pos: %w", o.ID, err)
@@ -305,8 +305,8 @@ func (m *Mission) Save(dir string) error {
 		if o.Yaw != 0 {
 			r = append(r, kv{"Yaw", fmtDeg(o.Yaw)})
 		}
-		if o.Value != 0 {
-			r = append(r, kv{"Value", strconv.Itoa(o.Value)})
+		if o.StartValue != 0 {
+			r = append(r, kv{"Value", strconv.Itoa(o.StartValue)})
 		}
 		if o.Count != 0 {
 			r = append(r, kv{"Count", strconv.Itoa(o.Count)})
