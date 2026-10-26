@@ -65,6 +65,7 @@ type weapons struct {
 	target                     sim.Target
 	vkeys                      map[glfw.Key]bool // keys held by a -script
 	vmouse                     bool
+	vright                     bool // a -script holds the throw button
 	shotReq                    bool
 	ropeState
 }
@@ -95,7 +96,7 @@ func (g *game) resetPlay() {
 }
 
 func (g *game) setupInput() {
-	g.capture(true)
+	g.capture(!g.menuOpen()) // the title menu wants the cursor
 	g.win.SetKeyCallback(func(w *glfw.Window, k glfw.Key, sc int, a glfw.Action, mods glfw.ModifierKey) {
 		if g.menuOpen() {
 			g.menuKey(k, a, mods)
@@ -128,8 +129,11 @@ func (g *game) setupInput() {
 			g.menuScroll(dy)
 			return
 		}
-		if g.editing && g.sim == nil {
+		switch {
+		case g.editing && g.sim == nil:
 			g.editorScroll(dy)
+		case g.sim != nil && g.ready && dy != 0:
+			g.cycleWeapon(map[bool]int{true: -1, false: 1}[dy > 0])
 		}
 	})
 	lastX, lastY := g.win.GetCursorPos()
@@ -195,8 +199,6 @@ func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 		g.restart()
 	case k == glfw.KeyR:
 		g.startSpan()
-	case k == glfw.KeyT:
-		g.throwWeapon()
 	case k >= glfw.Key1 && k < glfw.Key1+numWeapons:
 		g.selectWeapon(int(k - glfw.Key1))
 	case k == glfw.KeyX:
@@ -243,8 +245,11 @@ func (g *game) movementInput() character.Input {
 	in.Forward = axis(g.key(glfw.KeyW), g.key(glfw.KeyS))
 	in.Strafe = axis(g.key(glfw.KeyD), g.key(glfw.KeyA))
 	in.Jump = g.key(glfw.KeySpace)
-	in.Sneak = g.key(glfw.KeyLeftShift) || g.key(glfw.KeyC)
-	in.Sprint = g.key(glfw.KeyLeftControl)
+	in.Sneak = g.key(glfw.KeyC)
+	in.Sprint = g.key(glfw.KeyLeftShift)
+	if g.editing && g.sim == nil { // flying: Shift goes down
+		in.Sneak, in.Sprint = g.key(glfw.KeyLeftShift), g.key(glfw.KeyLeftControl)
+	}
 	return in
 }
 
@@ -303,11 +308,22 @@ func (g *game) tickPlay() {
 		} else {
 			g.useHeld = 0
 		}
-		held := g.mouseDown()
+		held, throwing := g.mouseDown(), g.rightDown()
+		torch := s.HeldTorch() >= 0
+		if g.weapon == wExplosive && !torch {
+			throwing = throwing || held // a flash bomb is thrown with either button
+		}
 		switch {
-		case s.HeldTorch() >= 0 || g.weapon == wExplosive:
+		case throwing || g.throwHold > 0: // right mouse: wind up, release to throw what's in hand
 			g.windup = false
-			g.windThrow(held)
+			g.windThrow(throwing)
+		case torch: // left: reach the flame out to set things alight
+			g.windup = false
+			if held && !g.fireWas && g.swing == 0 && s.Kindle(g.eye(), g.viewDir()) {
+				g.swing = swingTicks
+			}
+		case g.weapon == wExplosive:
+			g.windup = false
 		case g.weapon == wTNT:
 			g.windup, g.throwHold = false, 0
 			g.place(held)
@@ -363,27 +379,65 @@ func (g *game) strike(held bool) {
 	}
 }
 
-// windThrow winds up a throw (the held torch, else a flash bomb) while the
-// button is held and throws on its release: the longer the windup the
-// farther, and at full windup hard, bashing the first thing it hits.
+// windThrow winds up a throw of what's in hand (the held torch, else a
+// flash bomb or the wielded weapon) while the right button is held and
+// throws it on release: the longer the windup the farther (a tap barely
+// lobs it, as good as dropping it), and at full windup hard, bashing the
+// first thing it hits. TNT is set down, not thrown.
 func (g *game) windThrow(held bool) {
 	s := g.sim
 	switch {
 	case held && g.swing == 0:
-		if g.throwHold == 0 && s.HeldTorch() < 0 && s.Player.Ammo[sim.AmmoExplosive] > 0 {
-			g.fpHand.Play("windup", true)
+		if g.throwHold == 0 {
+			switch {
+			case s.HeldTorch() >= 0:
+			case g.weapon == wExplosive && s.Player.Ammo[sim.AmmoExplosive] > 0:
+				g.fpHand.Play("windup", true)
+			case throwable[g.weapon] != "" && !g.lost[g.weapon]:
+				if a := g.fp[g.weapon]; a != nil {
+					a.Play("windup", true)
+				}
+			default:
+				return // nothing to throw
+			}
 		}
 		g.throwHold = min(g.throwHold+1, throwTicks)
 	case !held && g.throwHold > 0:
 		k, hard := float64(g.throwHold)/throwTicks, g.throwHold == throwTicks
 		g.throwHold, g.swing = 0, swingTicks
-		if s.HeldTorch() >= 0 {
-			s.ThrowTorch(g.eye(), g.viewDir(), 6+6*k, hard)
-		} else if s.Throw(g.eye(), g.viewDir(), 5+4*k, hard) {
-			g.fpHand.Play("throw", true)
-		} else {
-			g.message("No flash bombs left.")
+		switch {
+		case s.HeldTorch() >= 0:
+			s.ThrowTorch(g.eye(), g.viewDir(), 1+11*k, hard)
+		case g.weapon == wExplosive:
+			if s.Throw(g.eye(), g.viewDir(), 1+8*k, hard) {
+				g.fpHand.Play("throw", true)
+			} else {
+				g.message("No flash bombs left.")
+			}
+		default:
+			g.throwWeapon(k)
 		}
+	}
+}
+
+// rightDown reports the throw button (right mouse) held.
+func (g *game) rightDown() bool {
+	return g.vright || g.captured && !g.swallow && g.win.GetMouseButton(glfw.MouseButtonRight) == glfw.Press
+}
+
+// cycleWeapon (the mouse wheel) wields the next item in hand that's there
+// to use: not a thrown weapon, a blade not taken, or bombs or TNT run out.
+func (g *game) cycleWeapon(d int) {
+	p := &g.sim.Player
+	for i := 1; i < numWeapons; i++ {
+		w := ((g.weapon+d*i)%numWeapons + numWeapons) % numWeapons
+		switch {
+		case g.lost[w], blades[w] != "" && !p.Weapons[blades[w]],
+			w == wExplosive && p.Ammo[sim.AmmoExplosive] == 0, w == wTNT && p.Ammo[sim.AmmoTNT] == 0:
+			continue
+		}
+		g.weapon = w
+		return
 	}
 }
 
@@ -547,11 +601,12 @@ func parseScript(s string) []scriptStep {
 }
 
 var scriptKeys = map[string]glfw.Key{"fwd": glfw.KeyW, "back": glfw.KeyS, "left": glfw.KeyA, "right": glfw.KeyD,
-	"crouch": glfw.KeyLeftShift, "run": glfw.KeyLeftControl, "use": glfw.KeyE, "jump": glfw.KeySpace}
+	"crouch": glfw.KeyC, "run": glfw.KeyLeftShift, "use": glfw.KeyE, "jump": glfw.KeySpace}
 
 type heldKey struct {
 	k     glfw.Key
 	mouse bool
+	right bool // the throw button
 	until int
 }
 
@@ -564,7 +619,9 @@ func (g *game) runScript() {
 	keep := scriptHeld[:0]
 	for _, h := range scriptHeld {
 		if g.playTick >= h.until {
-			if h.mouse {
+			if h.right {
+				g.vright = false
+			} else if h.mouse {
 				g.vmouse = false
 			} else {
 				g.vkeys[h.k] = false
@@ -599,6 +656,9 @@ func (g *game) runScript() {
 			var x, y, z float64
 			fmt.Sscanf(st.arg, "%f,%f,%f", &x, &y, &z)
 			g.player.Teleport(x, y, z)
+		case "throw": // hold the throw button N ticks
+			g.vright = true
+			scriptHeld = append(scriptHeld, heldKey{right: true, until: g.playTick + max(n, 1)})
 		case "fire":
 			g.vmouse = true
 			scriptHeld = append(scriptHeld, heldKey{mouse: true, until: g.playTick + max(n, 1)})

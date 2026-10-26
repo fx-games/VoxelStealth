@@ -525,8 +525,10 @@ func (g *game) drawHand(alpha float64, dt float32) {
 		if g.sim.Objects[i].Lit() {
 			blk = 15
 		}
-		hand := mgl32.Translate3D(-0.35+bobX, -0.45+bobY+0.2*sw+0.25*pull, -0.85-0.3*sw+0.2*pull).
-			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(15 - 60*sw + 40*pull)))
+		// A reach (left mouse, sw) thrusts it forward and tips the flame
+		// ahead; a windup (pull) draws it back.
+		hand := mgl32.Translate3D(-0.35+bobX+0.1*sw, -0.45+bobY+0.08*sw+0.25*pull, -0.85-0.45*sw+0.2*pull).
+			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(15 - 30*sw + 40*pull)))
 		g.drawArm(hand, -20, aspect, sky, blk)
 		g.modelRend.DrawHand(g.props[name], aspect, hand.Mul4(mgl32.Translate3D(0, -0.15, 0)).Mul4(mgl32.Scale3D(0.6, 0.6, 0.6)), sky, blk)
 		return
@@ -538,7 +540,7 @@ func (g *game) drawHand(alpha float64, dt float32) {
 	switch g.weapon {
 	case wBlade, wBlackjack: // animated in Blockbench; play.go's strike picks the clip
 		arm, a := fpArms[g.weapon], g.fp[g.weapon]
-		if a.Clip.Name == arm.strike && a.Done() || a.Clip.Name == "windup" && !g.windup {
+		if a.Clip.Name == arm.strike && a.Done() || a.Clip.Name == "windup" && !g.windup && g.throwHold == 0 {
 			a.Play("idle", false)
 		}
 		a.Update(dt)

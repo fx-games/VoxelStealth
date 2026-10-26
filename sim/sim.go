@@ -1081,6 +1081,32 @@ func (s *Sim) HeldTorch() int {
 	return -1
 }
 
+// kindleReach is how far the player reaches a held flame out.
+const kindleReach = 1.6
+
+// Kindle reaches the held light out along dir from the eye, its flame to
+// whatever it meets first within reach (or the air at arm's length): a
+// small flame, as a dropped torch's, catching rugs, fuel and wood, not
+// people. False when nothing lit is in hand.
+func (s *Sim) Kindle(eye, dir Vec3) bool {
+	i := s.HeldTorch()
+	if i < 0 || !s.Objects[i].Lit() {
+		return false
+	}
+	at0 := eye.Add(dir.Scale(kindleReach))
+	for t := 0.3; t < kindleReach; t += 0.1 {
+		if c := eye.Add(dir.Scale(t + 0.1)).Cell(); s.W.Solid(c.X, c.Y, c.Z) {
+			at0 = eye.Add(dir.Scale(t)) // before the face it touches
+			break
+		}
+	}
+	st := at(StimFire, at0, 0.6, 0.5)
+	src := s.objR(i)
+	st.Source = &src
+	s.Stimulate(st)
+	return true
+}
+
 // ThrowTorch lobs the held torch along the view about dist blocks
 // (0 drops it). It tumbles through the air (flyTorch) and, where it lands,
 // clatters, which draws guards over, and sets flammables alight; thrown

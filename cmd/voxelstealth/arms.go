@@ -222,6 +222,7 @@ func (g *game) tickBlade() {
 // poses it, else held up before the eye.
 func (g *game) drawBlade(alpha float64, bobX, bobY float32, sky, blk uint8) {
 	name := blades[g.weapon]
+	pull := float32(g.throwHold) / throwTicks // a throw wound up: drawn back
 	if h := g.blade.hum; h != nil && h.Attacking() {
 		yRot, xRot := yRotMC(g.cam.Yaw), float32(-g.cam.Pitch*180/math.Pi)
 		p := h.Pose(float32(alpha), xRot, yRot, true)
@@ -229,5 +230,5 @@ func (g *game) drawBlade(alpha float64, bobX, bobY float32, sky, blk uint8) {
 		g.itemRend.DrawInWorld(name, &g.cam, bettercombat.FirstPerson(p, head, xRot, heldDisplay[name]), sky, blk)
 		return
 	}
-	g.itemRend.DrawHandModel(name, float32(g.cam.Aspect), mgl32.Translate3D(0.56+bobX, -0.52+bobY, -0.72).Mul4(displayMat(bladeIdle)), sky, blk)
+	g.itemRend.DrawHandModel(name, float32(g.cam.Aspect), mgl32.Translate3D(0.56+bobX, -0.52+bobY+0.25*pull, -0.72+0.25*pull).Mul4(displayMat(bladeIdle)), sky, blk)
 }

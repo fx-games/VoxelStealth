@@ -244,11 +244,11 @@ var playHelp = []helpPage{
 	{"Moving", [][2]string{
 		{"W A S D, mouse", "move, look"},
 		{"Space", "jump; hold with W against a ledge in reach to pull yourself up"},
-		{"Shift (or C)", "crouch: slow, quiet, harder to see"},
-		{"Ctrl", "run: fast and loud"},
+		{"C", "crouch: slow, quiet, harder to see"},
+		{"Shift", "run: fast and loud"},
 	}, []string{
 		"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
-		"Rope arrows hang a rope: jump at it to grab it, W/S climb, A/D (or Ctrl+W/S) swing, Space lets go.",
+		"Rope arrows hang a rope: jump at it to grab it, W/S climb, A/D (or Shift+W/S) swing, Space lets go.",
 	}},
 	{"Using things", [][2]string{
 		{"E (hold)", "use: doors, loot, pick locks, carry bodies, take torches and weapons, knock lamps"},
@@ -261,14 +261,15 @@ var playHelp = []helpPage{
 	}},
 	{"Weapons", [][2]string{
 		{"1 - 7", "crossbow, blackjack, blade, flash bomb, TNT, long sword, halberd"},
-		{"Left mouse", "shoot a spanned bolt; hold and release: strike, or throw (a torch in hand: it)"},
+		{"Left mouse", "shoot a spanned bolt; strike (blackjack and blade: hold and release); a flame in hand: reach it out to set things alight"},
+		{"Right mouse", "throw what's in hand: hold to wind up, release to throw (a tap barely lobs it); flash bombs throw with either button"},
+		{"Mouse wheel", "next / previous item"},
 		{"R", "span the crossbow (slow; you barely move meanwhile)"},
 		{"X", "next arrow type: broadhead, water, noisemaker, rope"},
-		{"T", "throw the weapon in hand (walk over it to pick it up)"},
 	}, []string{
-		"Guards drop their arms when they go down: take a sword or halberd (E) to swing (click) or throw it; a crossbow gives bolts.",
-		"Wind a throw up fully and it hits hard: a guard it strikes goes down.",
-		"A flash bomb blinds whoever looks at it: they stagger about and can't fight. TNT, set down with a click, breaks walls.",
+		"Guards drop their arms when they go down: take a sword or halberd (E) to swing or throw it; a crossbow gives bolts.",
+		"Wind a throw up fully and it hits hard: a guard it strikes goes down. Walk over a thrown weapon to pick it up.",
+		"A flash bomb (thrown) blinds whoever looks at it: they stagger about and can't fight. TNT, set down with a click, breaks walls.",
 		"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	}},
 	{"Game", [][2]string{

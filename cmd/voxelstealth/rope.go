@@ -150,7 +150,7 @@ func (g *game) grabRope() {
 func (g *game) letGo() { g.onRope, g.regrab = nil, 10 }
 
 // hang moves the player hanging on the rope: a pendulum whose hands stay
-// within ropeD of the nock. W/S climb (with Ctrl: pump), A/D pump, Space
+// within ropeD of the nock. W/S climb (with Shift, the sprint key: pump), A/D pump, Space
 // jumps off. False when the player let go before moving.
 func (g *game) hang(in character.Input) bool {
 	p, r := g.player, g.onRope

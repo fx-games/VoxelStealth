@@ -1,9 +1,10 @@
 package main
 
-// Throwing the wielded weapon, as VoxelRogue's T does (its arrows.go
-// throwItem): the blade, blackjack or crossbow itself flies as a real
+// Throwing the wielded weapon (right mouse, wound up: windThrow), as
+// VoxelRogue's T does (its arrows.go throwItem): the blade, blackjack,
+// crossbow, sword or halberd itself flies as a real
 // projectile (Minecraft's snowball arc, slow enough to watch cross a
-// room), end over end. The blade sticks with its tip where it strikes
+// room), end over end. The blades stick with its tip where it strikes
 // (and pins, sim.ThrownHit); the blackjack and the crossbow bounce off and
 // come to rest. What it hits gets the stimulus the weapon deals. The hand
 // is empty of it until the player walks over it again.
@@ -44,15 +45,15 @@ var thrownModel = map[int]struct {
 	wHalberd:   {"halberd", 1.6, 0.02, true, math.Pi / 4},
 }
 
-// throwWeapon (T) hurls the wielded weapon along the view. A spanned
-// crossbow takes its bolt with it.
-func (g *game) throwWeapon() {
+// throwWeapon hurls the wielded weapon along the view, wound up by k (0..1:
+// a tap barely lobs it). A spanned crossbow takes its bolt with it.
+func (g *game) throwWeapon(k float64) {
 	what, ok := throwable[g.weapon]
-	if !ok || g.lost[g.weapon] || g.swing > 0 || g.windup {
+	if !ok || g.lost[g.weapon] {
 		return
 	}
 	e := g.eye()
-	a := g.arrows.Shoot(e.X, e.Y-0.1, e.Z, g.cam.Yaw, g.cam.Pitch, throwSpeed)
+	a := g.arrows.Shoot(e.X, e.Y-0.1, e.Z, g.cam.Yaw, g.cam.Pitch, throwSpeed*(0.3+0.7*k))
 	a.Gravity = throwGravity
 	if what != sim.ThrownBlade && !sim.Weapons[what].Sharp {
 		a.Bounce = throwBounce
@@ -61,7 +62,9 @@ func (g *game) throwWeapon() {
 	if g.weapon == wCrossbow {
 		g.chamber, g.spanning, g.reload = "", false, 0
 	}
-	g.swing = swingTicks
+	if a := g.fp[g.weapon]; a != nil {
+		a.Play("idle", false)
+	}
 	g.playLocal("swish", 0.5)
 }
 
