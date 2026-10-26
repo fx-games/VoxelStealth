@@ -36,6 +36,9 @@ parent = "impact"
 [stim.mop]        # a servant wiping up a puddle cell
 [stim.fall]       # a body landing (Intensity: blocks fallen)
 [stim.crush]      # a falling structure striking what is under it
+[stim.poison]     # a vial poured into food or drink; poisoned food eaten
+[stim.eat]        # an NPC eating or drinking (Source: the NPC)
+[stim.land]       # something thrown landing, to itself
 
 # ---- Objects ----
 
@@ -218,6 +221,35 @@ parent = "object"
 stim = "frob"
 effects = ["call take_weapon"]
 
+[archetype.food] # NPCs eat it on their rounds; a vial poisons it for good
+parent = "object"
+[[archetype.food.receptron]]
+stim = "poison"
+if = ["!poisoned"]
+effects = ["set poisoned true", "call poisoned"]
+[[archetype.food.receptron]]
+stim = "eat"
+effects = ["call feed"]
+
+[archetype.drink]
+parent = "food"
+
+[archetype.bottle] # taken, it is thrown or swung once
+parent = "drink"
+[[archetype.bottle.receptron]]
+stim = "frob"
+if = ["!$held"]
+effects = ["call take_bottle"]
+[[archetype.bottle.receptron]] # thrown: it shatters where it lands, loud enough to draw a guard
+stim = "land"
+effects = ["emit noise 45 sound sound=shatter", "destroy"]
+
+[archetype.poison_vial]
+parent = "ammo"
+[[archetype.poison_vial.receptron]] # thrown: it breaks (what the poison does then is for later)
+stim = "land"
+effects = ["emit noise 20 sound sound=shatter", "destroy"]
+
 [archetype.decor]
 parent = "object"
 [[archetype.decor.receptron]] # kicked over, if it is small enough
@@ -333,6 +365,18 @@ effects = ["call frob_body"]
 stim = "expired"
 if = ["$prop == blind"]
 effects = ["call recover"]
+[[archetype.npc.receptron]] # poisoned food eaten: ten seconds as if nothing happened,
+stim = "poison"              # then it thrashes and dies
+if = ["!poisoned", "!down"]
+effects = ["set poisoned true 200"]
+[[archetype.npc.receptron]]
+stim = "expired"
+if = ["$prop == poisoned", "!down"]
+effects = ["set convulsing true 50", "emit noise 30 sound sound=pain"]
+[[archetype.npc.receptron]]
+stim = "expired"
+if = ["$prop == convulsing", "!down"]
+effects = ["call kill player poisoned"]
 [[archetype.npc.receptron]] # whatever else strikes it and leaves it standing
 stim = "impact"
 effects = ["call startle"]

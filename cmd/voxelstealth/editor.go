@@ -54,6 +54,14 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindDecor, Name: "Iron gate"}, {Kind: sim.KindDecor, Name: "Iron pillar"}, {Kind: sim.KindDecor, Name: "Stone chair"},
 	{Kind: sim.KindDecor, Name: "Stone table"}, {Kind: sim.KindDecor, Name: "Tomb"}, {Kind: sim.KindDecor, Name: "Grave"},
 	{Kind: sim.KindDecor, Name: "Grave slab"},
+	{Kind: sim.KindAmmo, Name: sim.AmmoPoison, Count: 1},
+	{Kind: sim.KindFood, Name: "Banana cake"}, {Kind: sim.KindFood, Name: "Lemon cake"}, {Kind: sim.KindFood, Name: "Berry pie"},
+	{Kind: sim.KindFood, Name: "Cherry pie"}, {Kind: sim.KindFood, Name: "Apple crumble"},
+	{Kind: sim.KindFood, Name: "Plate of pancakes"}, {Kind: sim.KindFood, Name: "Plate of mutton"}, {Kind: sim.KindFood, Name: "Plate of lembas"},
+	{Kind: sim.KindFood, Name: "Plate of apples"}, {Kind: sim.KindFood, Name: "Plate of cram"},
+	{Kind: sim.KindDrink, Name: "Mug of ale"}, {Kind: sim.KindDrink, Name: "Clay mug"}, {Kind: sim.KindDrink, Name: "Gold goblet"},
+	{Kind: sim.KindDrink, Name: "Silver goblet"}, {Kind: sim.KindDrink, Name: "Wooden goblet"}, {Kind: sim.KindDrink, Name: "Skull cup"},
+	{Kind: sim.KindDrink, Name: "Wine glass"}, {Kind: sim.KindDrink, Name: sim.Bottle},
 }
 
 var npcKinds = []sim.NPCDef{
@@ -270,7 +278,7 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 		ed.serial++
 		o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
 		o.Pos = at.Floor()
-		if o.Kind == sim.KindDecor {
+		if o.Kind == sim.KindDecor || o.Kind == sim.KindFood || o.Kind == sim.KindDrink {
 			o.Yaw = g.cam.Yaw
 		}
 		m.Objects = append(m.Objects, &o)

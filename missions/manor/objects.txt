@@ -1,4 +1,4 @@
-# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable
+# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable decor food drink
 
 ID: front_door
 Kind: door

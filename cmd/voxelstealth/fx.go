@@ -37,6 +37,9 @@ var fx = map[string]particles.Props{
 		Size0: 0.2, Size1: 0.8, Col0: [4]float32{0.85, 0.85, 0.85, 0.5}, Col1: [4]float32{0.9, 0.9, 0.9, 0}},
 	"blood": {Count: 30, Spread: 0.12, Vel: [3]float64{0, 1, 0}, VelVar: 2.2, Gravity: 18, Life: 0.9, LifeVar: 0.25,
 		Size0: 0.09, Size1: 0.05, SizeVar: 0.03, Col0: [4]float32{0.65, 0.03, 0.03, 1}, Col1: [4]float32{0.4, 0, 0, 0.85}},
+	// Poison poured in: a sickly green fizz rising off it.
+	"poison": {Count: 30, Spread: 0.2, Vel: [3]float64{0, 0.9, 0}, VelVar: 0.6, Gravity: -0.8, Drag: 1.5, Life: 1.2, LifeVar: 0.4,
+		Size0: 0.09, Size1: 0.03, SizeVar: 0.03, Col0: [4]float32{0.45, 0.95, 0.25, 0.9}, Col1: [4]float32{0.2, 0.6, 0.1, 0}},
 	// Continuous, emitted a few per tick.
 	"wick": {Count: 1, Spread: 0.01, Vel: [3]float64{0, 0.3, 0}, VelVar: 0.05, Gravity: -0.5, Drag: 1, Life: 0.3, LifeVar: 0.08,
 		Size0: 0.05, Size1: 0.01, Col0: [4]float32{1, 0.75, 0.3, 0.9}, Col1: [4]float32{0.9, 0.3, 0, 0}, Additive: true},

@@ -213,6 +213,8 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 		wl = fmt.Sprintf("Flash bomb x%d", p.Ammo[sim.AmmoExplosive])
 	case wTNT:
 		wl = fmt.Sprintf("TNT x%d", p.Ammo[sim.AmmoTNT])
+	case wPoison, wBottle:
+		wl = fmt.Sprintf("%s x%d", weaponNames[g.weapon], p.Ammo[handAmmo[g.weapon]])
 	}
 	c.text(wl, w-c.width(wl)-10, h-34, white)
 	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d  tnt %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive], p.Ammo[sim.AmmoTNT])

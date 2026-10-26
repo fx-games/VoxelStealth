@@ -22,10 +22,15 @@ const (
 	wTNT
 	wSword
 	wHalberd
+	wPoison // poison vials: poured into food or drink, or thrown
+	wBottle // bottles taken: thrown, or swung once
 	numWeapons
 )
 
-var weaponNames = [numWeapons]string{"Crossbow", "Blackjack", "Blade", "Flash bomb", "TNT", "Long sword", "Halberd"}
+var weaponNames = [numWeapons]string{"Crossbow", "Blackjack", "Blade", "Flash bomb", "TNT", "Long sword", "Halberd", "Poison vial", "Bottle"}
+
+// handAmmo are the things in hand that are used up, by weapon slot.
+var handAmmo = map[int]string{wExplosive: sim.AmmoExplosive, wTNT: sim.AmmoTNT, wPoison: sim.AmmoPoison, wBottle: sim.AmmoBottle}
 
 // arrowTypes cycle with X.
 var arrowTypes = []string{sim.AmmoBroadhead, sim.AmmoWater, sim.AmmoNoise, sim.AmmoRope}
@@ -327,6 +332,24 @@ func (g *game) tickPlay() {
 		case g.weapon == wTNT:
 			g.windup, g.throwHold = false, 0
 			g.place(held)
+		case g.weapon == wPoison: // poured into the food or drink aimed at
+			g.windup, g.throwHold = false, 0
+			if held && !g.fireWas && g.swing == 0 && s.Player.Ammo[sim.AmmoPoison] > 0 {
+				if s.PoisonTarget(g.target) {
+					g.swing = swingTicks
+					g.usedUp()
+				} else {
+					g.message("Pour it into food or drink.")
+				}
+			}
+		case g.weapon == wBottle: // a club, once
+			g.windup, g.throwHold = false, 0
+			if held && !g.fireWas && g.swing == 0 && s.Player.Ammo[sim.AmmoBottle] > 0 {
+				g.swing = swingTicks
+				g.playLocal("swish", 0.6)
+				s.Melee("bottle")
+				g.usedUp()
+			}
 		case g.lost[g.weapon]: // thrown: the hand is empty
 			g.windup, g.throwHold = false, 0
 		case blades[g.weapon] != "":
@@ -393,6 +416,7 @@ func (g *game) windThrow(held bool) {
 			case s.HeldTorch() >= 0:
 			case g.weapon == wExplosive && s.Player.Ammo[sim.AmmoExplosive] > 0:
 				g.fpHand.Play("windup", true)
+			case (g.weapon == wPoison || g.weapon == wBottle) && s.Player.Ammo[handAmmo[g.weapon]] > 0:
 			case throwable[g.weapon] != "" && !g.lost[g.weapon]:
 				if a := g.fp[g.weapon]; a != nil {
 					a.Play("windup", true)
@@ -414,6 +438,9 @@ func (g *game) windThrow(held bool) {
 			} else {
 				g.message("No flash bombs left.")
 			}
+		case g.weapon == wPoison || g.weapon == wBottle:
+			s.ThrowItem(handAmmo[g.weapon], g.eye(), g.viewDir(), 1+10*k, hard)
+			g.usedUp()
 		default:
 			g.throwWeapon(k)
 		}
@@ -432,12 +459,19 @@ func (g *game) cycleWeapon(d int) {
 	for i := 1; i < numWeapons; i++ {
 		w := ((g.weapon+d*i)%numWeapons + numWeapons) % numWeapons
 		switch {
-		case g.lost[w], blades[w] != "" && !p.Weapons[blades[w]],
-			w == wExplosive && p.Ammo[sim.AmmoExplosive] == 0, w == wTNT && p.Ammo[sim.AmmoTNT] == 0:
+		case g.lost[w], blades[w] != "" && !p.Weapons[blades[w]], handAmmo[w] != "" && p.Ammo[handAmmo[w]] == 0:
 			continue
 		}
 		g.weapon = w
 		return
+	}
+}
+
+// usedUp moves the hand on to the next item once the last vial or bottle
+// in it is gone.
+func (g *game) usedUp() {
+	if a := handAmmo[g.weapon]; a != "" && g.sim.Player.Ammo[a] == 0 {
+		g.cycleWeapon(1)
 	}
 }
 
@@ -650,8 +684,12 @@ func (g *game) runScript() {
 		case "menu": // open a screen: title, game, help, options
 			map[string]func(){"title": g.openTitle, "game": g.openGameMenu,
 				"help": func() { g.open(g.helpScreen()) }, "options": func() { g.open(g.optionsScreen()) }}[st.arg]()
-		case "give": // a taken weapon: sword, halberd
-			g.sim.Player.Weapons[st.arg] = true
+		case "give": // a taken weapon (sword, halberd), or a poison vial or bottle
+			if st.arg == sim.AmmoPoison || st.arg == sim.AmmoBottle {
+				g.sim.Player.Ammo[st.arg]++
+			} else {
+				g.sim.Player.Weapons[st.arg] = true
+			}
 		case "tp":
 			var x, y, z float64
 			fmt.Sscanf(st.arg, "%f,%f,%f", &x, &y, &z)

@@ -45,6 +45,9 @@ const (
 	StimFrob   Stim = "frob"   // deliberate use (Extra "held": the key is held down; "revive": a comrade's shake)
 	StimStep   Stim = "step"   // a footstep on a cell (Intensity: the stride's loudness factor)
 	StimMop    Stim = "mop"    // wiping up a puddle cell
+	StimPoison Stim = "poison" // a vial poured into food or drink; poisoned food eaten (Source: the food)
+	StimEat    Stim = "eat"    // an NPC eating or drinking (Source: the NPC)
+	StimLand   Stim = "land"   // something thrown landing (to itself)
 )
 
 // Mediums: "radius" reaches everything whose box is within Range of the
@@ -112,6 +115,10 @@ func archetypeOf(o *Object) string {
 		return "street_lamp"
 	case o.Kind == KindDecor && decorArch[o.Name] != "":
 		return decorArch[o.Name]
+	case o.Kind == KindDrink && o.Name == Bottle:
+		return "bottle"
+	case o.Kind == KindAmmo && o.Name == AmmoPoison:
+		return "poison_vial"
 	}
 	return o.Kind
 }
@@ -318,6 +325,9 @@ func init() { // in init: responses stimulate in turn
 		"frob_chest":  obj((*Sim).frobChest),
 		"take":        obj((*Sim).take),
 		"take_weapon": obj((*Sim).takeWeapon),
+		"poisoned":    obj((*Sim).poisoned),
+		"feed":        obj((*Sim).feed),
+		"take_bottle": obj((*Sim).takeBottle),
 		"toggle": func(s *Sim, d Delivery, args []string) bool {
 			s.B.Set(d.To, args[0], !s.B.Bool(d.To, args[0]))
 			return true

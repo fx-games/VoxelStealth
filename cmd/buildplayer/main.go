@@ -12,7 +12,6 @@ import (
 	"image/color"
 	"log"
 	"math"
-	"os"
 	"path/filepath"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -80,12 +79,8 @@ func write(name string, slim bool) {
 	}
 	m.Meshes = []model.Mesh{me}
 	swing(m)
-	data, err := gltf.Encode(m)
-	if err != nil {
-		log.Fatal(err)
-	}
 	out := filepath.Join("assets", "models", name+".gltf")
-	if err := os.WriteFile(out, data, 0o644); err != nil {
+	if err := gltf.WriteFile(out, m); err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("wrote %s (%d bones, clips %v)", out, len(m.Bones), m.ClipNames())

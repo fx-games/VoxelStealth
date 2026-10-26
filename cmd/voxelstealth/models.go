@@ -80,6 +80,15 @@ func (g *game) loadModels(dir string) error {
 		}
 		sim.DecorSize[n] = extent(m)
 	}
+	for _, file := range foodModel {
+		m, err := gltf.LoadFile(filepath.Join(dir, "food", file+".gltf"))
+		if err != nil {
+			return err
+		}
+		if g.props["food/"+file], err = g.modelRend.Add(m); err != nil {
+			return err
+		}
+	}
 	for _, name := range []string{"candle", "candlestick"} {
 		m, err := gltf.LoadFile(filepath.Join(dir, "graveyard", name+".gltf"))
 		if err != nil {
@@ -299,6 +308,19 @@ var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_
 	"Dead grass": "graveyard/dead_grass", "Iron fence": "graveyard/iron_fence", "Iron gate": "graveyard/iron_gate",
 	"Iron pillar": "graveyard/iron_pillar", "Stone chair": "graveyard/stone_chair", "Stone table": "graveyard/stone_table",
 	"Tomb": "graveyard/tomb_01", "Grave": "graveyard/tomb_02", "Grave slab": "graveyard/tomb_03"}
+
+// foodModel is each food's and drink's model by Name (cmd/buildfood, from
+// VoxelHobbit).
+var foodModel = map[string]string{
+	"Banana cake": "banana_cake", "Lemon cake": "lemon_cake", "Berry pie": "berry_pie", "Cherry pie": "cherry_pie",
+	"Apple crumble": "apple_crumble", "Plate of pancakes": "plate_pancakes", "Plate of mutton": "plate_mutton",
+	"Plate of lembas": "plate_lembas", "Plate of apples": "plate_apples", "Plate of cram": "plate_cram",
+	"Mug of ale": "mug", "Clay mug": "clay_mug", "Gold goblet": "goblet_gold", "Silver goblet": "goblet_silver",
+	"Wooden goblet": "goblet_wood", "Skull cup": "skull_cup", "Wine glass": "wine_glass", sim.Bottle: "bottle",
+}
+
+// poisonTint is poisoned food's or drink's colour (ModelInstance.Color).
+var poisonTint = [4]float32{0.55, 1, 0.45, 1}
 
 // boxes are the decor models scaled up to a block wide.
 var boxes = map[string]bool{"apple_box": true, "small_box": true, "bottle_crate": true}

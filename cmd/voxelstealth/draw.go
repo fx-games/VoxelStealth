@@ -70,12 +70,18 @@ var lootSprites = []struct{ word, sprite string }{
 	{"chalice", "valuable_07"}, {"plate", "valuable_02"}, {"candelabrum", "valuable_05"},
 	{"silverware", "valuable_03"}, {"purse", "valuable_01"}, {"gem", "valuable_09"},
 	{"idol", "valuable_10"}, {"ring", "ring_04"}, {"wine", "potion_03"}, {"necklace", "amulet_05"},
-	{"crown", "crown_01"}, {"key", "misc_03"},
+	{"crown", "crown_01"}, {"key", "misc_03"}, {"poison", poisonSprite},
 }
+
+// poisonSprite is a poison vial's icon (a green potion, for now).
+const poisonSprite = "potion_67"
 
 func spriteFor(o *sim.Object) string {
 	switch o.Kind {
 	case sim.KindAmmo:
+		if o.Name == sim.AmmoPoison {
+			return poisonSprite
+		}
 		return "arrow"
 	case sim.KindKey:
 		return "misc_03"
@@ -324,7 +330,7 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		if t.doll != nil { // down or kicked: limp
 			a.skin = t.doll.Skin(creatureMatrix(x, y, z, n.Yaw, 0, 0), float32(alpha), a.skin)
 		} else if n.Alive() && a.hum != nil {
-			yaw = g.poseArmed(n, a, sk, x, y, z, alpha)
+			yaw = g.poseArmed(k, n, a, sk, x, y, z, alpha)
 		} else if n.Alive() {
 			if clip := clipFor(sk.model, n.Moving); clip != a.clip {
 				a.clip = clip
@@ -471,6 +477,17 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 			}
 		case sim.KindDoor:
 			// a block
+		case sim.KindFood, sim.KindDrink:
+			sky, blk := g.light(p.X, p.Y+0.3, p.Z)
+			in := render.ModelInstance{Model: g.props["food/"+foodModel[o.Name]], X: p.X, Y: p.Y, Z: p.Z, Yaw: o.Yaw, Sky: sky, Block: blk}
+			if o.Flight > 0 { // a bottle thrown: end over end
+				c := o.Prev.Add(o.Pos.Sub(o.Prev).Scale(alpha))
+				in.X, in.Y, in.Z, in.Tilt, in.TiltYaw = c.X, c.Y, c.Z, (float64(o.Flight-1)+alpha)*0.7, o.Yaw
+			}
+			if o.Poisoned() {
+				in.Color = poisonTint
+			}
+			g.insts = append(g.insts, in)
 		default:
 			sky, blk := g.light(p.X, p.Y+0.3, p.Z)
 			g.items = append(g.items, render.ItemInstance{Item: spriteFor(o), X: p.X, Y: p.Y + 0.25, Z: p.Z,
@@ -550,6 +567,18 @@ func (g *game) drawHand(alpha float64, dt float32) {
 		g.drawCrossbow(alpha, bobX, bobY, sky, blk)
 	case wSword, wHalberd:
 		g.drawBlade(alpha, bobX, bobY, sky, blk)
+	case wPoison, wBottle: // held out in the right hand; a click pours (or swings), a windup draws it back
+		if g.sim.Player.Ammo[handAmmo[g.weapon]] == 0 {
+			return
+		}
+		hand := mgl32.Translate3D(0.42+bobX-0.15*sw, -0.42+bobY+0.12*sw+0.2*pull, -0.8-0.3*sw+0.25*pull).
+			Mul4(mgl32.HomogRotate3DZ(mgl32.DegToRad(-50 * sw)))
+		g.drawArm(hand, 20, aspect, sky, blk)
+		if g.weapon == wPoison {
+			g.itemRend.DrawHandModel(poisonSprite, aspect, hand.Mul4(mgl32.Translate3D(0, 0.1, 0)).Mul4(mgl32.Scale3D(0.3, 0.3, 0.3)), sky, blk)
+		} else {
+			g.modelRend.DrawHand(g.props["food/bottle"], aspect, hand.Mul4(mgl32.Translate3D(0, -0.05, 0)).Mul4(mgl32.Scale3D(0.8, 0.8, 0.8)), sky, blk)
+		}
 	case wExplosive, wTNT: // the Blockbench hand (fp_hand.gltf), the bomb or TNT in its fist
 		a := g.fpHand
 		if (a.Clip.Name == "throw" || a.Clip.Name == "place") && a.Done() || a.Clip.Name == "windup" && g.throwHold == 0 {

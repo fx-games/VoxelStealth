@@ -319,6 +319,8 @@ func (g *game) handleEvents() {
 			}
 		case sim.EvShoot:
 			g.shootBolt(e)
+		case sim.EvPoisoned:
+			g.burst("poison", e.Pos.Add(sim.Vec3{Y: 0.3}))
 		case sim.EvBark:
 			g.caption(e.Text)
 			g.playBark(e)

@@ -260,7 +260,7 @@ var playHelp = []helpPage{
 		"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
 	}},
 	{"Weapons", [][2]string{
-		{"1 - 7", "crossbow, blackjack, blade, flash bomb, TNT, long sword, halberd"},
+		{"1 - 9", "crossbow, blackjack, blade, flash bomb, TNT, long sword, halberd, poison vial, bottle"},
 		{"Left mouse", "shoot a spanned bolt; strike (blackjack and blade: hold and release); a flame in hand: reach it out to set things alight"},
 		{"Right mouse", "throw what's in hand: hold to wind up, release to throw (a tap barely lobs it); flash bombs throw with either button"},
 		{"Mouse wheel", "next / previous item"},
@@ -270,6 +270,7 @@ var playHelp = []helpPage{
 		"Guards drop their arms when they go down: take a sword or halberd (E) to swing or throw it; a crossbow gives bolts.",
 		"Wind a throw up fully and it hits hard: a guard it strikes goes down. Walk over a thrown weapon to pick it up.",
 		"A flash bomb (thrown) blinds whoever looks at it: they stagger about and can't fight. TNT, set down with a click, breaks walls.",
+		"Click food or drink with a poison vial to poison it (once): whoever eats or drinks it there dies some ten seconds later. A bottle knocks out whoever it hits, thrown or swung, and shatters.",
 		"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
 	}},
 	{"Game", [][2]string{

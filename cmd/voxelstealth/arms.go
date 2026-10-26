@@ -66,7 +66,7 @@ func (g *game) tickArms() {
 			continue
 		}
 		a := g.npcAnims[k]
-		if !n.Alive() || n.Weapon == "" && n.TorchObj == 0 {
+		if !n.Alive() || n.Weapon == "" && n.TorchObj == 0 && !g.sim.Eating(k) && !g.sim.Convulsing(k) {
 			a.hum = nil
 			continue
 		}
@@ -91,12 +91,27 @@ func (g *game) tickArms() {
 
 // poseArmed poses NPC n's body (a.hum) at alpha into a.skin, and draws what
 // it holds at x,y,z: it returns the body's yaw, which the model is drawn at.
-func (g *game) poseArmed(n *sim.NPC, a *npcAnim, sk *npcSkin, x, y, z, alpha float64) float64 {
+func (g *game) poseArmed(k int, n *sim.NPC, a *npcAnim, sk *npcSkin, x, y, z, alpha float64) float64 {
 	p := a.hum.Pose(float32(alpha), 0, yRotMC(n.Yaw), false)
 	yaw := float64(p.BodyRot-180) * math.Pi / 180
 	torch := n.TorchObj != 0
 	if torch { // the torch held up before it
 		p.Parts[bettercombat.LeftArm][3] = p.Parts[bettercombat.LeftArm][3]*0.5 - math.Pi/10
+	}
+	t := float64(g.tick) + alpha
+	switch {
+	case g.sim.Convulsing(k): // the poison's throes: both arms thrash, the head lolls
+		for i, arm := range []int{bettercombat.RightArm, bettercombat.LeftArm} {
+			ph := float64(i) * 2.1
+			p.Parts[arm][3] = float32(-1.6 + 1.5*math.Sin(t*0.9+ph) + 0.4*math.Sin(t*2.3))
+			p.Parts[arm][5] = float32((1 - 2*float64(i)) * (0.4 + 0.6*math.Abs(math.Sin(t*0.7+ph))))
+		}
+		p.Parts[bettercombat.Head][3] = float32(0.5 * math.Sin(t*0.6))
+		p.Parts[bettercombat.Head][5] = float32(0.4 * math.Sin(t*1.1))
+	case g.sim.Eating(k): // the right hand to the mouth and down again, a bite at a time
+		lift := 0.5 - 0.5*math.Cos(t*0.25)
+		p.Parts[bettercombat.RightArm][3] = float32(-0.4 - 1.6*lift)
+		p.Parts[bettercombat.RightArm][4] = float32(-0.5 * lift)
 	}
 	bb := ry180.Mul4(p.BodyBone()).Mul4(ry180)
 	if len(a.skin) != len(sk.model.Bones) {

@@ -336,7 +336,7 @@ func (m *Mission) Save(dir string) error {
 		r = append(r, kv{"Key", o.Key}, kv{"Locked", yesNo(o.StartLocked)}, kv{"Open", yesNo(o.StartOpen)}, kv{"Lit", yesNo(o.StartLit)}, kv{"Running", yesNo(o.StartRunning)}, kv{"On", o.On})
 		recs = append(recs, r)
 	}
-	if err := writeRecords(filepath.Join(dir, "objects.txt"), "# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable\n", recs); err != nil {
+	if err := writeRecords(filepath.Join(dir, "objects.txt"), "# One record per object. Kind: torch lamp faucet door loot chest key ammo flammable decor food drink\n", recs); err != nil {
 		return err
 	}
 	recs = nil

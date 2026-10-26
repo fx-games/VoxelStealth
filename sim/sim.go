@@ -35,6 +35,8 @@ const (
 	KindAmmo      = "ammo"      // Name = ammo type, Count
 	KindFlammable = "flammable" // rugs, tapestries, hay
 	KindDecor     = "decor"     // decoration: Name picks the model; collides (DecorSize), never targeted
+	KindFood      = "food"      // cakes, pies, plates of food: NPCs eat it on their rounds (Name picks the model)
+	KindDrink     = "drink"     // mugs, goblets, glasses, bottles: drunk like food (Name picks the model)
 )
 
 // Ammo types.
@@ -45,6 +47,8 @@ const (
 	AmmoRope      = "rope"
 	AmmoExplosive = "explosive" // flash bombs
 	AmmoTNT       = "tnt"
+	AmmoPoison    = "poison" // poison vials: poison food or drink (PoisonTarget)
+	AmmoBottle    = "bottle" // bottles taken: thrown, or a one-time club
 )
 
 // Object is anything in the world the player or the stimulus system can
@@ -199,15 +203,16 @@ func (p *Player) Eye() Vec3 {
 type EventKind int
 
 const (
-	EvSound   EventKind = iota // play Sound at Pos (Loud: source loudness)
-	EvBark                     // NPC speaks: caption Text
-	EvMessage                  // HUD message Text
-	EvHurt                     // player was hurt
-	EvSpark                    // electricity in the puddle at Pos
-	EvBlast                    // explosion at Pos
-	EvFlash                    // a flash bomb went off at Pos
-	EvSlip                     // the player slipped on oil: their feet go
-	EvShoot                    // NPC shoots a crossbow bolt from Pos along Yaw, Pitch (BoltHit)
+	EvSound    EventKind = iota // play Sound at Pos (Loud: source loudness)
+	EvBark                      // NPC speaks: caption Text
+	EvMessage                   // HUD message Text
+	EvHurt                      // player was hurt
+	EvSpark                     // electricity in the puddle at Pos
+	EvBlast                     // explosion at Pos
+	EvFlash                     // a flash bomb went off at Pos
+	EvSlip                      // the player slipped on oil: their feet go
+	EvShoot                     // NPC shoots a crossbow bolt from Pos along Yaw, Pitch (BoltHit)
+	EvPoisoned                  // the food or drink at Pos was poisoned
 )
 
 // Event is something the game should show or play.
@@ -952,6 +957,14 @@ func (s *Sim) Describe(t Target) string {
 		return name + " (turn on)"
 	case KindAmmo:
 		return name + " x" + itoa(o.Count)
+	case KindFood, KindDrink:
+		switch {
+		case s.Player.Ammo[AmmoPoison] > 0 && !o.Poisoned():
+			name += " (poison it: left mouse with a vial)"
+		case o.Name == Bottle:
+			name += " (take)"
+		}
+		return name
 	case KindWeapon:
 		return Weapons[o.Name].Name + " (take)"
 	}
@@ -1243,14 +1256,18 @@ func (s *Sim) fly(pos, prev, vel *Vec3, hard *bool) bool {
 	return false
 }
 
-// flyTorch moves a thrown torch one tick (fly); a lit one landing starts a
-// small flame, and a lantern spills its oil first, which that flame lights.
+// flyTorch moves a thrown torch, bottle or vial one tick (fly); landing,
+// it gets a land stimulus (a bottle shatters), a lit one starts a small
+// flame, and a lantern spills its oil first, which that flame lights.
 func (s *Sim) flyTorch(i int) {
 	o := s.Objects[i]
 	o.Flight++
 	if s.fly(&o.Pos, &o.Prev, &o.Vel, &o.Hard) {
 		o.Flight = 0
 		o.Pos, o.Yaw = s.LayFlat(o.Pos, o.Yaw, 0, LieLength, LieRadius)
+		if s.hit(s.objR(i), Stimulus{Stim: StimLand, Origin: o.Pos}); o.Gone { // a bottle or vial breaks
+			return
+		}
 		s.B.Set(s.objR(i), "flying", false)
 		if o.Kind == KindTorch && o.Name == "Lantern" { // it cracks: its oil runs out over the floor
 			s.Stimulate(at(StimOil, o.Pos, 1, 3))
@@ -1430,13 +1447,20 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 
 // Melee swings the blackjack or the blade at the NPC in front of the
 // player, else at decoration or a window. It reports whether it hit.
-func (s *Sim) Melee(tool string) bool {
+func (s *Sim) Melee(tool string) (hit bool) {
 	p := &s.Player
 	st := Stimulus{Stim: StimBash, Intensity: 1, Medium: "radius"}
 	reach := 2.4
 	switch tool {
 	case "blade":
 		st = Stimulus{Stim: StimPierce, Intensity: 4, Medium: "radius", Extra: map[string]any{"how": "stabbed"}}
+	case "bottle": // a club once: it breaks on what it strikes
+		defer func() {
+			if hit {
+				s.Player.Ammo[AmmoBottle]--
+				s.emit(p.Pos, 40, "shatter", -1)
+			}
+		}()
 	case "sword", "halberd": // a guard's, taken
 		w := Weapons[tool]
 		st = Stimulus{Stim: StimPierce, Intensity: w.Damage, Medium: "radius", Extra: map[string]any{"how": "cut down"}}

@@ -83,6 +83,7 @@ type NPC struct {
 	Wander                float64 // a staggering NPC's turn rate
 	NoPath                int     // ticks before trying again after a failed path search, whatever the goal
 	LKP                   Vec3    // last known position of whatever worries it
+	MealAt                Vec3    // what it is eating or drinking (Eating)
 	heardFrom             Vec3    // where the sound being delivered seems to come from (reachSound)
 	LastSeen              int     // ticks since it last saw the player
 	Known                 []int
@@ -558,6 +559,10 @@ func pick(i int, s ...string) string { return s[i%len(s)] }
 func (s *Sim) act(k int) {
 	n := s.NPCs[k]
 	in := character.Input{Yaw: n.Yaw}
+	if s.Convulsing(k) { // the poison's throes: it stands thrashing where it is
+		s.move(k, in)
+		return
+	}
 	if s.doChore(k, &in) {
 		s.move(k, in)
 		return
@@ -570,7 +575,10 @@ func (s *Sim) act(k int) {
 		wp := n.Patrol[n.PatrolI%len(n.Patrol)]
 		if n.Wait > 0 {
 			n.Wait--
-			if wp.Face {
+			switch {
+			case s.Eating(k): // faces what it eats
+				s.turn(n, yawTo(n.pos(), n.MealAt), 0.15)
+			case wp.Face:
 				s.turn(n, wp.Yaw, 0.15)
 			}
 			if n.Wait == 0 {
@@ -580,6 +588,7 @@ func (s *Sim) act(k int) {
 		}
 		if s.walkTo(k, wp.Pos, 0.35, &in) {
 			n.Wait = max(1, wp.Wait)
+			s.eatAt(k) // what stands by the stop is eaten or drunk (feed waits on)
 		}
 	case StateSuspicious:
 		s.turn(n, yawTo(n.pos(), n.LKP), 0.12)
