@@ -159,6 +159,13 @@ func main() {
 			g.loadSFX(*sfxDir)
 		}
 	}
+	g.opts = loadOptions()
+	if err := g.setupMenus(); err != nil {
+		log.Fatal(err)
+	}
+	if *shot == "" && !*edit {
+		g.openTitle()
+	}
 	// -shot runs are automated: never grab the user's mouse or take any
 	// keyboard or mouse input.
 	if *shot == "" {
@@ -183,6 +190,7 @@ type game struct {
 	ready       bool     // the mission's chunks are loaded
 	loadFrac    float64  // loading progress, 0..1
 	captured    bool
+	swallow     bool // the click that captured the mouse, until released: not a shot or swing
 	auto        bool // automated -shot run: no input at all
 	script      []scriptStep
 
@@ -193,6 +201,7 @@ type game struct {
 	drawState
 	hudState
 	soundState
+	menuState
 	ed editor
 }
 
@@ -234,6 +243,7 @@ func (g *game) run(shotPath string, shotAt int) {
 			saveShot(filepath.Join("screenshots", time.Now().Format("2006-01-02_15-04-05")+".png"), fw, fh)
 		}
 		g.drawHUD(fw, fh)
+		g.drawMenus(fw, fh)
 		if autoShot {
 			saveShot(shotPath, fw, fh)
 			g.printStatus()
@@ -252,6 +262,9 @@ func (g *game) step() {
 	}
 	g.playTick++
 	g.runScript()
+	if g.menuOpen() {
+		return // paused
+	}
 	if g.editing && g.sim == nil {
 		g.tickEditor()
 		return
@@ -290,6 +303,10 @@ func (g *game) waitForWorld() {
 		return
 	}
 	g.startSim()
+	if g.loadNext { // Load Game on the title menu
+		g.loadNext = false
+		g.quickload()
+	}
 }
 
 // missionBounds is the cell box around everything the mission places.

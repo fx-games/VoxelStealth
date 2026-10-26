@@ -32,7 +32,7 @@ const sr = audio.SampleRate
 // synth builds a sound of dur seconds from a per-sample function of time.
 func synth(dur float64, f func(t float64) float64) *audio.Sound {
 	n := int(dur * sr)
-	s := &audio.Sound{Samples: make([]float32, n)}
+	s := &audio.Sound{Samples: make([]float32, n), Channels: 1, Rate: sr}
 	for i := range s.Samples {
 		s.Samples[i] = float32(math.Max(-1, math.Min(1, f(float64(i)/sr))))
 	}

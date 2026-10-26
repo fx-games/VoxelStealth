@@ -7,6 +7,7 @@ Model: guard
 Voice: generic-guard-a
 Pos: 10.5,64,58.5
 Yaw: 0
+Torch: yes
 Patrol: 10.5,64,58.5 3; 9.5,64,8.5 4 90; 53.5,64,8.5 3; 53.5,64,47.5 4 270; 40.5,64,46.5 2; 22.5,64,46.5 2
 
 ID: bertram

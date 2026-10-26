@@ -97,14 +97,26 @@ func (g *game) resetPlay() {
 func (g *game) setupInput() {
 	g.capture(true)
 	g.win.SetKeyCallback(func(w *glfw.Window, k glfw.Key, sc int, a glfw.Action, mods glfw.ModifierKey) {
+		if g.menuOpen() {
+			g.menuKey(k, a, mods)
+			return
+		}
 		if a != glfw.Press {
 			return
 		}
 		g.keyPressed(k, mods)
 	})
 	g.win.SetMouseButtonCallback(func(w *glfw.Window, b glfw.MouseButton, a glfw.Action, m glfw.ModifierKey) {
+		if a == glfw.Release {
+			g.swallow = false
+		}
+		if g.menuOpen() {
+			g.menuButton(b, a, m)
+			return
+		}
 		if a == glfw.Press && !g.captured {
 			g.capture(true)
+			g.swallow = true
 			return
 		}
 		if a == glfw.Press && g.editing && g.sim == nil {
@@ -112,6 +124,10 @@ func (g *game) setupInput() {
 		}
 	})
 	g.win.SetScrollCallback(func(w *glfw.Window, dx, dy float64) {
+		if g.menuOpen() {
+			g.menuScroll(dy)
+			return
+		}
 		if g.editing && g.sim == nil {
 			g.editorScroll(dy)
 		}
@@ -120,12 +136,13 @@ func (g *game) setupInput() {
 	g.win.SetCursorPosCallback(func(w *glfw.Window, x, y float64) {
 		dx, dy := x-lastX, y-lastY
 		lastX, lastY = x, y
-		if !g.captured {
+		if g.menuOpen() {
+			g.menuCursor(x, y)
 			return
 		}
-		const sens = 0.0025
-		g.cam.Yaw += dx * sens
-		g.cam.Pitch = math.Max(-1.55, math.Min(1.55, g.cam.Pitch-dy*sens))
+		if g.captured {
+			g.look(dx, dy)
+		}
 	})
 }
 
@@ -145,14 +162,10 @@ func (g *game) capture(on bool) {
 func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 	switch k {
 	case glfw.KeyEscape:
-		if g.captured {
-			g.capture(false)
-		} else {
-			g.win.SetShouldClose(true)
-		}
+		g.openGameMenu()
 		return
 	case glfw.KeyF1:
-		g.showHelp = !g.showHelp
+		g.open(g.helpScreen())
 		return
 	case glfw.KeyF2:
 		g.shotReq = true
@@ -221,7 +234,7 @@ func (g *game) key(k glfw.Key) bool {
 }
 
 func (g *game) mouseDown() bool {
-	return g.vmouse || g.captured && g.win.GetMouseButton(glfw.MouseButtonLeft) == glfw.Press
+	return g.vmouse || g.captured && !g.swallow && g.win.GetMouseButton(glfw.MouseButtonLeft) == glfw.Press
 }
 
 // movementInput reads WASD and the look direction.
@@ -512,7 +525,7 @@ func (g *game) arrowHit(a *projectile.Arrow, t projectile.Target) {
 // scriptStep is one automated input for -shot runs: at tick (counted from
 // the mission start) do action. Actions: fwd/back/left/right/crouch/run/
 // use/fire=N hold for N ticks; yaw/pitch=degrees; weapon=1..4; tp=x,y,z;
-// ammo=type; give=sword|halberd; save; load.
+// ammo=type; give=sword|halberd; menu=title|game|help|options; save; load.
 type scriptStep struct {
 	at     int
 	action string
@@ -577,6 +590,9 @@ func (g *game) runScript() {
 			g.selectWeapon(n - 1)
 		case "ammo":
 			g.ammo = st.arg
+		case "menu": // open a screen: title, game, help, options
+			map[string]func(){"title": g.openTitle, "game": g.openGameMenu,
+				"help": func() { g.open(g.helpScreen()) }, "options": func() { g.open(g.optionsScreen()) }}[st.arg]()
 		case "give": // a taken weapon: sword, halberd
 			g.sim.Player.Weapons[st.arg] = true
 		case "tp":

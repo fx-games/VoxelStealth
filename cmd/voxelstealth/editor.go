@@ -62,25 +62,6 @@ var npcKinds = []sim.NPCDef{
 	{Name: "Target", Kind: "target", Model: "lord"},
 }
 
-var editorHelp = []string{
-	"EDITOR",
-	"W A S D / mouse / Space / Shift   fly           G  no-clip",
-	"Left / right mouse  remove / place block         Middle mouse  pick block",
-	"1-9, wheel          choose block",
-	"M                   mark a box corner (twice: both corners)",
-	"F / Shift+F         fill marked box with the block / with air",
-	"C / V               copy marked box / paste it at the crosshair",
-	"Z                   undo (50 steps)",
-	"O / P               choose object / place it at the crosshair (torches: floor or wall; lanterns: floor or ceiling; candles: floor)",
-	"N / Shift+N         choose NPC kind / place it (faces your way)",
-	"K / Shift+K         add a patrol point for the last NPC / clear its patrol",
-	"J / Shift+J         the weapon of the NPC at the crosshair (else the last): random, sword, halberd, crossbow, none / its torch on or off",
-	"Backspace           delete the object or NPC at the crosshair",
-	"R                   add a room from the marked box",
-	"T / Y               set the start here / set the exit to the marked box",
-	"Ctrl+S              save            F6  playtest (again: back to editing)",
-}
-
 type change struct {
 	c        sim.Cell
 	old, new string

@@ -26,7 +26,6 @@ type hudState struct {
 	lines          []line
 	log            []string // everything said, for -shot status output
 	showObjectives bool
-	showHelp       bool
 	flash          int
 	flashColor     [3]uint8
 }
@@ -41,33 +40,6 @@ var (
 	panel  = color.NRGBA{8, 10, 16, 190}
 	shadow = color.NRGBA{0, 0, 0, 200}
 )
-
-var helpText = []string{
-	"PLAYING",
-	"W A S D / mouse   move, look        Space  jump",
-	"Shift (or C)      crouch: slow, quiet, harder to see",
-	"Ctrl              run: fast and loud",
-	"E (hold)          use: doors, loot, pick locks, carry bodies, take torches, knock lamps",
-	"Q                 kick: sends people flying (into walls and spikes), kicks doors in and stakes out",
-	"R                 span the crossbow (slow; you barely move meanwhile)",
-	"T                 throw the weapon in hand (walk over it to pick it up)",
-	"G                 drop the body or torch you carry (E on a chest hides a body)",
-	"1 2 3 4 5 6 7     crossbow, blackjack, blade, flash bomb, TNT, long sword, halberd",
-	"X                 next arrow type: broadhead, water, noisemaker, rope",
-	"Left mouse        shoot a spanned bolt; hold and release: strike, or throw (a torch in hand: it)",
-	"Tab               objectives          F5 / F9  quicksave / quickload",
-	"F2                screenshot           Esc  release mouse (again: quit)",
-	"",
-	"Stay in the dark (the gem bottom left), walk on carpet, keep doors closed.",
-	"Rope arrows hang a rope: jump at it to grab it, W/S climb, A/D (or Ctrl+W/S) swing, Space lets go.",
-	"Ledges: hold Space+W against one in reach (or climb a rope up to it) to pull yourself up.",
-	"Water puts out torches and makes puddles; lamps and puddles don't mix.",
-	"Guards see through windows. Glass breaks to a bolt or a swing, very loudly.",
-	"A carried torch lights your way (and you); thrown, it clatters and sets rugs alight.",
-	"Guards drop their arms when they go down: take a sword or halberd (E) to swing (click) or throw it; a crossbow gives bolts.",
-	"Wind a throw up fully and it hits hard: a guard it strikes goes down.",
-	"A flash bomb blinds whoever looks at it: they stagger about and can't fight. TNT, set down with a click, breaks walls.",
-}
 
 const msgTicks = 6 * sim.TicksPerSecond
 
@@ -202,15 +174,6 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 		y += 14
 	}
 	g.lines = keep
-	if g.showHelp {
-		cols := []color.Color{gold, white}
-		lines := helpText
-		if g.editing && g.sim == nil {
-			lines = editorHelp
-		}
-		c.panel(lines, cols)
-		return
-	}
 	if g.sim == nil {
 		g.paintEditorHUD(c, w, h)
 		return

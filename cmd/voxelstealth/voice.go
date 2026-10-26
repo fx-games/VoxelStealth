@@ -91,22 +91,7 @@ func loadOgg(path string) (*audio.Sound, error) {
 			mono[i] += data[i*ch+c] / float32(ch)
 		}
 	}
-	// ponytail: linear resampling, fine for speech; files should be 44.1 kHz anyway.
-	if fm.SampleRate != sr && fm.SampleRate > 0 {
-		n := int(int64(len(mono)) * sr / int64(fm.SampleRate))
-		out := make([]float32, n)
-		for i := range out {
-			x := float64(i) * float64(fm.SampleRate) / sr
-			j := int(x)
-			if j+1 >= len(mono) {
-				break
-			}
-			t := float32(x - float64(j))
-			out[i] = mono[j]*(1-t) + mono[j+1]*t
-		}
-		mono = out
-	}
-	return &audio.Sound{Samples: mono}, nil
+	return &audio.Sound{Samples: mono, Channels: 1, Rate: fm.SampleRate}, nil // the mixer resamples
 }
 
 // voiceFor returns NPC k's recording of a line, or nil.
