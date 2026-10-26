@@ -279,6 +279,9 @@ func (s *Sim) tickNPC(k int) {
 		s.tumble(k)
 		return
 	}
+	if s.Rising(k) {
+		return
+	}
 	if !n.alive() || n.CarriedBy || n.Hidden {
 		if !n.CarriedBy && !n.Hidden {
 			n.Body.Tick(bodyWorld{s}, character.Input{Yaw: n.Yaw}) // fall

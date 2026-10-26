@@ -866,3 +866,32 @@ func TestKick(t *testing.T) {
 		t.Fatal("door not kicked in")
 	}
 }
+
+// A kicked guard that lands unhurt lies still while it gets up, then reels.
+func TestKickedGuardGetsUp(t *testing.T) {
+	w, m := twoRooms()
+	m.NPCs = []*NPCDef{guard(Vec3{5, 1, 2.5}, math.Pi)}
+	s := New(w, m)
+	s.Player.Pos, s.Player.Yaw = Vec3{5, 1, 1}, math.Pi // facing +Z, open floor ahead
+	s.Kick()
+	for i := 0; s.Airborne(0); i++ {
+		if i > 5*TicksPerSecond {
+			t.Fatal("still flying")
+		}
+		s.Tick()
+	}
+	g := s.NPCs[0]
+	if !g.alive() || !s.Rising(0) {
+		t.Fatalf("guard %v, rising %v; want getting up", g.State(), s.Rising(0))
+	}
+	at := g.pos()
+	for s.Rising(0) {
+		s.Tick()
+		if s.Rising(0) && g.pos() != at {
+			t.Fatalf("moved from %v to %v while getting up", at, g.pos())
+		}
+	}
+	if g.Blind() == 0 {
+		t.Fatal("not dazed after getting up")
+	}
+}

@@ -178,7 +178,7 @@ func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
 		g.weapon = wCrossbow
 	case k == glfw.KeyQ && g.kickWait == 0 && s.Player.Carrying < 0:
 		s.Kick()
-		g.kickWait = kickTicks
+		g.kickWait, g.kicked = kickTicks, true
 	case k == glfw.KeyG:
 		if s.Player.Carrying >= 0 {
 			s.DropBody()

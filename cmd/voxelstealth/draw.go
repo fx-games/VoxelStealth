@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/particles"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -41,6 +42,8 @@ type drawState struct {
 	modelRend *render.ModelRenderer
 	skins     map[string]*npcSkin
 	npcAnims  []*npcAnim
+	self      *npcAnim                // the player's body (drawSelf)
+	kicked    bool                    // the player just kicked: drawSelf plays it
 	props     map[string]int          // prop box models
 	wicks     map[string][]mgl32.Vec3 // lit candle props' flame tops, model space
 	fp        map[int]*model.Animator // the melee weapons' first-person arms (fpArms)
@@ -187,6 +190,7 @@ func (g *game) drawWorld(alpha float64) {
 	g.insts, g.items = g.insts[:0], g.items[:0]
 	if g.sim != nil {
 		g.drawNPCs(alpha, dt)
+		g.drawSelf(alpha, dt)
 		g.drawObjects(g.sim.Objects, alpha)
 		for _, b := range g.sim.Bombs {
 			origin, yaw, tilt, _ := bombPose(b.Pos, b.Prev, b.Vel, b.Flight, b.Flying, b.Flash, alpha)
@@ -338,6 +342,53 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: n.Yaw, Tilt: tilt, TiltYaw: t.fallYaw,
 			Skin: a.skin, Sky: sky, Block: blk})
 	}
+}
+
+// drawSelf draws the player's own body in first person, as the reference
+// (tr7zw's FirstPersonModel) does: the player model in the "player" skin
+// without its head, and without its arms, which drawHand draws, set back
+// from the eye (more when crouched, so the eye stays out of the chest) so
+// that looking down shows the chest, legs and feet. It walks, and kicks
+// (g.kicked).
+func (g *game) drawSelf(alpha float64, dt float32) {
+	sk := g.skins["player"]
+	if sk == nil {
+		return
+	}
+	if g.self == nil {
+		g.self = &npcAnim{anim: model.NewAnimator(sk.model)}
+	}
+	a := g.self
+	step := g.walkDist - g.prevWalk
+	switch {
+	case g.kicked:
+		g.kicked = false
+		a.clip = "kick"
+		a.anim.Play("kick", true)
+	case a.clip == "kick" && !a.anim.Done():
+	default:
+		if clip := clipFor(sk.model, step > 0.01); clip != a.clip {
+			a.clip = clip
+			a.anim.Play(clip, false)
+		}
+	}
+	speed := float32(1)
+	if a.clip != "kick" && step > 0.01 {
+		speed = float32(min(2, max(0.5, step/0.1)))
+	}
+	a.anim.Update(dt * speed)
+	a.skin = a.anim.Skin(a.skin)
+	for i, b := range sk.model.Bones {
+		if b.Name == "head" || b.Name == "rightArm" || b.Name == "leftArm" {
+			a.skin[i] = mgl32.Mat4{}
+		}
+	}
+	x, y, z := g.player.Lerp(alpha)
+	yaw := g.cam.Yaw
+	back := 0.25 + (character.PlayerEyeHeight-g.player.EyeHeight)*0.8
+	x, z = x-math.Sin(yaw)*back, z+math.Cos(yaw)*back // yaw 0 faces -Z
+	sky, blk := g.light(x, y+1, z)
+	g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: yaw, Skin: a.skin, Sky: sky, Block: blk})
 }
 
 // drawObjects draws props as box models and loot as item sprites.

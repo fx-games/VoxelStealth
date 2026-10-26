@@ -1,6 +1,6 @@
 // Command buildplayer writes assets/models/player.gltf: the reference's
 // player model (PlayerModel with wide arms, 64×64 skin, with the second
-// layer), built cube by cube as ModelPart builds it, with Minecraft's walk and idle limb swings, over a
+// layer), built cube by cube as ModelPart builds it, with Minecraft's walk and idle limb swings and a kick, over a
 // placeholder skin. The game puts the NPCs' own skins on it
 // (assets/skins/<model>.png).
 //
@@ -143,6 +143,26 @@ func swing(m *model.Model) {
 			"rightArm": math.Cos(ph+math.Pi) * amount, "leftArm": math.Cos(ph) * amount,
 		}[b]
 		return mgl32.Vec3{float32(x), 0, 0}
+	})
+	clip("kick", 0.6, func(b string, t float64) mgl32.Vec3 { // ours: wind back, snap up and out, hold, lower
+		key := func(ts, xs []float64) float64 {
+			for i := 1; i < len(ts); i++ {
+				if t <= ts[i] {
+					f := (t - ts[i-1]) / (ts[i] - ts[i-1])
+					return xs[i-1] + (xs[i]-xs[i-1])*f*f*(3-2*f)
+				}
+			}
+			return xs[len(xs)-1]
+		}
+		ts := []float64{0, 0.15, 0.4, 0.6, 1}
+		x := map[string][]float64{
+			"rightLeg": {0, 0.5, -1.6, -1.6, 0},
+			"rightArm": {0, -0.2, 0.5, 0.5, 0}, "leftArm": {0, 0.2, -0.5, -0.5, 0},
+		}[b]
+		if x == nil {
+			return mgl32.Vec3{}
+		}
+		return mgl32.Vec3{float32(key(ts, x)), 0, 0}
 	})
 	clip("idle", 3.5, func(b string, t float64) mgl32.Vec3 {
 		z := math.Cos(2*math.Pi*t)*0.05 + 0.05 // the reference's zRot; ours turns the other way

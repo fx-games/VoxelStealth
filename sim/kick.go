@@ -17,7 +17,8 @@ const (
 	kickReach = 1.8
 	kickPower = 0.75 // blocks per tick: a body flies about four blocks
 	kickLift  = 0.3
-	dazedFor  = 2 * TicksPerSecond // a kicked NPC getting up
+	RiseTicks = 24                 // a kicked NPC getting up off the floor
+	dazedFor  = 2 * TicksPerSecond // and then reeling
 )
 
 // Kick kicks whatever is in front of the player: an NPC, else a door,
@@ -77,7 +78,8 @@ func (s *Sim) shove(k int, d Delivery, _ []string) bool {
 }
 
 // tumble is an airborne NPC's tick: it flies, slams into things and,
-// at rest, gets up dazed (blind until recover) if it can.
+// at rest, gets up (rising, RiseTicks) and reels dazed (blind until
+// recover) if it can.
 func (s *Sim) tumble(k int) {
 	n, r := s.NPCs[k], s.npcR(k)
 	imp, rest := n.Flight.Tick(&n.Body, bodyWorld{s})
@@ -90,12 +92,17 @@ func (s *Sim) tumble(k int) {
 		}
 	}
 	if rest {
+		n.Body.VX, n.Body.VZ = 0, 0
 		s.B.Clear(r, "airborne")
 		if n.alive() {
-			s.B.SetFor(r, "blind", true, max(n.Blind(), dazedFor))
+			s.B.SetFor(r, "rising", true, RiseTicks)
+			s.B.SetFor(r, "blind", true, max(n.Blind(), RiseTicks+dazedFor))
 		}
 	}
 }
+
+// Rising reports whether NPC k is getting up after a kick: it lies still.
+func (s *Sim) Rising(k int) bool { return s.B.Bool(s.npcR(k), "rising") }
 
 // Airborne reports whether NPC k is flying from a kick.
 func (s *Sim) Airborne(k int) bool { return s.B.Bool(s.npcR(k), "airborne") }

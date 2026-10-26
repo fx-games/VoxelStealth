@@ -319,7 +319,8 @@ func torchModel(o *sim.Object) string {
 // loadNPCs dresses the Minecraft player model (player.gltf, made by
 // cmd/buildplayer) in each NPC model's skin, ../skins/<model>.png beside
 // the models (64×64 Minecraft skins); a model without one wears the
-// placeholder, which is also "guard", the fallback.
+// placeholder, which is also "guard", the fallback, and "player", the
+// player's own body (drawSelf).
 func (g *game) loadNPCs(dir string) error {
 	base, err := gltf.LoadFile(filepath.Join(dir, "player.gltf"))
 	if err != nil {
@@ -331,8 +332,13 @@ func (g *game) loadNPCs(dir string) error {
 		g.skins[name] = &npcSkin{model: m, handle: h}
 		return err
 	}
-	if err := add("guard", base); err != nil {
-		return err
+	if c := base.Clips["kick"]; c != nil {
+		c.Loop = model.LoopOnce
+	}
+	for _, name := range []string{"guard", "player"} { // the placeholder, until a skin of that name comes
+		if err := add(name, base); err != nil {
+			return err
+		}
 	}
 	pngs, _ := filepath.Glob(filepath.Join(dir, "..", "skins", "*.png"))
 	for _, p := range pngs {

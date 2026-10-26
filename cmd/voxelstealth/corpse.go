@@ -17,6 +17,7 @@ import (
 	"github.com/memmaker/voxellib/ragdoll"
 	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxellib/voxel/render"
+	"github.com/memmaker/voxelstealth/sim"
 )
 
 // shapeInfo is per-model data for exact hits.
@@ -45,7 +46,8 @@ type npcTarget struct {
 
 	dying   int           // ticks since the NPC went down (0 = standing)
 	fallYaw float64       // direction it falls
-	doll    *ragdoll.Doll // down or kicked: its limbs
+	doll    *ragdoll.Doll // down, kicked or carried: its limbs
+	dollYaw float64       // the NPC's yaw when its doll was made
 
 	// As last drawn, for exact hits and arrows riding bones.
 	drawn                        bool
@@ -188,12 +190,21 @@ func (t *npcTarget) fall(yaw float64) {
 // tickFall ragdolls an NPC that went down or was kicked: a VoxelLib Doll
 // that follows its body. NPCs that went down without an arrow fall away
 // from the player who struck them (blade, blackjack), or backwards when
-// nobody is near (fire); kicked ones fly as their body does.
+// nobody is near (fire); kicked ones fly as their body does, and get up
+// the doll's way (Rise) while the sim has them rising.
 func (t *npcTarget) tickFall() {
 	s := t.g.sim
 	n := s.NPCs[t.k]
 	flying := s.Airborne(t.k)
 	switch {
+	case n.Alive() && !flying && t.doll != nil && s.Rising(t.k): // getting up
+		b := &n.Body
+		if !t.doll.Rising() { // facing the way it lay, so it doesn't spin getting up
+			n.Yaw = t.dollYaw - t.doll.Turn()
+			t.doll.Rise(creatureMatrix(b.X, b.Y, b.Z, n.Yaw, 0, 0), sim.RiseTicks)
+		}
+		t.doll.RiseStep()
+		return
 	case n.Alive() && !flying:
 		t.dying, t.doll = 0, nil
 		return
@@ -208,15 +219,36 @@ func (t *npcTarget) tickFall() {
 	}
 	b := &n.Body
 	if t.doll == nil {
-		t.doll = ragdoll.New(t.skin().model, creatureMatrix(b.X, b.Y, b.Z, n.Yaw, 0, 0))
+		t.doll, t.dollYaw = ragdoll.New(t.skin().model, creatureMatrix(b.X, b.Y, b.Z, n.Yaw, 0, 0)), n.Yaw
 		v := mgl32.Vec3{float32(b.VX), float32(b.VY), float32(b.VZ)}
 		if !flying { // a shove the way it falls
 			v = mgl32.Vec3{float32(math.Sin(t.fallYaw)) * 0.08, 0, -float32(math.Cos(t.fallYaw)) * 0.08}
 		}
 		t.doll.Push(v, 0.6)
 	}
+	if n.CarriedBy {
+		t.sling()
+		return
+	}
 	t.doll.Follow(b.X, b.Y, b.Z, 0.3)
 	t.doll.Step(collide.SolidsFunc(s.W.Solid))
+}
+
+// sling hangs a carried body over the player's right shoulder: its pelvis
+// held there, its head down the back and its legs down the front. It
+// passes through the blocks, so it never snags in a doorway.
+func (t *npcTarget) sling() {
+	p := &t.g.sim.Player
+	fx, fz := float32(math.Sin(p.Yaw)), -float32(math.Cos(p.Yaw)) // yaw 0 faces -Z
+	fwd, right := mgl32.Vec3{fx, 0, fz}, mgl32.Vec3{-fz, 0, fx}
+	sh := mgl32.Vec3{float32(p.Pos.X), float32(p.Pos.Y + t.g.player.EyeHeight - 0.3), float32(p.Pos.Z)}.Add(right.Mul(0.3))
+	down := mgl32.Vec3{0, -1, 0}
+	t.doll.Hold(ragdoll.Pelvis, sh)
+	t.doll.Pull(ragdoll.Crown, sh.Add(fwd.Mul(-0.8)).Add(down.Mul(0.5)), 0.15)
+	for _, f := range []int{ragdoll.FootR, ragdoll.FootL} {
+		t.doll.Pull(f, sh.Add(fwd.Mul(0.4)).Add(down.Mul(0.6)), 0.1)
+	}
+	t.doll.Step(collide.SolidsFunc(func(x, y, z int) bool { return false }))
 }
 
 // deathTilt is how far the NPC model is tipped over (radians): never,
