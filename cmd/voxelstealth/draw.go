@@ -230,7 +230,7 @@ func (g *game) propTilted(name string, p sim.Vec3, yaw, tilt, tiltYaw float64) {
 // while thrown (sim.Object.Flight), else lying on its side, resting on the
 // floor. Returns the model origin, its tilt toward o.Yaw and the flame.
 func lyingTorch(o *sim.Object, alpha float64) (origin sim.Vec3, tilt float64, tip sim.Vec3) {
-	const mid, length = 0.45, 0.75 // along the stick, from the origin
+	const mid, length = 0.45, sim.LieLength // along the stick, from the origin
 	fx, fz := math.Sin(o.Yaw), -math.Cos(o.Yaw)
 	axis := func(t float64) sim.Vec3 { return sim.Vec3{X: fx * math.Sin(t), Y: math.Cos(t), Z: fz * math.Sin(t)} }
 	if o.Flight > 0 {

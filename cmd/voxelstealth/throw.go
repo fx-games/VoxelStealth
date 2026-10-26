@@ -89,11 +89,22 @@ func (g *game) thrownHit(a *projectile.Arrow, nt *npcTarget) {
 
 // pickUpThrown gives back a thrown weapon at rest that the player
 // touches (Arrow.playerTouch: the player's box meets it), in a body or not.
+// One lying on the floor is laid where all of it is clear of the walls.
 func (g *game) pickUpThrown() {
 	p := g.player
 	for a, w := range g.thrown {
 		if !a.Stuck && a.In == nil {
 			continue
+		}
+		if a.Stuck && a.Bounce > 0 {
+			tm := thrownModel[w]
+			half := float64(tm.length) / 2
+			if tm.flatLay { // a picture: its blade along the diagonal
+				half *= math.Sqrt2
+			}
+			at, yaw := g.sim.LayFlat(vec(a.X, a.Y+0.1, a.Z), a.Yaw, half, half, float64(tm.radius)+0.05)
+			a.X, a.Z, a.Yaw = at.X, at.Z, yaw
+			a.PrevX, a.PrevZ, a.PrevYaw = at.X, at.Z, yaw
 		}
 		x, y, z := a.X, a.Y, a.Z
 		if t, ok := a.In.(*npcTarget); ok {

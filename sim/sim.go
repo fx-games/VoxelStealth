@@ -239,6 +239,9 @@ type Stats struct {
 	InnocentsKilled                                               int
 }
 
+// bombRadius is a bomb's half width, standing where it landed.
+const bombRadius = 0.15
+
 type bomb struct {
 	Pos, Prev, Vel Vec3 // Prev and Vel while Flying
 	Fuse           int
@@ -700,6 +703,50 @@ func (s *Sim) floorBelow(c Cell, depth int) (Cell, bool) {
 	return c, false
 }
 
+// LayFlat finds where a thing lying on the floor at at, from back behind
+// it to ahead in front along yaw and r thick about that line, rests clear
+// of the blocks: where it is, else the nearest spot on the same floor
+// (within a block), turned no more than it must be. A thing that fits
+// nowhere near stays as it is.
+func (s *Sim) LayFlat(at Vec3, yaw, back, ahead, r float64) (Vec3, float64) {
+	y := at.Y + 0.05
+	open := func(x, z float64) bool {
+		c := (Vec3{x, y, z}).Cell()
+		return !s.W.Solid(c.X, c.Y, c.Z)
+	}
+	fits := func(c Vec3, yaw float64) bool {
+		if f := (Vec3{c.X, y, c.Z}).Cell(); !s.W.Solid(f.X, f.Y-1, f.Z) {
+			return false // off the floor it fell on
+		}
+		fx, fz := forward(yaw)
+		for t := -back; ; t = min(t+0.1, ahead) {
+			x, z := c.X+fx*t, c.Z+fz*t
+			if !open(x-r, z-r) || !open(x+r, z-r) || !open(x-r, z+r) || !open(x+r, z+r) {
+				return false
+			}
+			if t >= ahead {
+				return true
+			}
+		}
+	}
+	turns := []float64{0, math.Pi / 4, -math.Pi / 4, math.Pi / 2, -math.Pi / 2, 3 * math.Pi / 4, -3 * math.Pi / 4, math.Pi}
+	for d := 0.0; d <= 1; d += 0.05 {
+		for k := range 8 {
+			a := float64(k) * math.Pi / 4
+			c := Vec3{at.X + d*math.Cos(a), at.Y, at.Z + d*math.Sin(a)}
+			for _, t := range turns {
+				if fits(c, yaw+t) {
+					return c, yaw + t
+				}
+			}
+			if d == 0 {
+				break
+			}
+		}
+	}
+	return at, yaw
+}
+
 func (s *Sim) tickBombs() {
 	for i := 0; i < len(s.Bombs); i++ {
 		b := &s.Bombs[i]
@@ -707,6 +754,7 @@ func (s *Sim) tickBombs() {
 			b.Flight++
 			if s.fly(&b.Pos, &b.Prev, &b.Vel, &b.Hard) {
 				b.Flying = false
+				b.Pos, _ = s.LayFlat(b.Pos, 0, 0, 0, bombRadius)
 			}
 		}
 		if b.Fuse--; b.Fuse%10 == 0 && b.Fuse > 0 {
@@ -777,7 +825,7 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 	case KindChest:
 		return p.Add(Vec3{-0.45, 0, -0.45}), p.Add(Vec3{0.45, 0.8, 0.45})
 	case KindWeapon:
-		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.2, 0.5})
+		return p.Add(Vec3{-0.35, 0, -0.35}), p.Add(Vec3{0.35, 0.2, 0.35})
 	case KindFlammable:
 		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.15, 0.5})
 	case KindFaucet:
@@ -815,7 +863,9 @@ func rayBox(o, d, lo, hi Vec3) (float64, bool) {
 const Reach = 2.8
 
 // TargetAt finds the nearest object or body along the view ray within
-// reach and not behind a wall.
+// reach and not behind a wall. What a body dropped (its weapon, its torch)
+// lies within its box: aimed at, a thing beside a body is the target, not
+// the body.
 func (s *Sim) TargetAt(eye, dir Vec3) Target {
 	best := NoTarget
 	best.Dist = Reach
@@ -840,7 +890,11 @@ func (s *Sim) TargetAt(eye, dir Vec3) Target {
 		if !n.alive() {
 			lo, hi = p.Add(Vec3{-0.9, 0, -0.9}), p.Add(Vec3{0.9, 0.5, 0.9})
 		}
-		if t, ok := rayBox(eye, dir, lo, hi); ok && t < best.Dist && clearPath(s.W, eye, eye.Add(dir.Scale(t))) {
+		t, ok := rayBox(eye, dir, lo, hi)
+		if ok && !n.alive() && best.Obj >= 0 && best.Dist < t+1.8 {
+			continue // the ray meets a thing lying in the body's box
+		}
+		if ok && t < best.Dist && clearPath(s.W, eye, eye.Add(dir.Scale(t))) {
 			best = Target{Obj: -1, NPC: k, Dist: t}
 		}
 	}
@@ -898,6 +952,8 @@ func (s *Sim) Describe(t Target) string {
 		return name + " (turn on)"
 	case KindAmmo:
 		return name + " x" + itoa(o.Count)
+	case KindWeapon:
+		return Weapons[o.Name].Name + " (take)"
 	}
 	return name
 }
@@ -1194,6 +1250,7 @@ func (s *Sim) flyTorch(i int) {
 	o.Flight++
 	if s.fly(&o.Pos, &o.Prev, &o.Vel, &o.Hard) {
 		o.Flight = 0
+		o.Pos, o.Yaw = s.LayFlat(o.Pos, o.Yaw, 0, LieLength, LieRadius)
 		s.B.Set(s.objR(i), "flying", false)
 		if o.Kind == KindTorch && o.Name == "Lantern" { // it cracks: its oil runs out over the floor
 			s.Stimulate(at(StimOil, o.Pos, 1, 3))

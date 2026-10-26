@@ -101,8 +101,18 @@ func (s *Sim) carryTorch(k int) {
 	}
 }
 
+// LieLength and LieRadius are a fallen torch's, lamp's or candle's reach
+// from its origin along its yaw and its half thickness, as drawn lying;
+// weaponRadius is a dropped weapon's (drawn as a turning picture).
+const (
+	LieLength    = 0.75
+	LieRadius    = 0.13
+	weaponRadius = 0.25
+)
+
 // disarm drops what NPC k carries as it goes down: the weapon to the
-// floor at its feet, the torch to burn on where it falls.
+// floor at its right, the torch to burn on at its left, each clear of the
+// body's middle to be aimed at and taken on its own.
 func (s *Sim) disarm(k int) {
 	n := s.NPCs[k]
 	at := n.pos()
@@ -116,12 +126,13 @@ func (s *Sim) disarm(k int) {
 		s.B.Clear(r, "carried")
 		s.B.Set(r, "fallen", true)
 		lx, lz := forward(n.Yaw - math.Pi/2)
-		o.Pos = Vec3{at.X + lx*0.5, at.Y, at.Z + lz*0.5}
+		o.Pos, o.Yaw = s.LayFlat(Vec3{at.X + lx*0.75, at.Y, at.Z + lz*0.75}, o.Yaw, 0, LieLength, LieRadius)
 		s.setLight(i, o.Lit())
 	}
 	if n.Weapon != "" {
 		rx, rz := forward(n.Yaw + math.Pi/2)
-		s.addObject(&Object{ID: n.ID + "_" + n.Weapon, Kind: KindWeapon, Name: n.Weapon, Pos: Vec3{at.X + rx*0.4, at.Y, at.Z + rz*0.4}, Yaw: n.Yaw})
+		pos, yaw := s.LayFlat(Vec3{at.X + rx*0.75, at.Y, at.Z + rz*0.75}, n.Yaw, 0, 0, weaponRadius)
+		s.addObject(&Object{ID: n.ID + "_" + n.Weapon, Kind: KindWeapon, Name: n.Weapon, Pos: pos, Yaw: yaw})
 		s.emit(at, 18, "clatter", -1)
 		n.Weapon, n.Loaded, n.Span, n.AimT = "", false, 0, 0
 	}

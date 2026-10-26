@@ -1,6 +1,9 @@
 package sim
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestGuardsArmed(t *testing.T) {
 	w, m := twoRooms()
@@ -48,6 +51,16 @@ func TestGuardDropsSwordAndTorch(t *testing.T) {
 	if o := s.Objects[wi]; o.Kind != KindWeapon || o.Name != "sword" || s.NPCs[0].Weapon != "" {
 		t.Fatalf("dropped %s %q; guard still holds %q", o.Kind, o.Name, s.NPCs[0].Weapon)
 	}
+	// Each lying by the body is aimed at on its own, the body between them.
+	down := Vec3{0, -1, 0}
+	for _, c := range []struct {
+		at       Vec3
+		obj, npc int
+	}{{s.Objects[wi].Pos, wi, -1}, {torch.Pos, ti, -1}, {s.NPCs[0].pos(), -1, 0}} {
+		if tg := s.TargetAt(c.at.Add(Vec3{0, 1.6, 0}), down); tg.Obj != c.obj || tg.NPC != c.npc {
+			t.Errorf("aimed down at %v: target obj %d npc %d, want %d %d", c.at, tg.Obj, tg.NPC, c.obj, c.npc)
+		}
+	}
 	s.Player.Pos = s.Objects[wi].Pos
 	s.Frob(Target{Obj: wi, NPC: -1}, false)
 	if !s.Player.Weapons["sword"] || !s.Objects[wi].Gone {
@@ -82,4 +95,32 @@ func TestCrossbowmanShoots(t *testing.T) {
 		}
 	}
 	t.Fatalf("crossbowman %v never shot", s.NPCs[0].State())
+}
+
+// A guard downed against a wall or in a corner drops its weapon and torch
+// clear of the blocks, lying whole on the floor beside it.
+func TestDroppedClearOfWalls(t *testing.T) {
+	for _, c := range []struct {
+		at  Vec3
+		yaw float64
+	}{{Vec3{0.3, 1, 5.5}, math.Pi / 2}, {Vec3{0.3, 1, 0.3}, 0}, {Vec3{9.7, 1, 10.7}, math.Pi}, {Vec3{5.5, 1, 0.3}, -math.Pi / 2}} {
+		w, m := twoRooms()
+		g := guard(c.at, c.yaw)
+		g.Torch = true
+		m.NPCs = []*NPCDef{g}
+		s := New(w, m)
+		s.Player.Pos = Vec3{18.5, 1, 9.5}
+		s.NPCs[0].Body.Teleport(c.at.X, c.at.Y, c.at.Z)
+		ti := s.NPCs[0].TorchObj - 1
+		s.knockOut(0, Delivery{}, []string{"hard"})
+		for _, d := range []struct {
+			i        int
+			ahead, r float64
+		}{{ti, LieLength, LieRadius}, {len(s.Objects) - 1, 0, weaponRadius}} {
+			o := s.Objects[d.i]
+			if at, yaw := s.LayFlat(o.Pos, o.Yaw, 0, d.ahead, d.r); at != o.Pos || yaw != o.Yaw {
+				t.Errorf("guard at %v: %s %q at %v yaw %.2f is in a wall (clear at %v yaw %.2f)", c.at, o.Kind, o.Name, o.Pos, o.Yaw, at, yaw)
+			}
+		}
+	}
 }
