@@ -760,3 +760,75 @@ Kind: decor
 Name: Dead grass
 Pos: 27.5,64,55.5
 Yaw: 114.59
+
+ID: lord_supper
+Kind: food
+Name: Plate of mutton
+Pos: 28.5,65,19.5
+Yaw: 0
+
+ID: lord_wine
+Kind: drink
+Name: Gold goblet
+Pos: 29.5,65,19.5
+Yaw: 0
+
+ID: maid_ale
+Kind: drink
+Name: Mug of ale
+Pos: 22.5,65,19.5
+Yaw: 0
+
+ID: dining_pie
+Kind: food
+Name: Cherry pie
+Pos: 24.5,65,20.5
+Yaw: 0
+
+ID: dining_lembas
+Kind: food
+Name: Plate of lembas
+Pos: 32.5,65,20.5
+Yaw: 0
+
+ID: dining_glass
+Kind: drink
+Name: Wine glass
+Pos: 19.5,65,20.5
+Yaw: 0
+
+ID: kitchen_cake
+Kind: food
+Name: Lemon cake
+Pos: 17.5,65,40.5
+Yaw: 0
+
+ID: guard_mutton
+Kind: food
+Name: Plate of pancakes
+Pos: 38.5,65,39.5
+Yaw: 0
+
+ID: guard_mug
+Kind: drink
+Name: Clay mug
+Pos: 39.5,65,39.5
+Yaw: 0
+
+ID: guard_bottle1
+Kind: drink
+Name: Bottle
+Pos: 40.5,65,39.5
+Yaw: 0
+
+ID: guard_bottle2
+Kind: drink
+Name: Bottle
+Pos: 41.5,65,39.5
+Yaw: 30
+
+ID: kitchen_bottle
+Kind: drink
+Name: Bottle
+Pos: 18.5,65,40.5
+Yaw: 0

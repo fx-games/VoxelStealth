@@ -142,6 +142,16 @@ func (g *game) drawHUD(fbW, fbH int) {
 	g.paintHUD(c, w, h)
 	g.hud.SetImage(c.img)
 	g.hud.Draw(0, 0, s, fbW, fbH)
+	if g.picking() {
+		g.drawPickerIcons(fbW, fbH, s)
+	}
+}
+
+// hudSize is the HUD canvas's size (drawHUD's scale applied).
+func (g *game) hudSize() (w, h int) {
+	fbW, fbH := g.win.GetFramebufferSize()
+	s := max(1, fbH/400)
+	return fbW / s, fbH / s
 }
 
 func (g *game) paintHUD(c *canvas, w, h int) {
@@ -217,7 +227,7 @@ func (g *game) paintHUD(c *canvas, w, h int) {
 		wl = fmt.Sprintf("%s x%d", weaponNames[g.weapon], p.Ammo[handAmmo[g.weapon]])
 	}
 	c.text(wl, w-c.width(wl)-10, h-34, white)
-	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d  tnt %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive], p.Ammo[sim.AmmoTNT])
+	amm := fmt.Sprintf("broad %d  water %d  noise %d  rope %d  bombs %d  tnt %d  poison %d  bottles %d", p.Ammo[sim.AmmoBroadhead], p.Ammo[sim.AmmoWater], p.Ammo[sim.AmmoNoise], p.Ammo[sim.AmmoRope], p.Ammo[sim.AmmoExplosive], p.Ammo[sim.AmmoTNT], p.Ammo[sim.AmmoPoison], p.Ammo[sim.AmmoBottle])
 	c.text(amm, w-c.width(amm)-10, h-18, grey)
 	if p.Carrying >= 0 {
 		t := "Carrying " + s.NPCs[p.Carrying].Name + " (G drops)"

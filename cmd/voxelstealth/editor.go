@@ -12,6 +12,7 @@ import (
 
 	"github.com/memmaker/voxellib/voxel"
 
+	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/platform/glfw"
 	"github.com/memmaker/voxellib/voxel/physics"
 	"github.com/memmaker/voxelstealth/sim"
@@ -54,6 +55,9 @@ var objectKinds = []sim.Object{
 	{Kind: sim.KindDecor, Name: "Iron gate"}, {Kind: sim.KindDecor, Name: "Iron pillar"}, {Kind: sim.KindDecor, Name: "Stone chair"},
 	{Kind: sim.KindDecor, Name: "Stone table"}, {Kind: sim.KindDecor, Name: "Tomb"}, {Kind: sim.KindDecor, Name: "Grave"},
 	{Kind: sim.KindDecor, Name: "Grave slab"},
+	{Kind: sim.KindDecor, Name: "Oak table"}, {Kind: sim.KindDecor, Name: "Oak chair"}, {Kind: sim.KindDecor, Name: "Oak stool"},
+	{Kind: sim.KindDecor, Name: "Spruce table"}, {Kind: sim.KindDecor, Name: "Spruce chair"}, {Kind: sim.KindDecor, Name: "Spruce stool"},
+	{Kind: sim.KindDecor, Name: "Dark oak table"}, {Kind: sim.KindDecor, Name: "Dark oak chair"}, {Kind: sim.KindDecor, Name: "Dark oak stool"},
 	{Kind: sim.KindAmmo, Name: sim.AmmoPoison, Count: 1},
 	{Kind: sim.KindFood, Name: "Banana cake"}, {Kind: sim.KindFood, Name: "Lemon cake"}, {Kind: sim.KindFood, Name: "Berry pie"},
 	{Kind: sim.KindFood, Name: "Cherry pie"}, {Kind: sim.KindFood, Name: "Apple crumble"},
@@ -84,11 +88,16 @@ type editor struct {
 	obj, npc int
 	lastNPC  *sim.NPCDef
 	serial   int
+	pick     picker
+	placing  int // what right-click places: tabBlocks, tabObjects or tabNPCs
 }
 
 func (g *game) tickEditor() {
 	g.eng.Renderer.Opt.Daylight = 1
 	in := g.movementInput()
+	if g.ed.pick.open {
+		in = character.Input{}
+	}
 	g.player.Tick(g.world, in)
 	g.tickSounds()
 }
@@ -143,9 +152,16 @@ func (g *game) editorClick(b glfw.MouseButton) {
 	switch b {
 	case glfw.MouseButtonLeft:
 		g.setBlocks([]change{{c: c, new: sim.BlockAir}})
-	case glfw.MouseButtonRight:
-		if p, ok := g.edPlaceCell(); ok {
-			g.setBlocks([]change{{c: p, new: palette[g.ed.sel]}})
+	case glfw.MouseButtonRight: // the last pick (picker.go)
+		switch g.ed.placing {
+		case tabObjects:
+			g.placeObject()
+		case tabNPCs:
+			g.placeNPC()
+		default:
+			if p, ok := g.edPlaceCell(); ok {
+				g.setBlocks([]change{{c: p, new: palette[g.ed.sel]}})
+			}
 		}
 	case glfw.MouseButtonMiddle:
 		name := strings.TrimPrefix(g.world.Block(c.X, c.Y, c.Z), "minecraft:")
@@ -162,11 +178,67 @@ func (g *game) editorClick(b glfw.MouseButton) {
 
 func (g *game) editorScroll(dy float64) {
 	n := len(palette)
+	g.ed.placing = tabBlocks
 	if dy < 0 {
 		g.ed.sel = (g.ed.sel + 1) % n
 	} else if dy > 0 {
 		g.ed.sel = (g.ed.sel + n - 1) % n
 	}
+}
+
+// placeObject places the chosen object kind at the targeted face.
+func (g *game) placeObject() {
+	ed, m := &g.ed, g.mission
+	at, face, ok := g.edPlace()
+	if !ok {
+		return
+	}
+	o := objectKinds[ed.obj]
+	if o.Kind == sim.KindTorch {
+		o.On = torchFaceOn[face]
+		switch o.Name {
+		case "Lantern":
+			o.On = lanternFaceOn[face]
+		case "Candles", "Candle", "Candlestick":
+			o.On = map[voxel.Face]string{voxel.FaceUp: "floor"}[face]
+		}
+		if o.On == "" {
+			g.message("Torches stand on floors or hang on walls; lanterns stand on floors or hang from ceilings; candles stand on floors.")
+			return
+		}
+		if n := face.Normal(); n.Y == 0 && sim.IsGlass(g.world.Block(at.X-n.X, at.Y-n.Y, at.Z-n.Z)) {
+			g.message("Torches don't hang on glass.")
+			return
+		}
+	}
+	ed.serial++
+	o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
+	o.Pos = at.Floor()
+	for _, d := range m.Objects { // on a table (or other decoration) in that cell: on top of it
+		if d.Kind == sim.KindDecor && d.Pos.Cell() == at {
+			o.Pos.Y = d.Pos.Y + sim.DecorSize[d.Name].Y
+		}
+	}
+	if o.Kind == sim.KindDecor || o.Kind == sim.KindFood || o.Kind == sim.KindDrink {
+		o.Yaw = g.cam.Yaw
+	}
+	m.Objects = append(m.Objects, &o)
+}
+
+// placeNPC places the chosen NPC kind in front of the targeted face.
+func (g *game) placeNPC() {
+	ed, m := &g.ed, g.mission
+	at, ok := g.edPlaceCell()
+	if !ok {
+		return
+	}
+	d := npcKinds[ed.npc]
+	ed.serial++
+	d.ID = fmt.Sprintf("%s_%d", d.Kind, len(m.NPCs)+ed.serial)
+	d.Name = fmt.Sprintf("%s %d", d.Name, len(m.NPCs)+1)
+	d.Pos, d.Yaw = at.Floor(), g.cam.Yaw
+	m.NPCs = append(m.NPCs, &d)
+	ed.lastNPC = &d
 }
 
 // markedBox returns the box between the two marks.
@@ -187,7 +259,7 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 	switch {
 	case k >= glfw.Key1 && k <= glfw.Key9:
 		if i := int(k - glfw.Key1); i < len(palette) {
-			ed.sel = i
+			ed.sel, ed.placing = i, tabBlocks
 		}
 	case k == glfw.KeyG:
 		g.player.NoClip = !g.player.NoClip
@@ -250,52 +322,16 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 				g.world.set(cs[i].c, cs[i].old)
 			}
 		}
+	case k == glfw.KeyE:
+		g.openPicker(true)
 	case k == glfw.KeyO:
-		ed.obj = (ed.obj + 1) % len(objectKinds)
+		ed.obj, ed.placing = (ed.obj+1)%len(objectKinds), tabObjects
 	case k == glfw.KeyP:
-		at, face, ok := g.edPlace()
-		if !ok {
-			return
-		}
-		o := objectKinds[ed.obj]
-		if o.Kind == sim.KindTorch {
-			o.On = torchFaceOn[face]
-			switch o.Name {
-			case "Lantern":
-				o.On = lanternFaceOn[face]
-			case "Candles", "Candle", "Candlestick":
-				o.On = map[voxel.Face]string{voxel.FaceUp: "floor"}[face]
-			}
-			if o.On == "" {
-				g.message("Torches stand on floors or hang on walls; lanterns stand on floors or hang from ceilings; candles stand on floors.")
-				return
-			}
-			if n := face.Normal(); n.Y == 0 && sim.IsGlass(g.world.Block(at.X-n.X, at.Y-n.Y, at.Z-n.Z)) {
-				g.message("Torches don't hang on glass.")
-				return
-			}
-		}
-		ed.serial++
-		o.ID = fmt.Sprintf("%s_%d", o.Kind, len(m.Objects)+ed.serial)
-		o.Pos = at.Floor()
-		if o.Kind == sim.KindDecor || o.Kind == sim.KindFood || o.Kind == sim.KindDrink {
-			o.Yaw = g.cam.Yaw
-		}
-		m.Objects = append(m.Objects, &o)
+		g.placeObject()
 	case k == glfw.KeyN && !shift:
-		ed.npc = (ed.npc + 1) % len(npcKinds)
+		ed.npc, ed.placing = (ed.npc+1)%len(npcKinds), tabNPCs
 	case k == glfw.KeyN:
-		at, ok := g.edPlaceCell()
-		if !ok {
-			return
-		}
-		d := npcKinds[ed.npc]
-		ed.serial++
-		d.ID = fmt.Sprintf("%s_%d", d.Kind, len(m.NPCs)+ed.serial)
-		d.Name = fmt.Sprintf("%s %d", d.Name, len(m.NPCs)+1)
-		d.Pos, d.Yaw = at.Floor(), g.cam.Yaw
-		m.NPCs = append(m.NPCs, &d)
-		ed.lastNPC = &d
+		g.placeNPC()
 	case k == glfw.KeyK:
 		if ed.lastNPC == nil {
 			g.message("Place an NPC first (Shift+N).")
@@ -484,6 +520,9 @@ func (g *game) paintEditorHUD(c *canvas, w, h int) {
 	}
 	for i, l := range lines {
 		c.text(l, 10, h-60+i*14, white)
+	}
+	if ed.pick.open {
+		g.paintPicker(c, w, h)
 	}
 	_ = w
 }

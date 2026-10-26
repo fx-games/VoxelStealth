@@ -120,6 +120,12 @@ func (g *game) setupInput() {
 			g.menuButton(b, a, m)
 			return
 		}
+		if g.picking() {
+			if a == glfw.Press {
+				g.pickerClick()
+			}
+			return
+		}
 		if a == glfw.Press && !g.captured {
 			g.capture(true)
 			g.swallow = true
@@ -135,6 +141,8 @@ func (g *game) setupInput() {
 			return
 		}
 		switch {
+		case g.picking():
+			g.pickerScroll(dy)
 		case g.editing && g.sim == nil:
 			g.editorScroll(dy)
 		case g.sim != nil && g.ready && dy != 0:
@@ -147,6 +155,10 @@ func (g *game) setupInput() {
 		lastX, lastY = x, y
 		if g.menuOpen() {
 			g.menuCursor(x, y)
+			return
+		}
+		if g.picking() {
+			g.ed.pick.mx, g.ed.pick.my = x, y
 			return
 		}
 		if g.captured {
@@ -169,6 +181,10 @@ func (g *game) capture(on bool) {
 
 // keyPressed handles single key presses (held keys are polled in ticks).
 func (g *game) keyPressed(k glfw.Key, mods glfw.ModifierKey) {
+	if g.picking() {
+		g.pickerKey(k)
+		return
+	}
 	switch k {
 	case glfw.KeyEscape:
 		g.openGameMenu()
@@ -681,6 +697,9 @@ func (g *game) runScript() {
 			g.selectWeapon(n - 1)
 		case "ammo":
 			g.ammo = st.arg
+		case "pick": // the editor's picker on a tab: 0 blocks, 1 objects, 2 NPCs
+			g.ed.pick.tab, _ = strconv.Atoi(st.arg)
+			g.openPicker(true)
 		case "menu": // open a screen: title, game, help, options
 			map[string]func(){"title": g.openTitle, "game": g.openGameMenu,
 				"help": func() { g.open(g.helpScreen()) }, "options": func() { g.open(g.optionsScreen()) }}[st.arg]()

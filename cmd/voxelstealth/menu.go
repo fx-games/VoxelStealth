@@ -285,7 +285,8 @@ var editorPages = []helpPage{
 	{"Building", [][2]string{
 		{"W A S D, mouse, Space, Shift", "fly"},
 		{"G", "no-clip"},
-		{"Left / right mouse", "remove / place block"},
+		{"E", "pick a block, object or NPC from a grid (Tab: next tab; click picks)"},
+		{"Left / right mouse", "remove block / place the last pick"},
 		{"Middle mouse", "pick block"},
 		{"1 - 9, wheel", "choose block"},
 		{"M", "mark a box corner (twice: both corners)"},

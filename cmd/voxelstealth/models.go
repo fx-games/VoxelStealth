@@ -307,7 +307,10 @@ var decor = map[string]string{"Box of apples": "apple_box", "Small box": "small_
 	"Bone": "graveyard/bone", "Skull": "graveyard/skull", "Ritual book": "graveyard/ritual_book", "Dead flower": "graveyard/dead_flower",
 	"Dead grass": "graveyard/dead_grass", "Iron fence": "graveyard/iron_fence", "Iron gate": "graveyard/iron_gate",
 	"Iron pillar": "graveyard/iron_pillar", "Stone chair": "graveyard/stone_chair", "Stone table": "graveyard/stone_table",
-	"Tomb": "graveyard/tomb_01", "Grave": "graveyard/tomb_02", "Grave slab": "graveyard/tomb_03"}
+	"Tomb": "graveyard/tomb_01", "Grave": "graveyard/tomb_02", "Grave slab": "graveyard/tomb_03",
+	"Oak table": "furniture/oak_table", "Oak chair": "furniture/oak_chair", "Oak stool": "furniture/oak_stool",
+	"Spruce table": "furniture/spruce_table", "Spruce chair": "furniture/spruce_chair", "Spruce stool": "furniture/spruce_stool",
+	"Dark oak table": "furniture/dark_oak_table", "Dark oak chair": "furniture/dark_oak_chair", "Dark oak stool": "furniture/dark_oak_stool"}
 
 // foodModel is each food's and drink's model by Name (cmd/buildfood, from
 // VoxelHobbit).
