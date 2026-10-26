@@ -114,7 +114,7 @@ func TestVisibilityAndWaterArrow(t *testing.T) {
 	s := New(w, m)
 	s.Tick()
 	lit := s.Visibility
-	s.ArrowHit(AmmoWater, Vec3{3.5, 2.5, 2.5}, -1, false)
+	s.ArrowHit(AmmoWater, Vec3{3.5, 2.5, 2.5}, -1, false, 0)
 	s.Tick()
 	if !(lit > 0.5 && s.Visibility < 0.05) {
 		t.Fatalf("visibility lit %.2f, doused %.2f", lit, s.Visibility)
@@ -122,7 +122,7 @@ func TestVisibilityAndWaterArrow(t *testing.T) {
 }
 
 func guard(pos Vec3, yaw float64) *NPCDef {
-	return &NPCDef{ID: "g", Kind: "guard", Pos: pos, Yaw: yaw, Patrol: []Waypoint{{Pos: pos, Wait: 1000, Yaw: yaw, Face: true}}}
+	return &NPCDef{ID: "g", Kind: "guard", Weapon: "sword", Pos: pos, Yaw: yaw, Patrol: []Waypoint{{Pos: pos, Wait: 1000, Yaw: yaw, Face: true}}}
 }
 
 func TestGuardSeesLitPlayerNotDark(t *testing.T) {
@@ -149,7 +149,7 @@ func TestNoisemakerDrawsGuard(t *testing.T) {
 	s := New(w, m)
 	s.Player.Pos = Vec3{1.5, 1, 9.5} // dark corner of room A
 	s.setDoor(0, true)
-	s.ArrowHit(AmmoNoise, Vec3{7.5, 1, 5.5}, -1, false)
+	s.ArrowHit(AmmoNoise, Vec3{7.5, 1, 5.5}, -1, false, 0)
 	run(s, 12*TicksPerSecond)
 	g := s.NPCs[0]
 	if g.State() != StateInvestigate && g.State() != StateSuspicious || g.pos().X > 11 {
@@ -295,7 +295,7 @@ func TestGuardSeesThroughGlassAndHearsItBreak(t *testing.T) {
 	m.NPCs = []*NPCDef{guard(Vec3{18.5, 1, 9.5}, 0)} // far corner, back turned
 	s = New(w, m)
 	s.Player.Pos = Vec3{1.5, 1, 9.5}
-	s.ArrowHit(AmmoBroadhead, Vec3{10.2, 2.5, 2.5}, -1, false)
+	s.ArrowHit(AmmoBroadhead, Vec3{10.2, 2.5, 2.5}, -1, false, 0)
 	if w.Block(10, 2, 2) != BlockAir {
 		t.Fatal("glass not broken")
 	}
@@ -341,7 +341,7 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 		&Object{ID: "torch", Kind: KindTorch, StartLit: true, On: "floor", Pos: Vec3{6.5, 1, 2.5}})
 	s := New(w, m)
 	torch := s.Objects[len(s.Objects)-1]
-	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false)
+	s.ArrowHit(AmmoWater, Vec3{5.5, 1.5, 2}, -1, false, 0)
 	spread(s)
 	if n := len(s.LiquidCells(StimWater)); n != 5 {
 		t.Fatalf("water arrow: %d puddle cells, want its own 5", n)
@@ -362,7 +362,7 @@ func TestPiercedBarrelLeaks(t *testing.T) {
 		t.Fatal("the leak didn't douse the torch beside the barrel")
 	}
 	clear(s.Liquid)
-	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false, 0)
 	spread(s)
 	if len(s.LiquidCells(StimWater)) < 2 {
 		t.Fatalf("shot: puddle of %d cells, want a few", len(s.LiquidCells(StimWater)))
@@ -375,7 +375,7 @@ func TestGlassBreaksOnPierceBashBlast(t *testing.T) {
 	for _, c := range []Cell{{6, 2, 2}, {6, 2, 6}, {12, 2, 8}} {
 		w.SetBlock(c.X, c.Y, c.Z, "minecraft:glass")
 	}
-	s.ArrowHit(AmmoBroadhead, Vec3{6.2, 2.5, 2.5}, -1, false)
+	s.ArrowHit(AmmoBroadhead, Vec3{6.2, 2.5, 2.5}, -1, false, 0)
 	s.Player.Pos, s.Player.Yaw, s.Player.Pitch = Vec3{5.5, 1, 6.5}, math.Pi/2, 0 // facing the pane at eye height
 	s.Melee("blackjack")
 	s.Explode(Vec3{12.5, 1.5, 6.5})
@@ -385,7 +385,7 @@ func TestGlassBreaksOnPierceBashBlast(t *testing.T) {
 		}
 	}
 	w.SetBlock(6, 2, 2, "minecraft:glass")
-	s.ArrowHit(AmmoWater, Vec3{6.2, 2.5, 2.5}, -1, false)
+	s.ArrowHit(AmmoWater, Vec3{6.2, 2.5, 2.5}, -1, false, 0)
 	if w.Block(6, 2, 2) == BlockAir {
 		t.Error("a water arrow broke glass")
 	}
@@ -396,7 +396,7 @@ func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
 	m.NPCs = []*NPCDef{guard(Vec3{5.5, 1, 3.5}, 0)}
 	m.Objects = append(m.Objects, &Object{ID: "oil", Kind: KindDecor, Name: "Oil barrel", Pos: Vec3{5.5, 1, 2.5}})
 	s := New(w, m)
-	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false)
+	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 2}, -1, false, 0)
 	spread(s)
 	if len(s.LiquidCells(StimOil)) < 3 || len(s.LiquidCells(StimWater)) != 0 {
 		t.Fatalf("oil %d cells, water %d", len(s.LiquidCells(StimOil)), len(s.LiquidCells(StimWater)))
@@ -409,8 +409,8 @@ func TestOilBurnsAndWaterPutsItOut(t *testing.T) {
 	if s.Player.Health() == 1000 {
 		t.Fatal("player unhurt standing in burning oil")
 	}
-	if s.NPCs[0].State() != StateDead || s.NPCs[0].Death != "accident" {
-		t.Fatalf("guard %v (%s), want burned", s.NPCs[0].State(), s.NPCs[0].Death)
+	if !s.Burning(0) {
+		t.Fatal("guard standing in burning oil is not on fire")
 	}
 	burning := burningOil(s)
 	if burning < 3 {
@@ -439,7 +439,7 @@ func TestWaterArrowPuddle(t *testing.T) {
 	for _, hit := range []Vec3{{4.5, 1.1, 4.5}, {9.6, 2.8, 2.5}} { // floor; wall at x=10, up high
 		w, m := twoRooms()
 		s := New(w, m)
-		s.ArrowHit(AmmoWater, hit, -1, false)
+		s.ArrowHit(AmmoWater, hit, -1, false, 0)
 		if len(s.LiquidCells(StimWater)) != 1 {
 			t.Fatalf("hit at %v: %d puddle cells at once, want 1", hit, len(s.LiquidCells(StimWater)))
 		}
@@ -528,15 +528,36 @@ func TestBroadheadDamage(t *testing.T) {
 	w, m := twoRooms()
 	m.NPCs = []*NPCDef{guard(Vec3{3.5, 1, 9.5}, 0), guard(Vec3{5.5, 1, 9.5}, 0)}
 	s := New(w, m)
-	s.ArrowHit(AmmoBroadhead, Vec3{3.5, 2.7, 9.5}, 0, true)
+	s.ArrowHit(AmmoBroadhead, Vec3{3.5, 2.7, 9.5}, 0, true, 0)
 	if s.NPCs[0].State() != StateDead {
 		t.Fatal("head shot didn't kill")
 	}
 	for i := 1; i <= 4; i++ {
-		s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 9.5}, 1, false)
+		s.ArrowHit(AmmoBroadhead, Vec3{5.5, 1.5, 9.5}, 1, false, 0)
 		if dead := s.NPCs[1].State() == StateDead; dead != (i == 4) {
 			t.Fatalf("body shot %d: dead %v, health %d", i, dead, s.NPCs[1].Health())
 		}
+	}
+}
+
+// A broadhead that kills with a wall close behind carries the body back
+// and pins it there; with the wall far off the body just falls.
+func TestBroadheadPinsToWall(t *testing.T) {
+	w, m := twoRooms()
+	m.NPCs = []*NPCDef{guard(Vec3{3.5, 1, 9.5}, 0), guard(Vec3{5.5, 1, 9.5}, 0)}
+	s := New(w, m)
+	s.ArrowHit(AmmoBroadhead, Vec3{3.5, 2.7, 9.5}, 0, true, math.Pi) // flying +Z: the wall at z 11
+	s.ArrowHit(AmmoBroadhead, Vec3{5.5, 2.7, 9.5}, 1, true, 0)       // -Z: nine blocks to the wall
+	run(s, 10)
+	if pinned, _, _ := s.Pinned(0); !pinned || math.Abs(s.NPCs[0].Body.Z-10.7) > 0.01 || s.NPCs[0].Body.Y != 1 {
+		t.Fatalf("not pinned to the wall: pinned %v at %v", pinned, s.NPCs[0].Pos())
+	}
+	if pinned, flying, _ := s.Pinned(1); pinned || flying || s.NPCs[1].Body.Z != 9.5 {
+		t.Fatalf("pinned with the wall far off, at %v", s.NPCs[1].Pos())
+	}
+	s.pickUpBody(0)
+	if pinned, _, _ := s.Pinned(0); pinned {
+		t.Fatal("still pinned when picked up")
 	}
 }
 
@@ -783,7 +804,7 @@ func TestStreetLampDoused(t *testing.T) {
 	if o := s.Objects[1]; o.Fallen() || !o.Lit() {
 		t.Fatal("street lamp knocked over")
 	}
-	s.ArrowHit(AmmoWater, Vec3{7.5, 1 + StreetLampHead, 5.5}, -1, false)
+	s.ArrowHit(AmmoWater, Vec3{7.5, 1 + StreetLampHead, 5.5}, -1, false, 0)
 	if o := s.Objects[1]; o.Lit() || o.HasLight {
 		t.Fatal("water left the street lamp lit")
 	}

@@ -37,6 +37,7 @@ type Mission struct {
 	NPCs       []*NPCDef
 	Objects    []*Object
 	Rooms      []*Room
+	Structures []*Structure
 }
 
 // Objective kinds: steal (Target = loot object id), loot (reach the
@@ -206,7 +207,8 @@ func LoadMission(dir string) (*Mission, error) {
 		return nil, err
 	}
 	for _, r := range recs {
-		d := &NPCDef{ID: r.get("ID"), Name: r.get("Name"), Kind: r.get("Kind"), Model: r.get("Model"), Voice: r.get("Voice"), Yaw: deg(r.get("Yaw"))}
+		d := &NPCDef{ID: r.get("ID"), Name: r.get("Name"), Kind: r.get("Kind"), Model: r.get("Model"), Voice: r.get("Voice"), Yaw: deg(r.get("Yaw")),
+			Weapon: r.get("Weapon"), Torch: yes(r.get("Torch"))}
 		if d.Pos, err = parseVec(r.get("Pos")); err != nil {
 			return nil, fmt.Errorf("npc %s Pos: %w", d.ID, err)
 		}
@@ -259,6 +261,26 @@ func LoadMission(dir string) (*Mission, error) {
 		}
 		m.Rooms = append(m.Rooms, rm)
 	}
+	if recs, err = readRecords(filepath.Join(dir, "structures.txt")); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	for _, r := range recs {
+		st := &Structure{ID: r.get("ID"), Name: r.get("Name")}
+		if st.Box, err = parseBox(r.get("Box")); err != nil {
+			return nil, fmt.Errorf("structure %s: %w", st.ID, err)
+		}
+		for _, f := range strings.Split(r.get("Supports"), ";") {
+			if f = strings.TrimSpace(f); f == "" {
+				continue
+			}
+			v, err := parseVec(f)
+			if err != nil {
+				return nil, fmt.Errorf("structure %s Supports: %w", st.ID, err)
+			}
+			st.Supports = append(st.Supports, v.Cell())
+		}
+		m.Structures = append(m.Structures, st)
+	}
 	return m, nil
 }
 
@@ -294,7 +316,7 @@ func (m *Mission) Save(dir string) error {
 			ps = append(ps, s)
 		}
 		recs = append(recs, record{{"ID", d.ID}, {"Name", d.Name}, {"Kind", d.Kind}, {"Model", d.Model}, {"Voice", d.Voice}, {"Pos", fmtVec(d.Pos)},
-			{"Yaw", fmtDeg(d.Yaw)}, {"Keys", strings.Join(d.Keys, ",")}, {"Patrol", strings.Join(ps, "; ")}})
+			{"Yaw", fmtDeg(d.Yaw)}, {"Keys", strings.Join(d.Keys, ",")}, {"Weapon", d.Weapon}, {"Torch", yesNo(d.Torch)}, {"Patrol", strings.Join(ps, "; ")}})
 	}
 	if err := writeRecords(filepath.Join(dir, "npcs.txt"), "# One record per NPC. Kind: guard | civilian | target. Patrol: 'x,y,z waitSeconds [faceDegrees]; ...'\n", recs); err != nil {
 		return err
@@ -325,5 +347,16 @@ func (m *Mission) Save(dir string) error {
 		}
 		recs = append(recs, r)
 	}
-	return writeRecords(filepath.Join(dir, "rooms.txt"), "# One record per room; Box lines are inclusive cell corners. Sound travels between rooms through openings and doors.\n", recs)
+	if err := writeRecords(filepath.Join(dir, "rooms.txt"), "# One record per room; Box lines are inclusive cell corners. Sound travels between rooms through openings and doors.\n", recs); err != nil {
+		return err
+	}
+	recs = nil
+	for _, st := range m.Structures {
+		var sup []string
+		for _, c := range st.Supports {
+			sup = append(sup, fmtCell(c))
+		}
+		recs = append(recs, record{{"ID", st.ID}, {"Name", st.Name}, {"Box", fmtBox(st.Box)}, {"Supports", strings.Join(sup, "; ")}})
+	}
+	return writeRecords(filepath.Join(dir, "structures.txt"), "# One record per collapsible structure: the blocks in Box (inclusive cell corners) fall when every post of Supports blocks is broken.\n", recs)
 }

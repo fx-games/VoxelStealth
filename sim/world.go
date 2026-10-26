@@ -6,8 +6,11 @@
 package sim
 
 import (
+	"github.com/memmaker/voxellib/voxel"
 	"math"
 	"strings"
+
+	"github.com/memmaker/voxellib/voxel/collide"
 )
 
 // Block names the simulation reads and writes. The game registers the
@@ -35,6 +38,14 @@ type World interface {
 	SetBlock(x, y, z int, name string)
 }
 
+// Shaper is a World with blocks that collide as boxes rather than whole
+// cells (stairs): bodies walk up them, so they are not Solid to bodies
+// but give their boxes. The pathfinder still treats them as Solid.
+type Shaper interface {
+	collide.Boxer
+	Shaped(x, y, z int) bool
+}
+
 // OpenDoor reports whether a block name is an open door.
 func OpenDoor(name string) bool {
 	return strings.HasPrefix(name, BlockDoor+"[") && strings.Contains(name, "open=true")
@@ -59,10 +70,21 @@ func yawTo(from, to Vec3) float64        { return math.Atan2(to.X-from.X, -(to.Z
 func angleDiff(a, b float64) float64     { return math.Abs(math.Remainder(a-b, 2*math.Pi)) }
 func forward(yaw float64) (x, z float64) { return math.Sin(yaw), -math.Cos(yaw) }
 
-// IsSpikes reports whether block b is spikes: dripstone pointing up.
-func IsSpikes(b string) bool {
-	return strings.HasPrefix(b, "minecraft:pointed_dripstone") && !strings.Contains(b, "vertical_direction=down")
+// IsLadder reports whether block b is a ladder.
+func IsLadder(b string) bool {
+	b, _, _ = strings.Cut(b[strings.IndexByte(b, ':')+1:], "[")
+	return b == "ladder" || strings.HasSuffix(b, "_ladder")
 }
+
+// IsSpikes reports whether block b is spikes: dripstone pointing up, or
+// wall spikes (WallSpikes).
+func IsSpikes(b string) bool {
+	return strings.HasPrefix(b, "minecraft:pointed_dripstone") && !strings.Contains(b, "vertical_direction=down") || WallSpikes(b)
+}
+
+// WallSpikes reports whether block b is spikes on a wall (VoxelLib's
+// _spikes blocks): they pin what they impale.
+func WallSpikes(b string) bool { return voxel.IsSpikes(b) }
 
 // Cell is an integer block position.
 type Cell struct{ X, Y, Z int }

@@ -16,15 +16,12 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/go-gl/mathgl/mgl64"
-	"github.com/memmaker/voxellib/importer/bbmodel"
+	"github.com/memmaker/voxellib/bettercombat"
 	"github.com/memmaker/voxellib/model"
 	"github.com/memmaker/voxellib/projectile"
 	"github.com/memmaker/voxellib/voxel/render"
 	"github.com/memmaker/voxelstealth/sim"
 )
-
-// crossbowGroup is the bone holding the crossbow in the pack's artmob.
-const crossbowGroup = "repeater_crossbow_arrow"
 
 type npcSkin struct {
 	model  *model.Model
@@ -33,17 +30,20 @@ type npcSkin struct {
 }
 
 type npcAnim struct {
-	anim *model.Animator
-	skin []mgl32.Mat4
-	clip string
+	anim  *model.Animator
+	skin  []mgl32.Mat4
+	clip  string
+	hum   *bettercombat.Humanoid // armed or carrying a torch: posed by poseArmed
+	combo int                    // the NPC's Combo when its last swing began
 }
 
 type drawState struct {
 	modelRend *render.ModelRenderer
 	skins     map[string]*npcSkin
 	npcAnims  []*npcAnim
-	self      *npcAnim                // the player's body (drawSelf)
-	kicked    bool                    // the player just kicked: drawSelf plays it
+	self      *npcAnim // the player's body (drawSelf)
+	kicked    bool     // the player just kicked: drawSelf plays it
+	legSkin   []mgl32.Mat4
 	props     map[string]int          // prop box models
 	wicks     map[string][]mgl32.Vec3 // lit candle props' flame tops, model space
 	fp        map[int]*model.Animator // the melee weapons' first-person arms (fpArms)
@@ -51,11 +51,12 @@ type drawState struct {
 	fpHand    *model.Animator // the empty first-person hand that throws flash bombs and sets TNT down
 	handBone  int             // fpHand's fist bone, and its bind pose: the held item follows it
 	handBind  mgl32.Mat4
-	bowModel  int
 	itemRend  *render.ItemRenderer
 	lightGem  image.Image // HUD light gem sprite
 	insts     []render.ModelInstance
 	items     []render.ItemInstance
+	poses     []render.ItemPose // items in hands
+	torchTips map[int]sim.Vec3  // carried torches' flames by object, as last drawn
 	lastAnim  time.Time
 	parts     particles.System
 	handParts particles.System // the held torch's flame, drawn over the hand
@@ -78,6 +79,8 @@ func spriteFor(o *sim.Object) string {
 		return "arrow"
 	case sim.KindKey:
 		return "misc_03"
+	case sim.KindWeapon:
+		return o.Name
 	}
 	n := strings.ToLower(o.Name)
 	for _, l := range lootSprites {
@@ -95,18 +98,6 @@ func (g *game) loadAssets(dir, texDir string) error {
 	}
 	if g.partRend, err = render.NewParticleRenderer(g.eng.Renderer); err != nil {
 		return err
-	}
-	p, err := bbmodel.Import(filepath.Join(dir, "cleannrooster"))
-	if err != nil {
-		return err
-	}
-	g.bowModel = -1
-	for _, m := range p.Models {
-		if bow := m.Subtree(crossbowGroup); bow != nil && g.bowModel < 0 {
-			if g.bowModel, err = g.modelRend.Add(bow); err != nil {
-				return err
-			}
-		}
 	}
 	g.props, g.wicks, g.fp = map[string]int{}, map[string][]mgl32.Vec3{}, map[int]*model.Animator{}
 	for name, parts := range propParts {
@@ -143,6 +134,12 @@ func (g *game) loadAssets(dir, texDir string) error {
 		names, imgs = append(names, l.sprite), append(imgs, img)
 	}
 	names, imgs = append(names, "valuable_04"), append(imgs, mustPNG(filepath.Join(texDir, "items", "valuable_04.png")))
+	for _, n := range crossbowSprites {
+		names, imgs = append(names, n), append(imgs, mustPNG(filepath.Join(texDir, "crossbow", n+".png")))
+	}
+	for _, n := range []string{"sword", "halberd"} {
+		names, imgs = append(names, n), append(imgs, mustPNG(filepath.Join(texDir, "weapons", n+".png")))
+	}
 	g.itemRend, err = render.NewItemRenderer(g.eng.Renderer, names, imgs)
 	return err
 }
@@ -187,7 +184,7 @@ func (g *game) drawWorld(alpha float64) {
 		dt = 0
 	}
 	g.lastAnim = now
-	g.insts, g.items = g.insts[:0], g.items[:0]
+	g.insts, g.items, g.poses = g.insts[:0], g.items[:0], g.poses[:0]
 	if g.sim != nil {
 		g.drawNPCs(alpha, dt)
 		g.drawSelf(alpha, dt)
@@ -206,7 +203,11 @@ func (g *game) drawWorld(alpha float64) {
 		g.drawObjects(g.mission.Objects, alpha)
 	}
 	g.modelRend.Draw(&g.cam, g.insts)
+	if g.sim != nil {
+		g.drawCollapse(alpha)
+	}
 	g.itemRend.DrawWorld(&g.cam, g.items)
+	g.itemRend.DrawPosed(&g.cam, g.poses)
 	if g.sim != nil {
 		g.partRend.Draw(&g.cam, g.parts.P, alpha, g.light)
 	}
@@ -319,10 +320,11 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		x, y, z := b.Lerp(alpha)
 		t := g.npcTargets[k]
 		tilt := t.deathTilt(alpha)
-		t.drawn, t.drawX, t.drawY, t.drawZ, t.drawYaw, t.drawTilt = true, x, y, z, n.Yaw, tilt
-		t.drawFrame++
+		yaw := n.Yaw
 		if t.doll != nil { // down or kicked: limp
 			a.skin = t.doll.Skin(creatureMatrix(x, y, z, n.Yaw, 0, 0), float32(alpha), a.skin)
+		} else if n.Alive() && a.hum != nil {
+			yaw = g.poseArmed(n, a, sk, x, y, z, alpha)
 		} else if n.Alive() {
 			if clip := clipFor(sk.model, n.Moving); clip != a.clip {
 				a.clip = clip
@@ -339,7 +341,9 @@ func (g *game) drawNPCs(alpha float64, dt float32) {
 		if !n.Alive() {
 			sky, blk = g.light(x, y+0.3, z)
 		}
-		g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: n.Yaw, Tilt: tilt, TiltYaw: t.fallYaw,
+		t.drawn, t.drawX, t.drawY, t.drawZ, t.drawYaw, t.drawTilt = true, x, y, z, yaw, tilt
+		t.drawFrame++
+		g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: yaw, Tilt: tilt, TiltYaw: t.fallYaw,
 			Skin: a.skin, Sky: sky, Block: blk})
 	}
 }
@@ -378,8 +382,9 @@ func (g *game) drawSelf(alpha float64, dt float32) {
 	}
 	a.anim.Update(dt * speed)
 	a.skin = a.anim.Skin(a.skin)
+	kicking := a.clip == "kick" && !a.anim.Done()
 	for i, b := range sk.model.Bones {
-		if b.Name == "head" || b.Name == "rightArm" || b.Name == "leftArm" {
+		if b.Name == "head" || b.Name == "rightArm" || b.Name == "leftArm" || kicking && b.Name == "rightLeg" { // the kicking leg is drawLeg's
 			a.skin[i] = mgl32.Mat4{}
 		}
 	}
@@ -391,10 +396,30 @@ func (g *game) drawSelf(alpha float64, dt float32) {
 	g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: x, Y: y, Z: z, Yaw: yaw, Skin: a.skin, Sky: sky, Block: blk})
 }
 
+// drawLeg draws the kicking leg in first person, as the hand is drawn:
+// the body's leg (drawSelf hides it meanwhile) with the hip set higher and
+// closer than the body's, so that the kick swings up into view looking
+// straight ahead, lunging forward as it straightens.
+func (g *game) drawLeg(sky, blk uint8) {
+	a, sk := g.self, g.skins["player"]
+	if a == nil || sk == nil || a.clip != "kick" || a.anim.Done() {
+		return
+	}
+	leg := sk.model.Bone("rightLeg")
+	pose := a.anim.Skin(nil)
+	g.legSkin = append(g.legSkin[:0], make([]mgl32.Mat4, len(pose))...)
+	g.legSkin[leg] = pose[leg]
+	ahead := pose[leg].Mul4x1(mgl32.Vec4{0, -1, 0, 0}).Z() // how far the foot points forward, 0..1
+	hip := mgl32.Vec3{-1.9 / 16, 12. / 16, 0}              // the leg's pivot (cmd/buildplayer)
+	view := mgl32.Translate3D(0.16, -0.6, 0.15-0.2*max(ahead, 0)).Mul4(mgl32.HomogRotate3DY(math.Pi)).
+		Mul4(mgl32.Translate3D(-hip.X(), -hip.Y(), -hip.Z()))
+	g.modelRend.DrawHandSkinned(sk.handle, float32(g.cam.Aspect), view, g.legSkin, sky, blk)
+}
+
 // drawObjects draws props as box models and loot as item sprites.
 func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 	for _, o := range objs {
-		if o.Gone || o.Held() {
+		if o.Gone || o.Held() || o.Carried() { // a carried torch is drawNPCs'
 			continue
 		}
 		p := o.Pos
@@ -423,7 +448,11 @@ func (g *game) drawObjects(objs []*sim.Object, alpha float64) {
 				g.prop(name, p, o.Yaw, 0)
 			}
 		case sim.KindDecor:
-			g.prop(decor[o.Name], p, o.Yaw, 0)
+			if down, way := o.Toppled(); down { // on its side, the way it was kicked
+				g.propTilted(decor[o.Name], p.Add(sim.Vec3{Y: sim.DecorSize[o.Name].X}), o.Yaw, math.Pi/2, way)
+			} else {
+				g.prop(decor[o.Name], p, o.Yaw, 0)
+			}
 		case sim.KindFaucet:
 			g.prop("faucet", p, o.Yaw, 0)
 			if o.Running() {
@@ -468,6 +497,10 @@ func (g *game) drawArrows(alpha float64) {
 				continue
 			}
 		}
+		if w, ok := g.thrown[a]; ok {
+			g.drawThrown(a, w, x, y, z, yaw, pitch, alpha)
+			continue
+		}
 		name := "arrow_" + g.arrowAmmo[a]
 		back := 0.4 * math.Cos(pitch)
 		sky, blk := g.light(x-math.Sin(yaw)*back, y-0.4*math.Sin(pitch), z+math.Cos(yaw)*back)
@@ -498,6 +531,10 @@ func (g *game) drawHand(alpha float64, dt float32) {
 		g.modelRend.DrawHand(g.props[name], aspect, hand.Mul4(mgl32.Translate3D(0, -0.15, 0)).Mul4(mgl32.Scale3D(0.6, 0.6, 0.6)), sky, blk)
 		return
 	}
+	g.drawLeg(sky, blk)
+	if g.lost[g.weapon] { // thrown: nothing in the hand
+		return
+	}
 	switch g.weapon {
 	case wBlade, wBlackjack: // animated in Blockbench; play.go's strike picks the clip
 		arm, a := fpArms[g.weapon], g.fp[g.weapon]
@@ -508,16 +545,9 @@ func (g *game) drawHand(alpha float64, dt float32) {
 		g.fpSkin = a.Skin(g.fpSkin)
 		g.modelRend.DrawHandSkinned(g.props[arm.file], aspect, mgl32.Translate3D(bobX, bobY, 0), g.fpSkin, sky, blk)
 	case wCrossbow:
-		kick := float32(0)
-		if g.recoil > 0 {
-			kick = (float32(g.recoil) - float32(alpha)) / recoilTicks
-		}
-		view := mgl32.Translate3D(0.42+bobX, -0.36+bobY, -0.75+0.12*kick).
-			Mul4(mgl32.HomogRotate3DY(mgl32.DegToRad(8))).
-			Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(4 + 8*kick))).
-			Mul4(bowHold).
-			Mul4(mgl32.Scale3D(0.55, 0.55, 0.55))
-		g.modelRend.DrawHand(g.bowModel, aspect, view, sky, blk)
+		g.drawCrossbow(alpha, bobX, bobY, sky, blk)
+	case wSword, wHalberd:
+		g.drawBlade(alpha, bobX, bobY, sky, blk)
 	case wExplosive, wTNT: // the Blockbench hand (fp_hand.gltf), the bomb or TNT in its fist
 		a := g.fpHand
 		if (a.Clip.Name == "throw" || a.Clip.Name == "place") && a.Done() || a.Clip.Name == "windup" && g.throwHold == 0 {
@@ -552,12 +582,6 @@ func (g *game) drawArm(hand mgl32.Mat4, yaw, aspect float32, sky, blk uint8) {
 	arm := hand.Mul4(mgl32.HomogRotate3DY(mgl32.DegToRad(yaw))).Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(25)))
 	g.modelRend.DrawHand(g.props["arm"], aspect, arm, sky, blk)
 }
-
-// bowHold turns the cut-out crossbow so it points into the screen (as the
-// explorer holds it).
-var bowHold = mgl32.HomogRotate3DY(mgl32.DegToRad(-90)).
-	Mul4(mgl32.HomogRotate3DX(mgl32.DegToRad(-90))).
-	Mul4(mgl32.HomogRotate3DZ(mgl32.DegToRad(45)))
 
 // part is one coloured box of a prop model, in blocks, origin at the
 // prop's feet.

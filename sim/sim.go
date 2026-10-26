@@ -92,6 +92,7 @@ func (o *Object) Locked() bool  { return o.is("locked") }  // doors, chests
 func (o *Object) Running() bool { return o.is("running") } // faucets
 func (o *Object) Fallen() bool  { return o.is("fallen") }  // a torch or lamp lying on the floor
 func (o *Object) Held() bool    { return o.is("held") }    // torch in the player's hand
+func (o *Object) Carried() bool { return o.is("carried") } // torch in an NPC's hand
 func (o *Object) Burnt() bool   { return o.is("burnt") }
 
 // num reads number property prop; a mission's object has its Start value.
@@ -157,15 +158,20 @@ type Player struct {
 	Yaw, Pitch  float64
 	Crouch, Run bool
 	OnGround    bool
-	Carrying    int // NPC index, -1 = none
+	Landed      float64 // blocks fallen, the tick a fall ends (character.Landed)
+	Carrying    int     // NPC index, -1 = none
 	Keys        []string
 	Ammo        map[string]int
+	Weapons     map[string]bool // blades taken from guards (Weapons keys)
 	Loot        int
 	R           stimres.ID // in the broker
 	b           *Broker
 	walk        float64
 	last        Vec3
 	lastInit    bool
+	lastY       float64
+	moved       float64 // this tick
+	climb       float64 // up or down a ladder since the last rung
 }
 
 func (p *Player) r() Receiver { return stimres.Object[Cell](p.R) }
@@ -200,6 +206,8 @@ const (
 	EvSpark                    // electricity in the puddle at Pos
 	EvBlast                    // explosion at Pos
 	EvFlash                    // a flash bomb went off at Pos
+	EvSlip                     // the player slipped on oil: their feet go
+	EvShoot                    // NPC shoots a crossbow bolt from Pos along Yaw, Pitch (BoltHit)
 )
 
 // Event is something the game should show or play.
@@ -210,7 +218,9 @@ type Event struct {
 	Loud  float64
 	Text  string
 	Line  string // EvBark: what was said, without the speaker's name
-	NPC   int    // EvBark, and EvSound made by an NPC (else -1)
+	NPC   int    // EvBark, EvShoot, and EvSound made by an NPC (else -1)
+	Yaw   float64
+	Pitch float64
 }
 
 // Outcome of the mission.
@@ -256,10 +266,12 @@ type State struct {
 	Outcome     Outcome
 	FailReason  string
 	Stats       Stats
-	Visibility  float64      // player's light gem, 0..1
-	Done        map[int]bool // objective index → complete
-	Seen        bool         // ever fought
-	Broker      []byte       // the broker's state (Snapshot)
+	Visibility  float64         // player's light gem, 0..1
+	Done        map[int]bool    // objective index → complete
+	Seen        bool            // ever fought
+	Broker      []byte          // the broker's state (Snapshot)
+	Falls       []*Falling      // structures coming down
+	Collapsed   map[string]bool // structure ID → it came down
 }
 
 // Sim is a running mission.
@@ -286,8 +298,9 @@ func New(w World, m *Mission) *Sim {
 	s.Time = m.StartTime
 	s.Liquid = map[Cell]Stim{}
 	s.Done = map[int]bool{}
+	s.Collapsed = map[string]bool{}
 	s.B = s.newBroker()
-	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Carrying: -1, Ammo: map[string]int{}, R: s.B.NewObject("player")}
+	s.Player = Player{Pos: m.Start, Yaw: m.StartYaw, Carrying: -1, Ammo: map[string]int{}, Weapons: map[string]bool{}, R: s.B.NewObject("player")}
 	for k, v := range m.Ammo {
 		s.Player.Ammo[k] = v
 	}
@@ -321,6 +334,7 @@ func New(w World, m *Mission) *Sim {
 		n.R = s.B.NewObject(npcArchetype(n.Kind))
 		s.B.Set(stimres.Object[Cell](n.R), "health", npcHealth)
 		s.NPCs = append(s.NPCs, n)
+		s.arm(n, d)
 	}
 	s.init()
 	for i, o := range s.Objects {
@@ -383,6 +397,9 @@ func (s *Sim) Restore(st State) error {
 	}
 	if s.Done == nil {
 		s.Done = map[int]bool{}
+	}
+	if s.Player.Weapons == nil {
+		s.Player.Weapons = map[string]bool{}
 	}
 	s.Events = nil
 	s.init()
@@ -456,6 +473,7 @@ func (s *Sim) Tick() {
 		s.init()
 	}
 	s.tickBombs()
+	s.tickFalls()
 	for i := range s.NPCs {
 		s.tickNPC(i)
 	}
@@ -481,22 +499,31 @@ func (s *Sim) tickPlayer() {
 		p.last, p.lastInit = p.Pos, true
 	}
 	moved := p.Pos.DistXZ(p.last)
-	p.last = p.Pos
+	p.last, p.moved = p.Pos, moved
+	if p.Landed > 0 {
+		s.land(p.r(), p.Pos, p.Landed)
+	}
 	if p.OnGround && moved > 0.01 {
 		p.walk += moved
 		const stride = 1.7
 		if p.walk >= stride {
 			p.walk -= stride
-			loud := Material(s.FloorSurface(p.Pos))
+			f := 1.0
 			switch {
 			case p.Crouch:
-				loud *= 0.45
+				f = 0.45
 			case p.Run:
-				loud *= 1.35
+				f = 1.35
 			}
-			s.emit(p.Pos, loud, "footstep", -1)
+			s.step(p.Pos, f, -1)
+		}
+	} else if !p.OnGround && s.climbable(p.Pos.Cell()) { // rungs
+		if p.climb += math.Abs(p.Pos.Y - p.lastY); p.climb >= 1 {
+			p.climb = 0
+			s.step(p.Pos, 1, -1)
 		}
 	}
+	p.lastY = p.Pos.Y
 	if i := s.HeldTorch(); i >= 0 {
 		o := s.Objects[i]
 		o.Pos = p.Pos.Add(Vec3{0, 0.6, 0}) // its light sits at chest height
@@ -636,7 +663,7 @@ func (s *Sim) tickObjects() {
 	for i := 0; i < len(s.Noisemakers); i++ {
 		n := &s.Noisemakers[i]
 		if n.T%8 == 0 {
-			s.emit(n.Pos, 46, "noisemaker", -1)
+			s.emit(n.Pos, 60, "noisemaker", -1)
 		}
 		n.T++
 	}
@@ -749,6 +776,8 @@ func (s *Sim) ObjectBox(i int) (lo, hi Vec3) {
 		return p.Add(Vec3{-0.25, 0, -0.25}), p.Add(Vec3{0.25, 0.8, 0.25})
 	case KindChest:
 		return p.Add(Vec3{-0.45, 0, -0.45}), p.Add(Vec3{0.45, 0.8, 0.45})
+	case KindWeapon:
+		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.2, 0.5})
 	case KindFlammable:
 		return p.Add(Vec3{-0.5, 0, -0.5}), p.Add(Vec3{0.5, 0.15, 0.5})
 	case KindFaucet:
@@ -1159,6 +1188,7 @@ func (s *Sim) pickUpBody(k int) {
 		return
 	}
 	n.CarriedBy = true
+	s.unpin(k)
 	s.Player.Carrying = k
 	s.message("Carrying " + n.Name + ". Press E to drop, or E on a chest to hide.")
 }
@@ -1183,12 +1213,12 @@ func (s *Sim) DropBody() {
 
 // ArrowHit tells the simulation where an arrow struck: npc >= 0 when it
 // hit a body (head: in the head).
-func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
+func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool, yaw float64) {
 	switch ammo {
 	case AmmoBroadhead:
 		if npc >= 0 {
 			if s.reachable(npc) {
-				s.hit(s.npcR(npc), Stimulus{Stim: StimPierce, Origin: pos, Intensity: math.Ceil(npcHealth / 4.0), Extra: map[string]any{"how": "shot", "head": head}})
+				s.hit(s.npcR(npc), Stimulus{Stim: StimPierce, Origin: pos, Intensity: math.Ceil(npcHealth / 4.0), Extra: map[string]any{"how": "shot", "head": head, "yaw": yaw}})
 			}
 			return
 		}
@@ -1206,6 +1236,36 @@ func (s *Sim) ArrowHit(ammo string, pos Vec3, npc int, head bool) {
 		if npc < 0 {
 			s.emit(pos, 26, "arrow", -1)
 		}
+	}
+}
+
+// Thrown weapons (the player's T).
+const (
+	ThrownBlade     = "blade"
+	ThrownBlackjack = "blackjack"
+	ThrownCrossbow  = "crossbow"
+)
+
+// ThrownHit reports a thrown weapon striking pos, NPC npc (-1 for none),
+// flying along yaw: the blade pierces like a broadhead, twice as hard,
+// and the others bash; on nothing that reacts it clatters.
+func (s *Sim) ThrownHit(what string, pos Vec3, npc int, head bool, yaw float64) {
+	st := Stimulus{Stim: StimBash, Origin: pos, Intensity: 1, Extra: map[string]any{"how": "struck", "head": head, "yaw": yaw}}
+	switch {
+	case what == ThrownBlade:
+		st.Stim, st.Intensity, st.Extra["how"] = StimPierce, math.Ceil(npcHealth/2.0), "knifed"
+	case Weapons[what].Sharp: // a sword or halberd: runs it through, and may pin it
+		st.Stim, st.Intensity, st.Extra["how"] = StimPierce, Weapons[what].Damage+2, "run through"
+	}
+	if npc >= 0 {
+		if s.reachable(npc) {
+			s.hit(s.npcR(npc), st)
+		}
+		return
+	}
+	st.Medium, st.Range = "radius", 0.01
+	if !s.Stimulate(st) {
+		s.emit(pos, 20, "clatter", -1)
 	}
 }
 
@@ -1290,10 +1350,16 @@ func (s *Sim) landing(eye, dir Vec3, dist float64) Vec3 {
 func (s *Sim) Melee(tool string) bool {
 	p := &s.Player
 	st := Stimulus{Stim: StimBash, Intensity: 1, Medium: "radius"}
-	if tool == "blade" {
+	reach := 2.4
+	switch tool {
+	case "blade":
 		st = Stimulus{Stim: StimPierce, Intensity: 4, Medium: "radius", Extra: map[string]any{"how": "stabbed"}}
+	case "sword", "halberd": // a guard's, taken
+		w := Weapons[tool]
+		st = Stimulus{Stim: StimPierce, Intensity: w.Damage, Medium: "radius", Extra: map[string]any{"how": "cut down"}}
+		reach = w.Reach
 	}
-	best, bestD := -1, 2.4
+	best, bestD := -1, reach
 	for k, n := range s.NPCs {
 		if !n.alive() {
 			continue
@@ -1305,7 +1371,7 @@ func (s *Sim) Melee(tool string) bool {
 	}
 	if best >= 0 {
 		n := s.NPCs[best]
-		if tool == "blade" {
+		if st.Stim == StimPierce {
 			s.emit(n.pos(), 24, "stab", -1)
 		}
 		st.Origin = n.pos()
@@ -1317,7 +1383,7 @@ func (s *Sim) Melee(tool string) bool {
 	fx, fz := forward(p.Yaw)
 	cp := math.Cos(p.Pitch)
 	dir := Vec3{fx * cp, math.Sin(p.Pitch), fz * cp}
-	for t := 0.2; t < 2.2; t += 0.1 {
+	for t := 0.2; t < reach-0.2; t += 0.1 {
 		st.Origin = eye.Add(dir.Scale(t))
 		c := st.Origin.Cell()
 		hit := s.W.Solid(c.X, c.Y, c.Z)
@@ -1352,6 +1418,7 @@ func (s *Sim) killNPC(k int, by, how string) {
 	}
 	n.setState(StateDead)
 	s.B.Set(s.npcR(k), "down", true)
+	s.disarm(k)
 	n.Path, n.Death = nil, by
 	if by == "accident" {
 		s.Stats.Accidents++

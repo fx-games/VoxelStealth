@@ -230,8 +230,27 @@ func (t *npcTarget) tickFall() {
 		t.sling()
 		return
 	}
+	if pinned, pinning, yaw := s.Pinned(t.k); pinned || pinning {
+		t.pin(yaw, pinned)
+		return
+	}
 	t.doll.Follow(b.X, b.Y, b.Z, 0.3)
 	t.doll.Step(collide.SolidsFunc(s.W.Solid))
+}
+
+// pin carries a body along with the bolt that pins it, and once it is
+// pinned hangs it by the chest against the wall ahead (yaw: the bolt's
+// flight), its legs dangling.
+func (t *npcTarget) pin(yaw float64, pinned bool) {
+	b := &t.g.sim.NPCs[t.k].Body
+	t.doll.Follow(b.X, b.Y, b.Z, 1)
+	if pinned {
+		u := mgl32.Vec3{float32(math.Sin(yaw)), 0, -float32(math.Cos(yaw))} // yaw 0 faces -Z
+		at := mgl32.Vec3{float32(b.X), float32(b.Y), float32(b.Z)}.Add(u.Mul(0.15))
+		t.doll.Hold(ragdoll.Neck, at.Add(mgl32.Vec3{0, 1.5, 0}))
+		t.doll.Hold(ragdoll.Pelvis, at.Add(mgl32.Vec3{0, 0.75, 0}))
+	}
+	t.doll.Step(collide.SolidsFunc(t.g.sim.W.Solid))
 }
 
 // sling hangs a carried body over the player's right shoulder: its pelvis

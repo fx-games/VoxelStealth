@@ -38,10 +38,13 @@ const (
 	StimBash   Stim = "bash"   // the blackjack
 	StimKick   Stim = "kick"   // the player's kick (Extra "yaw": the way it sends things)
 	StimSlam   Stim = "slam"   // a thrown body striking something (Intensity: m/s; Source: the body)
+	StimFall   Stim = "fall"   // a body landing (Intensity: blocks fallen)
 	StimBlast  Stim = "blast"  // explosions
 	StimFlash  Stim = "flash"  // flash bombs: blinds whoever sees it (Intensity: ticks)
 	StimNoise  Stim = "noise"  // sound through the room graph (Intensity: loudness, Extra "sound")
-	StimFrob   Stim = "frob"   // deliberate use (Extra "held": the key is held down)
+	StimFrob   Stim = "frob"   // deliberate use (Extra "held": the key is held down; "revive": a comrade's shake)
+	StimStep   Stim = "step"   // a footstep on a cell (Intensity: the stride's loudness factor)
+	StimMop    Stim = "mop"    // wiping up a puddle cell
 )
 
 // Mediums: "radius" reaches everything whose box is within Range of the
@@ -133,6 +136,9 @@ func (w simWorld) ArchetypeAt(c Cell) string {
 	if l := s.Liquid[c]; l != "" {
 		return l + "_puddle"
 	}
+	if s.supportOf(c) >= 0 {
+		return "support"
+	}
 	switch b := s.W.Block(c.X, c.Y, c.Z); {
 	case IsGlass(b):
 		return "glass"
@@ -142,6 +148,8 @@ func (w simWorld) ArchetypeAt(c Cell) string {
 		return "tnt"
 	case IsSpikes(b):
 		return "spikes"
+	case s.burnable(c) && (strings.Contains(b, "_stairs") || IsLadder(b)):
+		return "creaky"
 	case s.burnable(c):
 		return "flammable_block"
 	}
@@ -193,6 +201,14 @@ func (w simWorld) Destroyed(r Receiver) {
 	}
 	o := s.Objects[i]
 	s.setLight(i, false)
+	if o.Kind == KindChest { // what was hidden in it lies in the ashes
+		for _, k := range o.Hidden {
+			n := s.NPCs[k]
+			n.Hidden = false
+			n.Body.Teleport(o.Pos.X, o.Pos.Y, o.Pos.Z)
+		}
+		o.Hidden = nil
+	}
 	if o.Kind == KindDoor { // it leaves its opening
 		for _, dc := range o.doorCells() {
 			s.W.SetBlock(dc.X, dc.Y, dc.Z, BlockAir)
@@ -241,11 +257,15 @@ func (s *Sim) reachSound(st Stimulus, yield func(Receiver, float64)) {
 	if st.Source != nil {
 		by = s.npcIndex(*st.Source)
 	}
-	loud, _ := st.Extra["sound"].(string)
-	s.event(Event{Kind: EvSound, Sound: loud, Pos: st.Origin, Loud: st.Intensity, NPC: by})
+	kind, _ := st.Extra["sound"].(string)
+	s.event(Event{Kind: EvSound, Sound: kind, Pos: st.Origin, Loud: st.Intensity, NPC: by})
+	f := s.Rooms.spread(st.Origin, s.doorClosed) // once for every listener
 	for k := range s.NPCs {
 		if k != by && s.reachable(k) && s.NPCs[k].Blind() == 0 {
-			yield(s.npcR(k), 0)
+			if d, from := s.Rooms.pathLen(f, s.NPCs[k].eye()); d*SoundFalloff < st.Intensity {
+				s.NPCs[k].heardFrom = from // for hearNoise, which runs right after this
+				yield(s.npcR(k), d)
+			}
 		}
 	}
 }
@@ -288,15 +308,16 @@ func init() { // in init: responses stimulate in turn
 		return func(s *Sim, d Delivery, _ []string) bool { return f(s, d.To.Addr, d) }
 	}
 	responses = map[string]response{
-		"douse":      obj((*Sim).douse),
-		"kindle":     obj((*Sim).kindle),
-		"light_off":  obj(func(s *Sim, i int, _ Delivery, _ []string) bool { s.setLight(i, false); return true }),
-		"short_out":  obj((*Sim).shortOut),
-		"take_torch": obj((*Sim).takeTorch),
-		"pick_lock":  obj((*Sim).pickLock),
-		"open_door":  obj((*Sim).openDoor),
-		"frob_chest": obj((*Sim).frobChest),
-		"take":       obj((*Sim).take),
+		"douse":       obj((*Sim).douse),
+		"kindle":      obj((*Sim).kindle),
+		"light_off":   obj(func(s *Sim, i int, _ Delivery, _ []string) bool { s.setLight(i, false); return true }),
+		"short_out":   obj((*Sim).shortOut),
+		"take_torch":  obj((*Sim).takeTorch),
+		"pick_lock":   obj((*Sim).pickLock),
+		"open_door":   obj((*Sim).openDoor),
+		"frob_chest":  obj((*Sim).frobChest),
+		"take":        obj((*Sim).take),
+		"take_weapon": obj((*Sim).takeWeapon),
 		"toggle": func(s *Sim, d Delivery, args []string) bool {
 			s.B.Set(d.To, args[0], !s.B.Bool(d.To, args[0]))
 			return true
@@ -315,6 +336,7 @@ func init() { // in init: responses stimulate in turn
 		"notice_fire": npc((*Sim).noticeFire),
 		"blast_block": cell(blastBlock),
 		"shove":       npc((*Sim).shove),
+		"pin":         npc((*Sim).pin),
 		"impale":      impale,
 		"strike": func(s *Sim, d Delivery, _ []string) bool {
 			why, _ := d.St.Extra["why"].(string)
@@ -325,6 +347,10 @@ func init() { // in init: responses stimulate in turn
 		"recover":   npc(func(s *Sim, k int, _ Delivery, _ []string) bool { s.recover(k); return true }),
 		"hurt": func(s *Sim, _ Delivery, args []string) bool {
 			s.HurtPlayer(atoi(args[0]), strings.Join(args[1:], " "))
+			return true
+		},
+		"fall_player": func(s *Sim, d Delivery, _ []string) bool { // Minecraft: a point per block past three
+			s.HurtPlayer(int(math.Ceil(d.Intensity-3)), "Fell to your death.")
 			return true
 		},
 		"dazzle": (*Sim).dazzlePlayer,
@@ -349,6 +375,7 @@ func init() { // in init: responses stimulate in turn
 		"ignite_oil":    cell((*Sim).igniteOil),
 		"unlight_above": cell(func(s *Sim, c Cell, _ Delivery) bool { s.unlightAbove(c); return true }),
 	}
+	addReactions()
 }
 
 // Object responses.
@@ -474,6 +501,7 @@ func (s *Sim) knockOut(k int, _ Delivery, args []string) bool {
 	}
 	n.setState(StateUnconscious)
 	s.B.Set(s.npcR(k), "down", true)
+	s.disarm(k)
 	n.Path = nil
 	s.Stats.Knockouts++
 	s.emit(n.pos(), 18, "body", -1)

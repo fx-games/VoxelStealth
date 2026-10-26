@@ -49,7 +49,7 @@ const tickDur = time.Second / sim.TicksPerSecond
 func main() {
 	var (
 		missionDir = flag.String("mission", "missions/manor", "mission directory")
-		assets     = flag.String("assets", "../VoxelLib/assets", "VoxelLib asset directory (cleannrooster)")
+		assets     = flag.String("assets", "../VoxelLib/assets", "VoxelLib asset directory")
 		texDir     = flag.String("textures", "assets", "texture pack and item icons (rpg16pack, items)")
 		edit       = flag.Bool("edit", false, "open the mission in the editor (saves to the mission directory)")
 		shot       = flag.String("shot", "", "save a screenshot PNG at tick -shot-at and quit (never grabs input)")
@@ -113,6 +113,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer eng.Close()
+	eng.Renderer.SetDamageTextures(pack.DamageTextures()) // strained supports crack
 
 	g := &game{eng: eng, win: win, reg: reg, mission: m, missionDir: *missionDir, editing: *edit,
 		auto: *shot != "", script: parseScript(*script)}
@@ -168,21 +169,22 @@ func main() {
 
 // game is the glue between the engine, the simulation and the player.
 type game struct {
-	eng        *engine.Engine
-	win        *glfw.Window
-	reg        *voxel.Registry
-	cam        render.Camera
-	player     *character.Character
-	world      *simWorld
-	mission    *sim.Mission
-	missionDir string
-	sim        *sim.Sim // nil while loading and in the editor
-	editing    bool     // editor mode (sim == nil unless playtesting)
-	ready      bool     // the mission's chunks are loaded
-	loadFrac   float64  // loading progress, 0..1
-	captured   bool
-	auto       bool // automated -shot run: no input at all
-	script     []scriptStep
+	eng         *engine.Engine
+	win         *glfw.Window
+	reg         *voxel.Registry
+	cam         render.Camera
+	player      *character.Character
+	world       *simWorld
+	blockMeshes map[string]*render.BlockMesh // blockMesh
+	mission     *sim.Mission
+	missionDir  string
+	sim         *sim.Sim // nil while loading and in the editor
+	editing     bool     // editor mode (sim == nil unless playtesting)
+	ready       bool     // the mission's chunks are loaded
+	loadFrac    float64  // loading progress, 0..1
+	captured    bool
+	auto        bool // automated -shot run: no input at all
+	script      []scriptStep
 
 	tick, playTick     int // ticks since launch / since the mission started
 	walkDist, prevWalk float64

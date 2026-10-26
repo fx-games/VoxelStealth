@@ -169,6 +169,19 @@ func (rm *RoomMap) spread(src Vec3, closed func(door int) bool) soundField {
 	return f
 }
 
+// pathLen is how far a sound travels to at, closed doors counted as the
+// blocks of path they muffle as much as (+Inf: it doesn't get there), and
+// where it seems to come from: the source in the same room, else the
+// opening it came in by.
+func (rm *RoomMap) pathLen(f soundField, at Vec3) (float64, Vec3) {
+	r := rm.RoomAt(at.Cell())
+	d, ok := f.dist[r]
+	if !ok {
+		return math.Inf(1), Vec3{}
+	}
+	return d + f.entry[r].Dist(at), f.entry[r]
+}
+
 // heard returns the loudness reaching a listener and where it seems to
 // come from (the source if in the same room, else the last opening).
 func (rm *RoomMap) heard(f soundField, loud float64, at Vec3) (float64, Vec3) {

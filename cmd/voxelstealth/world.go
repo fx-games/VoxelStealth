@@ -5,8 +5,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/memmaker/voxellib/actors"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/voxel"
+	"github.com/memmaker/voxellib/voxel/collide"
 	"github.com/memmaker/voxelstealth/sim"
 )
 
@@ -36,8 +38,36 @@ func (w *simWorld) Solid(x, y, z int) bool {
 	if wd.Chunk(voxel.ChunkPos{X: x >> 4, Z: z >> 4}) == nil {
 		return true
 	}
-	return wd.Reg.Info(wd.Block(x, y, z)).Collides && !sim.OpenDoor(w.Block(x, y, z))
+	// Stairs are footing to the pathfinder; bodies take their boxes (Shaped).
+	return wd.Footing(x, y, z) && !sim.OpenDoor(w.Block(x, y, z))
 }
+
+// Shaped reports a stair or slab: bodies collide with its boxes (sim.Shaper).
+func (w *simWorld) Shaped(x, y, z int) bool { return w.g.reg.Info(w.g.eng.World.Block(x, y, z)).Step }
+
+// Boxes are the stairs' collision boxes in area (sim.Shaper).
+func (w *simWorld) Boxes(area collide.AABB, out []collide.AABB) []collide.AABB {
+	wd := w.g.eng.World
+	area.Grow(0, 0.5, 0).Blocks(func(x, y, z int) {
+		if !w.Shaped(x, y, z) {
+			return
+		}
+		out = wd.StateBoxes(wd.Block(x, y, z), x, y, z, out)
+	})
+	return out
+}
+
+// Climbable, StairOrSlab and Air are the engine world's: ladders climbed
+// (character.Climber), and no jumping up stairs (actors.StepBlocks).
+func (w *simWorld) Climbable(x, y, z int) bool   { return w.g.eng.World.Climbable(x, y, z) }
+func (w *simWorld) StairOrSlab(x, y, z int) bool { return w.g.eng.World.StairOrSlab(x, y, z) }
+func (w *simWorld) Air(x, y, z int) bool         { return w.g.eng.World.Air(x, y, z) }
+
+var (
+	_ sim.Shaper        = (*simWorld)(nil)
+	_ character.Climber = (*simWorld)(nil)
+	_ actors.StepBlocks = (*simWorld)(nil)
+)
 
 func (w *simWorld) Liquid(x, y, z int) character.Liquid {
 	info := w.g.reg.Info(w.g.eng.World.Block(x, y, z))

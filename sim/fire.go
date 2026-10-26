@@ -81,7 +81,7 @@ func flammability(block string) (ignite, burn int) {
 		return 60, 20
 	case b == "short_grass", b == "fern", b == "tall_grass", b == "large_fern", b == "dead_bush":
 		return 60, 100
-	case b == "vine", b == "tnt", b == "target":
+	case b == "vine", b == "tnt", b == "target", b == "ladder":
 		return 15, 100
 	case b == "scaffolding":
 		return 60, 60

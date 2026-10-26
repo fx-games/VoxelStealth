@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/memmaker/stimres"
+	"github.com/memmaker/voxellib/actors"
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/ragdoll"
 	"github.com/memmaker/voxellib/voxel/collide"
@@ -60,6 +61,8 @@ type NPCDef struct {
 	Yaw                   float64
 	Patrol                []Waypoint
 	Keys                  []string
+	Weapon                string // a Weapons key, "random", or "" (a guard's is random)
+	Torch                 bool   // carries a lit torch
 }
 
 // NPC is a running NPC.
@@ -80,12 +83,18 @@ type NPC struct {
 	Wander                float64 // a staggering NPC's turn rate
 	NoPath                int     // ticks before trying again after a failed path search, whatever the goal
 	LKP                   Vec3    // last known position of whatever worries it
+	heardFrom             Vec3    // where the sound being delivered seems to come from (reachSound)
 	LastSeen              int     // ticks since it last saw the player
 	Known                 []int
 	Keys                  []string
 	Hidden, CarriedBy     bool
 	Death                 string
 	AttackT, Cool         int
+	Weapon                string // a Weapons key, "" unarmed
+	Combo                 int    // attacks struck so far: the game plays the next of the weapon's swings
+	Loaded                bool   // a crossbowman's crossbow is spanned
+	Span, AimT            int    // ticks spent spanning the crossbow, aiming it
+	TorchObj              int    // the torch it carries, Objects index + 1 (0: none)
 	BarkT                 int
 	Reporter              bool // fled and reported already
 	Moving                bool // walked this tick (animation)
@@ -93,6 +102,10 @@ type NPC struct {
 	Attacking             bool
 	Stirred               bool    // a sound or the sight of the player caught its attention this tick
 	Sight                 float64 // suspicion the sight of the player adds this tick (see)
+	Chore                 string  // what it is off to do about something (react.go), or ""
+	ChoreOf               int     // the NPC or object it is for
+	ChoreAt               Vec3    // where
+	ChoreT                int     // ticks at work on it
 	R                     stimres.ID
 	b                     *Broker
 	prevPos               Vec3
@@ -166,12 +179,20 @@ func (w navWorld) Solid(x, y, z int) bool {
 }
 
 // bodyWorld is the character controller's view: closed doors are solid,
-// and decorations are boxes (DecorSize).
+// stairs and decorations are boxes (Shaper, DecorSize).
 type bodyWorld struct{ s *Sim }
 
-func (w bodyWorld) Solid(x, y, z int) bool { return w.s.W.Solid(x, y, z) }
+func (w bodyWorld) Solid(x, y, z int) bool {
+	if sh, ok := w.s.W.(Shaper); ok && sh.Shaped(x, y, z) {
+		return false
+	}
+	return w.s.W.Solid(x, y, z)
+}
 
 func (w bodyWorld) Boxes(area collide.AABB, out []collide.AABB) []collide.AABB {
+	if sh, ok := w.s.W.(Shaper); ok {
+		out = sh.Boxes(area, out)
+	}
 	for i, o := range w.s.Objects {
 		if o.Kind != KindDecor || o.Gone {
 			continue
@@ -190,6 +211,9 @@ func (s *Sim) DecorBox(i int) collide.AABB {
 	if !ok {
 		sz = Vec3{0.5, 1, 0.5} // unknown: the whole cell
 	}
+	if down, _ := o.Toppled(); down { // lying on its side
+		sz = Vec3{math.Max(sz.X, sz.Y/2), math.Min(sz.X, sz.Z) * 2, math.Max(sz.Z, sz.Y/2)}
+	}
 	return collide.AABB{MinX: o.Pos.X - sz.X, MinY: o.Pos.Y, MinZ: o.Pos.Z - sz.Z, MaxX: o.Pos.X + sz.X, MaxY: o.Pos.Y + sz.Y, MaxZ: o.Pos.Z + sz.Z}
 }
 
@@ -197,6 +221,12 @@ func (s *Sim) DecorBox(i int) collide.AABB {
 // and height (Y) from its feet. The game fills it from the models,
 // widest extent on both axes so the box covers any yaw.
 var DecorSize = map[string]Vec3{}
+
+// Climbable is the world's ladders (character.Climber).
+func (w bodyWorld) Climbable(x, y, z int) bool {
+	cl, ok := w.s.W.(character.Climber)
+	return ok && cl.Climbable(x, y, z)
+}
 
 func (w bodyWorld) Liquid(x, y, z int) character.Liquid {
 	if strings.HasPrefix(w.s.W.Block(x, y, z), "minecraft:water") { // any level
@@ -210,16 +240,24 @@ func (s *Sim) Body() character.World { return bodyWorld{s} }
 
 var _ character.World = bodyWorld{}
 var _ collide.Boxer = bodyWorld{}
+var _ character.Climber = bodyWorld{}
 
 func (s *Sim) newNav(k int) *nav.Graph {
 	n := s.NPCs[k]
-	return &nav.Graph{W: navWorld{s}, MaxDrop: 3, Passable: func(from, to nav.Pos) bool {
+	g := &nav.Graph{W: navWorld{s}, MaxDrop: 3, Passable: func(from, to nav.Pos) bool {
 		if di, ok := s.doors[Cell{to.X, to.Y, to.Z}]; ok {
 			d := s.Objects[di]
 			return !d.Locked() || slices.Contains(n.Keys, d.Key)
 		}
 		return true
 	}}
+	if sb, ok := s.W.(actors.StepBlocks); ok { // no climbing off a stair sideways
+		g.Stairs = sb.StairOrSlab
+	}
+	if cl, ok := s.W.(character.Climber); ok { // up and down ladders
+		g.Links = g.Ladders(cl.Climbable)
+	}
+	return g
 }
 
 // bark makes an NPC say something (rate limited).
@@ -275,6 +313,7 @@ func (s *Sim) tickNPC(k int) {
 		n.BarkT--
 	}
 	n.Moving, n.Running, n.Attacking = false, false, false
+	s.carryTorch(k)
 	if s.Airborne(k) {
 		s.tumble(k)
 		return
@@ -282,10 +321,21 @@ func (s *Sim) tickNPC(k int) {
 	if s.Rising(k) {
 		return
 	}
+	if pinned, flying, _ := s.Pinned(k); flying {
+		s.flyToPin(k)
+		return
+	} else if pinned {
+		return // hangs on the wall
+	}
 	if !n.alive() || n.CarriedBy || n.Hidden {
 		if !n.CarriedBy && !n.Hidden {
 			n.Body.Tick(bodyWorld{s}, character.Input{Yaw: n.Yaw}) // fall
+			s.land(s.npcR(k), n.pos(), n.Body.Landed)
 		}
+		return
+	}
+	if s.Burning(k) {
+		s.runBurning(k)
 		return
 	}
 	n.StateT++
@@ -304,15 +354,14 @@ func (s *Sim) tickNPC(k int) {
 func (s *Sim) hearNoise(k int, d Delivery, _ []string) bool {
 	n, snd := s.NPCs[k], d.St
 	kind, _ := snd.Extra["sound"].(string)
-	if kind == "footstep" && snd.Source != nil && s.npcIndex(*snd.Source) >= 0 { // the household's own steps: only the player's are suspicious
+	if (kind == "footstep" || kind == "creak") && snd.Source != nil && s.npcIndex(*snd.Source) >= 0 { // the household's own steps: only the player's are suspicious
 		return false
 	}
 	thr := 8.0
 	if n.Kind != "guard" {
 		thr = 11
 	}
-	f := s.Rooms.spread(snd.Origin, s.doorClosed)
-	rcv, _ := s.Rooms.heard(f, snd.Intensity, n.eye())
+	rcv := snd.Intensity - SoundFalloff*d.Dist // the medium measured the path (reachSound)
 	if rcv <= thr {
 		return false
 	}
@@ -324,7 +373,7 @@ func (s *Sim) hearNoise(k int, d Delivery, _ []string) bool {
 			return false
 		}
 		n.setSuspicion(math.Max(n.Suspicion(), 80))
-		n.LKP = snd.Origin
+		n.LKP = s.soundGoal(k, snd.Origin)
 		if n.IsGuard() {
 			s.setState(k, StateSearch)
 			s.bark(k, "What's going on?!")
@@ -332,11 +381,11 @@ func (s *Sim) hearNoise(k int, d Delivery, _ []string) bool {
 			s.setState(k, StateFlee)
 		}
 		return true
-	case "footstep", "lockpick":
+	case "footstep", "lockpick", "creak":
 		n.setSuspicion(n.Suspicion() + over*0.9)
 	case "door", "squeak", "loot", "unlock":
 		n.setSuspicion(n.Suspicion() + over*1.2)
-	case "noisemaker", "crash", "clatter", "arrow", "zap", "stab", "thud":
+	case "noisemaker", "shatter", "crash", "clatter", "arrow", "zap", "stab", "thud":
 		n.setSuspicion(n.Suspicion() + over*2.5)
 	case "body", "fire", "ignite", "splash", "hiss":
 		n.setSuspicion(n.Suspicion() + over*1.8)
@@ -344,8 +393,26 @@ func (s *Sim) hearNoise(k int, d Delivery, _ []string) bool {
 		n.setSuspicion(n.Suspicion() + over*0.5)
 	}
 	n.setSuspicion(math.Min(n.Suspicion(), AlertAt-1)) // sound alone never confirms
-	n.LKP = snd.Origin
+	n.LKP = s.soundGoal(k, snd.Origin)
 	return true
+}
+
+// soundGoal is where NPC k goes to look into a sound from src, as in Thief:
+// it doesn't know the source, only where the sound came into its room. A
+// sound from the same room it walks to; one through an opening it walks
+// through, a little way into the next room, where the next sound it hears
+// comes to it directly (or by the next opening).
+func (s *Sim) soundGoal(k int, src Vec3) Vec3 {
+	n := s.NPCs[k]
+	from := n.heardFrom
+	if from == src {
+		return src
+	}
+	dx, dz := from.X-n.pos().X, from.Z-n.pos().Z
+	if l := math.Hypot(dx, dz); l > 0.01 {
+		from.X, from.Z = from.X+dx/l*1.5, from.Z+dz/l*1.5
+	}
+	return from
 }
 
 // perceive updates suspicion from sight and sound; it reports whether
@@ -491,6 +558,10 @@ func pick(i int, s ...string) string { return s[i%len(s)] }
 func (s *Sim) act(k int) {
 	n := s.NPCs[k]
 	in := character.Input{Yaw: n.Yaw}
+	if s.doChore(k, &in) {
+		s.move(k, in)
+		return
+	}
 	switch n.State() {
 	case StatePatrol:
 		if len(n.Patrol) == 0 {
@@ -612,6 +683,9 @@ func (s *Sim) noticeBody(k int, d Delivery, _ []string) bool {
 	if n.IsGuard() {
 		n.setSuspicion(90)
 		s.setState(k, StateSearch)
+		if o.State() == StateUnconscious {
+			s.setChore(k, ChoreRevive, j, o.pos())
+		}
 	} else {
 		s.setState(k, StateFlee)
 	}
@@ -636,6 +710,7 @@ func (s *Sim) move(k int, in character.Input) {
 	n := s.NPCs[k]
 	n.prevPos = n.pos()
 	n.Body.Tick(bodyWorld{s}, in)
+	s.land(s.npcR(k), n.pos(), n.Body.Landed)
 	n.Moving = math.Hypot(n.Body.X-n.Body.PrevX, n.Body.Z-n.Body.PrevZ) > 0.01
 	n.Running = n.Moving && in.Forward > 0.6
 	// Footsteps are a sim sound like the player's; NPCs ignore each other's
@@ -644,11 +719,11 @@ func (s *Sim) move(k int, in character.Input) {
 		n.walk += n.pos().DistXZ(n.prevPos)
 		if n.walk >= 1.7 {
 			n.walk -= 1.7
-			loud := Material(s.FloorSurface(n.pos()))
+			f := 1.0
 			if n.Running {
-				loud *= 1.35
+				f = 1.35
 			}
-			s.emit(n.pos(), loud, "footstep", k)
+			s.step(n.pos(), f, k)
 		}
 	}
 }
@@ -661,22 +736,31 @@ func (s *Sim) fight(k int, in *character.Input) {
 		n.Cool--
 	}
 	d := n.pos().DistXZ(p.Pos)
-	if n.AttackT > 0 {
+	w := s.weaponOf(k)
+	if n.AttackT > 0 { // the weapon's swing, its hit at the upswing
 		n.AttackT++
 		n.Attacking = true
 		s.turn(n, yawTo(n.pos(), p.Pos), 0.3)
-		if n.AttackT == 9 && d < 2.4 && math.Abs(n.pos().Y-p.Pos.Y) < 1.6 {
+		if n.AttackT == (w.Swing+1)/2 && d < w.Reach+0.4 && math.Abs(n.pos().Y-p.Pos.Y) < 1.6 {
 			s.emit(p.Pos, 28, "hit", k)
 			me := s.npcR(k)
-			s.hit(s.playerR(), Stimulus{Stim: StimPierce, Intensity: 7, Origin: n.pos(), Source: &me, Extra: map[string]any{"why": "Cut down by " + n.Name + "."}})
+			st := Stimulus{Stim: StimBash, Intensity: w.Damage, Origin: n.pos(), Source: &me, Extra: map[string]any{"why": "Beaten down by " + n.Name + "."}}
+			if w.Sharp {
+				st.Stim, st.Extra["why"] = StimPierce, "Cut down by "+n.Name+"."
+			}
+			s.hit(s.playerR(), st)
 		}
-		if n.AttackT > 16 {
-			n.AttackT, n.Cool = 0, 12
+		if n.AttackT > w.Swing {
+			n.AttackT, n.Cool = 0, 8
 		}
 		return
 	}
-	if n.LastSeen == 0 && d < 2.0 && n.Cool == 0 {
+	if w.Ranged && s.aimBolt(k, d) {
+		return
+	}
+	if n.LastSeen == 0 && d < w.Reach-0.4 && n.Cool == 0 {
 		n.AttackT = 1
+		n.Combo++
 		return
 	}
 	target := n.LKP
@@ -686,7 +770,7 @@ func (s *Sim) fight(k int, in *character.Input) {
 			n.Path = nil
 		}
 	}
-	if d > 1.4 || n.LastSeen > 0 {
+	if d > w.Reach-0.8 || n.LastSeen > 0 {
 		s.walkTo(k, target, 1, in)
 	} else {
 		s.turn(n, yawTo(n.pos(), p.Pos), 0.3)
@@ -786,10 +870,10 @@ func (s *Sim) walkTo(k int, goal Vec3, speed float64, in *character.Input) bool 
 	if angleDiff(yawTo(p, t), n.Yaw) > 1.2 {
 		in.Forward = 0.05 // turn first
 	}
-	if float64(next.Y) > p.Y+0.5 && n.Body.OnGround && p.DistXZ(t) < 1.4 {
+	if float64(next.Y) > p.Y+0.5 && n.Body.OnGround && p.DistXZ(t) < 1.4 && actors.StepJumps(s.W, floor(p.X), floor(p.Y), floor(p.Z)) {
 		in.Jump = true
 	}
-	if moved := n.pos().DistXZ(n.prevPos); moved < 0.01 {
+	if moved := n.pos().Dist(n.prevPos); moved < 0.01 { // climbing a ladder is moving
 		n.Stuck++
 	} else {
 		n.Stuck = 0

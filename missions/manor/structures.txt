@@ -1,0 +1,11 @@
+# One record per collapsible structure: the blocks in Box (inclusive cell corners) fall when every post of Supports blocks is broken.
+
+ID: balcony
+Name: Front balcony
+Box: 20,68,42 24,69,47
+Supports: 20,64,47; 20,65,47; 20,66,47; 20,67,47; 24,64,47; 24,65,47; 24,66,47; 24,67,47
+
+ID: logstore
+Name: Log store
+Box: 52,68,30 54,70,32
+Supports: 52,64,30; 52,65,30; 52,66,30; 52,67,30; 54,64,32; 54,65,32; 54,66,32; 54,67,32

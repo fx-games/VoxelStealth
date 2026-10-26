@@ -1,6 +1,6 @@
-// Command buildplayer writes assets/models/player.gltf: the reference's
-// player model (PlayerModel with wide arms, 64×64 skin, with the second
-// layer), built cube by cube as ModelPart builds it, with Minecraft's walk and idle limb swings and a kick, over a
+// Command buildplayer writes assets/models/player.gltf and
+// player_slim.gltf: the reference's player model (PlayerModel with wide
+// arms, and with slim ones; 64×64 skin, with the second layer), built cube by cube as ModelPart builds it, with Minecraft's walk and idle limb swings and a kick, over a
 // placeholder skin. The game puts the NPCs' own skins on it
 // (assets/skins/<model>.png).
 //
@@ -48,10 +48,29 @@ var parts = []struct {
 // stands it 24 pixels up; our yaw is the reference's plus a half turn.
 func ours(p mgl32.Vec3) mgl32.Vec3 { return mgl32.Vec3{p[0], 24 - p[1], -p[2]}.Mul(1. / 16) }
 
+// slimArms are PlayerModel's slim arms (the "slim" skins' model, Alex's):
+// three pixels wide and half a pixel lower, on the same texture offsets.
+var slimArms = map[string]struct {
+	pivot mgl32.Vec3
+	boxes []box
+}{
+	"rightArm": {mgl32.Vec3{-5, 2.5, 0}, []box{{-2, -2, -2, 3, 12, 4, 40, 16, 0}, {-2, -2, -2, 3, 12, 4, 40, 32, 0.25}}},
+	"leftArm":  {mgl32.Vec3{5, 2.5, 0}, []box{{-1, -2, -2, 3, 12, 4, 32, 48, 0}, {-1, -2, -2, 3, 12, 4, 48, 48, 0.25}}},
+}
+
 func main() {
-	m := &model.Model{Name: "player", Textures: []image.Image{placeholder()}, Clips: map[string]*model.Clip{}, Tags: map[string]bool{}}
+	write("player", false)
+	write("player_slim", true)
+}
+
+// write writes assets/models/<name>.gltf, with the slim arms if slim.
+func write(name string, slim bool) {
+	m := &model.Model{Name: name, Textures: []image.Image{placeholder()}, Clips: map[string]*model.Clip{}, Tags: map[string]bool{}}
 	me := model.Mesh{Texture: 0}
 	for bi, p := range parts {
+		if a, ok := slimArms[p.name]; ok && slim {
+			p.pivot, p.boxes = a.pivot, a.boxes
+		}
 		piv := ours(p.pivot)
 		m.Bones = append(m.Bones, model.Bone{Name: p.name, Parent: -1, T: piv, R: mgl32.QuatIdent(), S: mgl32.Vec3{1, 1, 1},
 			InvBind: mgl32.Translate3D(-piv[0], -piv[1], -piv[2])})
@@ -65,7 +84,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	out := filepath.Join("assets", "models", "player.gltf")
+	out := filepath.Join("assets", "models", name+".gltf")
 	if err := os.WriteFile(out, data, 0o644); err != nil {
 		log.Fatal(err)
 	}
@@ -144,7 +163,7 @@ func swing(m *model.Model) {
 		}[b]
 		return mgl32.Vec3{float32(x), 0, 0}
 	})
-	clip("kick", 0.6, func(b string, t float64) mgl32.Vec3 { // ours: wind back, snap up and out, hold, lower
+	clip("kick", 0.5, func(b string, t float64) mgl32.Vec3 { // ours: a flick back, then snapped up past straight out, and lowered
 		key := func(ts, xs []float64) float64 {
 			for i := 1; i < len(ts); i++ {
 				if t <= ts[i] {
@@ -154,10 +173,10 @@ func swing(m *model.Model) {
 			}
 			return xs[len(xs)-1]
 		}
-		ts := []float64{0, 0.15, 0.4, 0.6, 1}
+		ts := []float64{0, 0.08, 0.2, 0.5, 0.8, 1}
 		x := map[string][]float64{
-			"rightLeg": {0, 0.5, -1.6, -1.6, 0},
-			"rightArm": {0, -0.2, 0.5, 0.5, 0}, "leftArm": {0, 0.2, -0.5, -0.5, 0},
+			"rightLeg": {0, 0.7, -2.4, -2.1, 0, 0},
+			"rightArm": {0, -0.3, 0.9, 0.7, 0, 0}, "leftArm": {0, 0.3, -0.9, -0.7, 0, 0},
 		}[b]
 		if x == nil {
 			return mgl32.Vec3{}

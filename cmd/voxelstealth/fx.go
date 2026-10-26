@@ -68,7 +68,7 @@ func (g *game) burst(name string, p sim.Vec3) { g.parts.Emit(p.X, p.Y, p.Z, fx[n
 func (g *game) tickFX() {
 	s := g.sim
 	eye := g.eye()
-	for _, o := range s.Objects {
+	for i, o := range s.Objects {
 		if o.Gone || o.Pos.Dist(eye) > 24 {
 			continue
 		}
@@ -90,6 +90,10 @@ func (g *game) tickFX() {
 			}
 		case o.Kind == sim.KindLamp && o.Lit() && !o.Fallen() && lampModel(o) == "lamp_electric":
 			g.burst("glow", o.Pos.Add(sim.Vec3{Y: 0.25})) // around the panes
+		case o.Kind == sim.KindTorch && o.Carried(): // its flame where drawNPCs last held it
+			if tip, ok := g.torchTips[i]; ok && o.Lit() {
+				g.burst("flame", tip)
+			}
 		case o.Kind == sim.KindTorch && o.Lit() && !o.Held() && !o.Fallen() && ownModel[o.Name] == "":
 			g.burst("flame", g.torchTip(o))
 		case o.Kind == sim.KindTorch && o.Lit() && !o.Held() && !o.Fallen():
@@ -105,6 +109,20 @@ func (g *game) tickFX() {
 			_, _, tip := lyingTorch(o, 1)
 			g.burst("flame", tip)
 		}
+	}
+	// People on fire.
+	for k, n := range s.NPCs {
+		if s.Burning(k) && n.Pos().Dist(eye) < 24 && !n.Hidden {
+			for _, y := range []float64{0.4, 1.0, 1.6} {
+				g.burst("flame", n.Pos().Add(sim.Vec3{Y: y}))
+			}
+			if s.Now%3 == 0 {
+				g.burst("wisp", n.Pos().Add(sim.Vec3{Y: 2}))
+			}
+		}
+	}
+	if s.PlayerBurning() && s.Now%4 == 0 {
+		g.flash, g.flashColor = 3, [3]uint8{255, 120, 20}
 	}
 	// Lit fuses: a spark on each bomb's wick once it leaves the hand.
 	for _, b := range s.Bombs {

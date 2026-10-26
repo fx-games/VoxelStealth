@@ -108,6 +108,11 @@ func (g *game) makeSounds() {
 	}))
 	boom := n(0.03)
 	add("explosion", synth(2.2, func(t float64) float64 { return 6 * env(t, 0.004, 0.5) * boom() }))
+	// Old wood under weight: a slow, wavering groan.
+	add("creak", synth(0.45, func(t float64) float64 {
+		f := 180 + 60*math.Sin(t*9) + 40*t
+		return 0.35 * env(t, 0.06, 0.3) * tone(t, f) * (0.6 + 0.4*math.Sin(t*170))
+	}))
 	hiss := n(0.9)
 	add("hiss", synth(0.8, func(t float64) float64 { return 0.5 * env(t, 0.05, 0.3) * hiss() }))
 	add("flash", synth(1.0, func(t float64) float64 { return 3*env(t, 0.001, 0.08)*boom() + 0.6*env(t, 0.01, 0.4)*hiss() }))
@@ -287,6 +292,11 @@ func (g *game) handleEvents() {
 				g.playWorld("arrow-wood", e.Pos, e.Loud)
 				continue
 			}
+			if e.Sound == "creak" { // a step on old wood, groaning
+				g.playWorld("step-wood", e.Pos, e.Loud)
+				g.playWorld("creak", e.Pos, e.Loud)
+				continue
+			}
 			if e.Sound == "footstep" {
 				name := "step-" + s.FloorSurface(e.Pos)
 				if g.sfx[name] == nil {
@@ -307,6 +317,8 @@ func (g *game) handleEvents() {
 			} else {
 				g.playWorld(e.Sound, e.Pos, e.Loud)
 			}
+		case sim.EvShoot:
+			g.shootBolt(e)
 		case sim.EvBark:
 			g.caption(e.Text)
 			g.playBark(e)
@@ -316,6 +328,8 @@ func (g *game) handleEvents() {
 			g.flash, g.flashColor = 10, [3]uint8{200, 0, 0}
 		case sim.EvBlast:
 			g.flash, g.flashColor = 12, [3]uint8{255, 250, 230}
+		case sim.EvSlip:
+			g.slipped = slipTicks
 		case sim.EvSpark:
 			if g.eye().Dist(e.Pos) < 12 {
 				g.flash, g.flashColor = 4, [3]uint8{200, 230, 255}

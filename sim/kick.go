@@ -2,6 +2,7 @@ package sim
 
 import (
 	"math"
+	"strings"
 
 	"github.com/memmaker/voxellib/ragdoll"
 )
@@ -68,6 +69,7 @@ func (s *Sim) shove(k int, d Delivery, _ []string) bool {
 		return false
 	}
 	yaw, _ := d.St.Extra["yaw"].(float64)
+	s.unpin(k)
 	ragdoll.Kick(&n.Body, yaw, kickPower*d.Intensity, kickLift)
 	n.Flight, n.Path = ragdoll.Flight{}, nil
 	s.B.Set(s.npcR(k), "airborne", true)
@@ -77,12 +79,20 @@ func (s *Sim) shove(k int, d Delivery, _ []string) bool {
 	return true
 }
 
+// land strikes r with the fall it just ended, dist blocks (StimFall).
+func (s *Sim) land(r Receiver, at Vec3, dist float64) {
+	if dist > 0 {
+		s.hit(r, Stimulus{Stim: StimFall, Intensity: dist, Origin: at})
+	}
+}
+
 // tumble is an airborne NPC's tick: it flies, slams into things and,
 // at rest, gets up (rising, RiseTicks) and reels dazed (blind until
 // recover) if it can.
 func (s *Sim) tumble(k int) {
 	n, r := s.NPCs[k], s.npcR(k)
 	imp, rest := n.Flight.Tick(&n.Body, bodyWorld{s})
+	s.land(r, n.pos(), n.Body.Landed)
 	if imp.Speed > 0 {
 		st := Stimulus{Stim: StimSlam, Intensity: imp.Speed * TicksPerSecond, Origin: n.pos(), Source: &r}
 		s.emit(n.pos(), 10+st.Intensity*2, "thud", k)
@@ -108,10 +118,48 @@ func (s *Sim) Rising(k int) bool { return s.B.Bool(s.npcR(k), "rising") }
 func (s *Sim) Airborne(k int) bool { return s.B.Bool(s.npcR(k), "airborne") }
 
 // impale is the spikes' slam receptron: whatever fell on them is pierced.
+// Wall spikes keep what they kill: it hangs on them (pinned), facing
+// into the wall.
 func impale(s *Sim, d Delivery, _ []string) bool {
 	if d.St.Source == nil {
 		return false
 	}
-	return s.hit(*d.St.Source, Stimulus{Stim: StimPierce, Intensity: 20, Origin: d.St.Origin,
-		Extra: map[string]any{"how": "impaled"}})
+	st := Stimulus{Stim: StimPierce, Intensity: 20, Origin: d.St.Origin, Extra: map[string]any{"how": "impaled"}}
+	c := d.To.Addr
+	b := s.W.Block(c.X, c.Y, c.Z)
+	if !WallSpikes(b) {
+		return s.hit(*d.St.Source, st)
+	}
+	into, ok := intoWall[blockProp(b, "facing")]
+	if !ok {
+		return s.hit(*d.St.Source, st)
+	}
+	st.Extra["yaw"] = into
+	if !s.hit(*d.St.Source, st) {
+		return false
+	}
+	if k := s.npcIndex(*d.St.Source); k >= 0 && !s.NPCs[k].alive() {
+		n, r := s.NPCs[k], s.npcR(k)
+		s.B.Clear(r, "airborne")
+		s.B.Clear(r, "pinning")
+		n.Flight, n.Body.VX, n.Body.VY, n.Body.VZ = ragdoll.Flight{}, 0, 0, 0
+		s.B.Set(r, "pin_yaw", into)
+		s.B.Set(r, "pinned", true)
+		s.emit(n.pos(), 30, "stab", -1)
+	}
+	return true
+}
+
+// intoWall is the yaw pointing into the wall behind spikes facing a way.
+var intoWall = map[string]float64{"south": 0, "north": math.Pi, "west": math.Pi / 2, "east": -math.Pi / 2}
+
+// blockProp is block state b's property key ("" if it has none).
+func blockProp(b, key string) string {
+	_, props, _ := strings.Cut(b, "[")
+	for _, kv := range strings.Split(strings.TrimSuffix(props, "]"), ",") {
+		if k, v, ok := strings.Cut(kv, "="); ok && k == key {
+			return v
+		}
+	}
+	return ""
 }

@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/memmaker/voxellib/voxel"
@@ -56,7 +57,7 @@ var objectKinds = []sim.Object{
 }
 
 var npcKinds = []sim.NPCDef{
-	{Name: "Guard", Kind: "guard", Model: "guard"},
+	{Name: "Guard", Kind: "guard", Model: "guard", Weapon: "random"},
 	{Name: "Servant", Kind: "civilian", Model: "servant"},
 	{Name: "Target", Kind: "target", Model: "lord"},
 }
@@ -73,6 +74,7 @@ var editorHelp = []string{
 	"O / P               choose object / place it at the crosshair (torches: floor or wall; lanterns: floor or ceiling; candles: floor)",
 	"N / Shift+N         choose NPC kind / place it (faces your way)",
 	"K / Shift+K         add a patrol point for the last NPC / clear its patrol",
+	"J / Shift+J         the weapon of the NPC at the crosshair (else the last): random, sword, halberd, crossbow, none / its torch on or off",
 	"Backspace           delete the object or NPC at the crosshair",
 	"R                   add a room from the marked box",
 	"T / Y               set the start here / set the exit to the marked box",
@@ -317,6 +319,20 @@ func (g *game) editorKey(k glfw.Key, mods glfw.ModifierKey) {
 		if at, ok := g.edPlaceCell(); ok {
 			ed.lastNPC.Patrol = append(ed.lastNPC.Patrol, sim.Waypoint{Pos: at.Floor(), Wait: 3 * sim.TicksPerSecond})
 		}
+	case k == glfw.KeyJ:
+		d := g.editorNPC()
+		if d == nil {
+			g.message("Place an NPC first (Shift+N).")
+			return
+		}
+		if shift {
+			d.Torch = !d.Torch
+			g.message(fmt.Sprintf("%s: torch %s", d.Name, map[bool]string{true: "on", false: "off"}[d.Torch]))
+			return
+		}
+		i := slices.Index(npcWeapons, d.Weapon)
+		d.Weapon = npcWeapons[(i+1)%len(npcWeapons)]
+		g.message(fmt.Sprintf("%s: weapon %s", d.Name, weaponLabel(d.Weapon)))
 	case k == glfw.KeyBackspace || k == glfw.KeyDelete:
 		g.editorDelete()
 	case k == glfw.KeyR:
@@ -353,12 +369,31 @@ func forBox(b sim.Box, f func(sim.Cell)) {
 	}
 }
 
-// editorDelete removes the object or NPC nearest the crosshair ray.
-func (g *game) editorDelete() {
+// npcWeapons are what J cycles an NPC's weapon through ("": none).
+var npcWeapons = []string{"random", "sword", "halberd", "crossbow", ""}
+
+// weaponLabel names an NPCDef.Weapon for the editor.
+func weaponLabel(w string) string {
+	if w == "" {
+		return "none"
+	}
+	return w
+}
+
+// editorNPC is the NPC at the crosshair, else the last one placed.
+func (g *game) editorNPC() *sim.NPCDef {
+	if i, isNPC := g.editorPick(); i >= 0 && isNPC {
+		return g.mission.NPCs[i]
+	}
+	return g.ed.lastNPC
+}
+
+// editorPick finds the object or NPC nearest the crosshair ray: its
+// index, or -1.
+func (g *game) editorPick() (best int, isNPC bool) {
 	m := g.mission
 	e, d := g.eye(), g.viewDir()
 	best, bestD := -1, 0.8
-	isNPC := false
 	near := func(p sim.Vec3) float64 {
 		t := math.Max(0, p.Sub(e).X*d.X+p.Sub(e).Y*d.Y+p.Sub(e).Z*d.Z)
 		return e.Add(d.Scale(t)).Dist(p)
@@ -373,6 +408,13 @@ func (g *game) editorDelete() {
 			best, bestD, isNPC = i, dd, true
 		}
 	}
+	return best, isNPC
+}
+
+// editorDelete removes the object or NPC nearest the crosshair ray.
+func (g *game) editorDelete() {
+	m := g.mission
+	best, isNPC := g.editorPick()
 	switch {
 	case best < 0:
 		return
@@ -448,10 +490,20 @@ func (g *game) paintEditorHUD(c *canvas, w, h int) {
 	lines := []string{
 		fmt.Sprintf("EDITOR  %s  |  %.1f %.1f %.1f  |  %s", m.Title, g.player.X, g.player.Y, g.player.Z, room),
 		fmt.Sprintf("Block [%d] %s   Object (O): %s   NPC (N): %s", ed.sel+1, palette[ed.sel], o.Name, npcKinds[ed.npc].Name),
+		g.editorNPCLine(),
 		fmt.Sprintf("%d objects, %d NPCs, %d rooms   undo %d   F1 help", len(m.Objects), len(m.NPCs), len(m.Rooms), len(ed.undo)),
 	}
 	for i, l := range lines {
-		c.text(l, 10, h-46+i*14, white)
+		c.text(l, 10, h-60+i*14, white)
 	}
 	_ = w
+}
+
+// editorNPCLine shows the arms of the NPC J would change.
+func (g *game) editorNPCLine() string {
+	d := g.editorNPC()
+	if d == nil {
+		return "No NPC (Shift+N places one)"
+	}
+	return fmt.Sprintf("%s (J): weapon %s, torch %s", d.Name, weaponLabel(d.Weapon), map[bool]string{true: "on", false: "off"}[d.Torch])
 }

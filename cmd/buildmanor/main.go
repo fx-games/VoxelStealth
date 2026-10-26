@@ -178,17 +178,27 @@ func main() {
 		}
 	}
 	// Stairs up in the library (x 40..44, z 12..13) and down to the cellar
-	// (x 47..43, z 27..28).
-	for i := 0; i < 4; i++ {
-		b.fill(40+i, G, 12, 40+i, G+i, 13, "spruce_planks")
-	}
+	// (x 48..43, z 27..28): stair blocks, half a block a step, climbing
+	// east; each flight's top step sits in the floor it leads to.
+	const up = "[facing=east,half=bottom]"
 	b.air(40, U-1, 12, 43, U-1, 13)
-	b.air(43, G-1, 27, 47, G-1, 28)
 	for i := 0; i < 5; i++ {
-		x := 47 - i
-		b.fill(x, C, 27, x, C+4-i, 28, "cobblestone")
-		b.air(x, C+5-i, 27, x, G-1, 28)
+		if i > 0 {
+			b.fill(40+i, G, 12, 40+i, G+i-1, 13, "spruce_planks")
+		}
+		b.fill(40+i, G+i, 12, 40+i, G+i, 13, "spruce_stairs"+up)
 	}
+	b.air(43, G-1, 27, 47, G-1, 28)
+	for i := 0; i < 6; i++ {
+		x := 48 - i
+		b.fill(x, C, 27, x, C+4-i, 28, "cobblestone")
+		b.fill(x, C+5-i, 27, x, C+5-i, 28, "cobblestone_stairs"+up)
+		if i > 0 {
+			b.air(x, C+6-i, 27, x, G-1, 28)
+		}
+	}
+	// A ladder up the east front to the roof.
+	b.fill(50, G, 20, 50, U+4, 20, "ladder[facing=east]")
 	// Furniture.
 	b.fill(19, G, 19, 33, G, 21, "oak_planks") // dining table
 	b.fill(15, G, 37, 15, G, 40, "furnace")    // kitchen
@@ -203,6 +213,27 @@ func main() {
 	b.fill(21, U, 28, 23, U, 28, "calcite") // wash basin
 	b.fill(15, U, 36, 17, U, 40, "calcite") // bath tub (rim)
 	b.fill(16, U, 37, 16, U, 39, "light_blue_wool")
+
+	// Wall spikes to kick people into: the wine cellar's north wall, the
+	// guard room's south wall, inside the outer wall east of the gate.
+	b.fill(40, C, 11, 44, C+1, 11, "iron_spikes[facing=south]")
+	b.fill(43, G, 40, 46, G+1, 40, "iron_spikes[facing=north]")
+	b.fill(36, G, 62, 39, G+1, 62, "iron_spikes[facing=north]")
+	// Collapsible structures (structures below): a balcony off the bathroom
+	// over Aldric's path along the south front, on two stakes, and a log
+	// store over his path along the east wall.
+	b.fill(20, U-1, 42, 24, U-1, 47, "spruce_planks")
+	b.fill(20, U, 47, 24, U, 47, "oak_fence")
+	b.fill(20, U, 42, 20, U, 46, "oak_fence")
+	b.fill(24, U, 42, 24, U, 46, "oak_fence")
+	b.air(22, U, 41, 22, U+1, 41)
+	for _, x := range []int{20, 24} {
+		b.fill(x, G, 47, x, U-2, 47, "oak_log[axis=y]")
+	}
+	b.fill(52, G+4, 30, 54, G+4, 32, "spruce_planks")
+	b.fill(52, G+5, 30, 54, G+6, 32, "oak_log[axis=x]")
+	b.fill(52, G, 30, 52, G+3, 30, "oak_log[axis=y]")
+	b.fill(54, G, 32, 54, G+3, 32, "oak_log[axis=y]")
 
 	b.save(filepath.Join(*out, "world"))
 	writeMission(b, *out)
@@ -305,7 +336,7 @@ func writeMission(b *builder, dir string) {
 			wp(33.5, U, 13.5, 4), wp(33.5, U, 38.5, 4), wp(42.5, U, 32.5, 5, 90), wp(33.5, U, 25.5, 1)}},
 		{ID: "dunstan", Name: "Captain Dunstan", Kind: "guard", Model: "captain", Voice: "unique-captain", Pos: v(43.5, G, 35.5), Keys: []string{"vault"}, Patrol: []sim.Waypoint{
 			wp(43.5, G, 35.5, 10, 180), wp(41.5, G, 24.5, 1), wp(41.5, C, 20.5, 2), wp(38.5, C, 15.5, 6, 270), wp(44.5, C, 24.5, 1)}},
-		{ID: "edith", Name: "Maid Edith", Kind: "civilian", Model: "servant", Voice: "generic-servant-a", Pos: v(20.5, G, 36.5), Patrol: []sim.Waypoint{
+		{ID: "edith", Name: "Maid Edith", Kind: "civilian", Model: "maid", Voice: "generic-servant-a", Pos: v(20.5, G, 36.5), Patrol: []sim.Waypoint{
 			wp(20.5, G, 36.5, 12, 270), wp(18.5, G, 32.5, 3), wp(25.5, G, 17.5, 8, 180), wp(20.5, G, 26.5, 1)}},
 		{ID: "fenwick", Name: "Butler Fenwick", Kind: "civilian", Model: "servant", Voice: "generic-servant-b", Pos: v(22.5, U, 18.5), Patrol: []sim.Waypoint{
 			wp(22.5, U, 18.5, 8), wp(33.5, U, 30.5, 4), wp(42.5, U, 36.5, 8, 0), wp(33.5, U, 20.5, 1)}},
@@ -389,6 +420,19 @@ func writeMission(b *builder, dir string) {
 		{ID: "cellar_oil", Kind: sim.KindDecor, Name: "Oil barrel", Pos: v(45.5, C, 16.5), Yaw: 0.7},
 	}
 	m.Objects = append(m.Objects, graveyard()...)
+	posts := func(x, y0, y1, z int) []sim.Cell {
+		var out []sim.Cell
+		for y := y0; y <= y1; y++ {
+			out = append(out, sim.Cell{X: x, Y: y, Z: z})
+		}
+		return out
+	}
+	m.Structures = []*sim.Structure{
+		{ID: "balcony", Name: "Front balcony", Box: box(20, U-1, 42, 24, U, 47),
+			Supports: append(posts(20, G, U-2, 47), posts(24, G, U-2, 47)...)},
+		{ID: "logstore", Name: "Log store", Box: box(52, G+4, 30, 54, G+6, 32),
+			Supports: append(posts(52, G, G+3, 30), posts(54, G, G+3, 32)...)},
+	}
 	m.Rooms = []*sim.Room{
 		{ID: 1, Name: "Entrance hall", Boxes: []sim.Box{box(27, G, 31, 36, G+3, 40)}},
 		{ID: 2, Name: "Dining hall", Boxes: []sim.Box{box(15, G, 11, 36, G+3, 29)}},

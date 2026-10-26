@@ -108,6 +108,9 @@ func (g *game) loadModels(dir string) error {
 		if g.props[arm.file], err = g.modelRend.Add(fp); err != nil {
 			return err
 		}
+		if g.props[thrownModel[w].name], err = g.modelRend.Add(fp.Subtree(arm.weapon)); err != nil { // thrown (throw.go)
+			return err
+		}
 		a := model.NewAnimator(fp)
 		a.FadeTime = 0.05
 		a.Play("idle", false)
@@ -171,9 +174,9 @@ func (g *game) addRetextured(name string, base *model.Model, tex image.Image) er
 // fpArms are the melee weapons' first-person arms, in view space, made and
 // animated in Blockbench (assets/models/<file>.bbmodel): idle, windup (held
 // while the button is) and the strike on its release, which lands melee.
-var fpArms = map[int]struct{ file, strike, melee string }{
-	wBlade:     {"fp_dagger", "stab", "blade"},
-	wBlackjack: {"fp_blackjack", "strike", "blackjack"},
+var fpArms = map[int]struct{ file, strike, melee, weapon string }{ // weapon: the bone holding the weapon alone
+	wBlade:     {"fp_dagger", "stab", "blade", "dagger"},
+	wBlackjack: {"fp_blackjack", "strike", "blackjack", "baton"},
 }
 
 // lampTexture is the lamp's 2×1 texture: its glTF maps the post to the
@@ -316,13 +319,31 @@ func torchModel(o *sim.Object) string {
 	return name
 }
 
+// slimSkin reports whether a skin is for the slim arms
+// (player_slim.gltf): the strip a wide arm's back takes past a slim one's,
+// x 54..55 of the right arm's rows, is empty.
+func slimSkin(img image.Image) bool {
+	for y := 20; y < 32; y++ {
+		for x := 54; x < 56; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // loadNPCs dresses the Minecraft player model (player.gltf, made by
-// cmd/buildplayer) in each NPC model's skin, ../skins/<model>.png beside
+// cmd/buildplayer; player_slim.gltf for slim skins) in each NPC model's skin, ../skins/<model>.png beside
 // the models (64×64 Minecraft skins); a model without one wears the
 // placeholder, which is also "guard", the fallback, and "player", the
 // player's own body (drawSelf).
 func (g *game) loadNPCs(dir string) error {
 	base, err := gltf.LoadFile(filepath.Join(dir, "player.gltf"))
+	if err != nil {
+		return err
+	}
+	slim, err := gltf.LoadFile(filepath.Join(dir, "player_slim.gltf"))
 	if err != nil {
 		return err
 	}
@@ -332,8 +353,10 @@ func (g *game) loadNPCs(dir string) error {
 		g.skins[name] = &npcSkin{model: m, handle: h}
 		return err
 	}
-	if c := base.Clips["kick"]; c != nil {
-		c.Loop = model.LoopOnce
+	for _, m := range []*model.Model{base, slim} {
+		if c := m.Clips["kick"]; c != nil {
+			c.Loop = model.LoopOnce
+		}
 	}
 	for _, name := range []string{"guard", "player"} { // the placeholder, until a skin of that name comes
 		if err := add(name, base); err != nil {
@@ -352,6 +375,9 @@ func (g *game) loadNPCs(dir string) error {
 			return fmt.Errorf("%s: %w", p, err)
 		}
 		m := *base
+		if slimSkin(img) {
+			m = *slim
+		}
 		m.Textures = []image.Image{img}
 		if err := add(strings.TrimSuffix(filepath.Base(p), ".png"), &m); err != nil {
 			return err
