@@ -10,7 +10,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/voxellib/model"
 	"github.com/memmaker/voxellib/voxel"
+	"github.com/memmaker/voxellib/voxel/render"
 
 	"github.com/memmaker/voxellib/character"
 	"github.com/memmaker/voxellib/platform/glfw"
@@ -89,7 +92,8 @@ type editor struct {
 	lastNPC  *sim.NPCDef
 	serial   int
 	pick     picker
-	placing  int // what right-click places: tabBlocks, tabObjects or tabNPCs
+	placing  int                     // what right-click places: tabBlocks, tabObjects or tabNPCs
+	poses    map[string][]mgl32.Mat4 // each NPC model standing idle
 }
 
 func (g *game) tickEditor() {
@@ -464,6 +468,19 @@ func (g *game) editorSave() {
 	g.message("Saved to " + g.missionDir)
 }
 
+// editorLoad reloads the mission and its world from disk, dropping every
+// unsaved edit.
+func (g *game) editorLoad() {
+	m, err := sim.LoadMission(g.missionDir)
+	if err != nil {
+		g.message("Load failed: " + err.Error())
+		return
+	}
+	g.mission, g.ed.undo = m, nil
+	g.eng.Regenerate()
+	g.message("Loaded " + g.missionDir)
+}
+
 // togglePlaytest starts the mission from its start, or ends the playtest
 // and restores every block the simulation changed.
 func (g *game) togglePlaytest() {
@@ -479,11 +496,31 @@ func (g *game) togglePlaytest() {
 	g.message("Back in the editor.")
 }
 
+// drawNPCDef draws n as the game does, standing idle.
+func (g *game) drawNPCDef(n *sim.NPCDef) {
+	sk := g.skins[n.Model]
+	if sk == nil {
+		sk = g.skins["guard"]
+	}
+	skin, ok := g.ed.poses[n.Model]
+	if !ok {
+		a := model.NewAnimator(sk.model)
+		a.Play(clipFor(sk.model, false), false)
+		skin = a.Skin(nil)
+		if g.ed.poses == nil {
+			g.ed.poses = map[string][]mgl32.Mat4{}
+		}
+		g.ed.poses[n.Model] = skin
+	}
+	sky, blk := g.light(n.Pos.X, n.Pos.Y+1, n.Pos.Z)
+	g.insts = append(g.insts, render.ModelInstance{Model: sk.handle, X: n.Pos.X, Y: n.Pos.Y, Z: n.Pos.Z, Yaw: n.Yaw, Skin: skin, Sky: sky, Block: blk})
+}
+
 // drawEditorMarks draws NPCs, patrols, the start and the marks.
 func (g *game) drawEditorMarks() {
 	m := g.mission
 	for _, n := range m.NPCs {
-		g.prop("npc_mark", n.Pos, n.Yaw, 0)
+		g.drawNPCDef(n)
 		for _, w := range n.Patrol {
 			g.prop("waypoint", w.Pos, 0, 0)
 		}

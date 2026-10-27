@@ -273,7 +273,7 @@ func (g *game) paintPicker(c *canvas, w, h int) {
 }
 
 // drawPickerIcons draws each visible cell's block or model, turned three
-// quarters, over the HUD (s is the HUD's scale).
+// quarters and seen flat (Renderer.Icons), over the HUD (s is the HUD's scale).
 func (g *game) drawPickerIcons(fbW, fbH, s int) {
 	p := &g.ed.pick
 	w, h := fbW/s, fbH/s
@@ -282,6 +282,8 @@ func (g *game) drawPickerIcons(fbW, fbH, s int) {
 	size := float32(l.cell*s) * 0.55 / float32(fbH) * 2
 	yaw, pitch := float32(math.Pi/4), float32(math.Pi/6)
 	n := g.pickCount(p.tab)
+	g.eng.Renderer.Icons = true
+	defer func() { g.eng.Renderer.Icons = false }()
 	for r := 0; r < l.rows; r++ {
 		for col := 0; col < l.cols; col++ {
 			i := (r+p.scroll)*l.cols + col

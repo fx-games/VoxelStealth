@@ -668,7 +668,6 @@ var propParts = map[string][]part{
 	"arm":        {bx(-0.065, -0.075, -0.07, 0.065, 0.075, 0.07, skin), bx(-0.1, -0.1, 0.05, 0.1, 0.1, 1.1, skin)}, // fist at the origin, forearm along +Z
 	"marker":     {bx(-0.15, 0, -0.15, 0.15, 2.0, 0.15, color.NRGBA{60, 220, 90, 255})},
 	"waypoint":   {bx(-0.1, 0, -0.1, 0.1, 0.4, 0.1, color.NRGBA{240, 200, 40, 255})},
-	"npc_mark":   {bx(-0.3, 0, -0.3, 0.3, 1.8, 0.3, color.NRGBA{220, 60, 60, 255}), bx(-0.05, 1.4, -0.6, 0.05, 1.5, -0.3, color.NRGBA{255, 255, 255, 255})},
 }
 
 // boxModel builds a static model from coloured boxes: one texture column

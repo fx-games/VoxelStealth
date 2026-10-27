@@ -106,6 +106,7 @@ func main() {
 		RenderDistance: renderDistance,
 		WorldDir:       filepath.Join(*missionDir, "world"),
 		ReadOnly:       !*edit, // play never changes the mission on disk
+		ManualSave:     true,   // the editor writes only when told to
 		Textures:       ownTextures{pack, *blockDir},
 		RenderOptions:  render.Options{Missing: respack.MissingTexture, IsGreyscale: respack.IsGreyscale},
 	})

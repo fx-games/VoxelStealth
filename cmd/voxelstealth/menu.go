@@ -150,11 +150,17 @@ func (g *game) openGameMenu() {
 	ctx := g.ui
 	resume := ctx.Screens.CloseAll
 	playing := g.sim != nil && !(g.editing && g.sim == nil)
+	saveItems := []ui.MenuItem{
+		{Label: "Save Game", Disabled: !playing, OnClick: func() { resume(); g.quicksave() }},
+		{Label: "Load Game", Disabled: !playing || !g.hasSave(), OnClick: func() { resume(); g.quickload() }}}
+	if g.editing && g.sim == nil { // the editor writes the mission only from here (or Ctrl+S)
+		saveItems = []ui.MenuItem{
+			{Label: "Save Mission", OnClick: func() { resume(); g.editorSave() }},
+			{Label: "Load Mission", OnClick: func() { resume(); g.editorLoad() }}}
+	}
 	g.open(&ui.MenuScreen{Title: "menu.game", TitleY: 40, Origin: func(h int) int { return h/4 - 16 }, Rows: []ui.MenuRow{
 		{Y: 24, Items: []ui.MenuItem{{Label: "menu.returnToGame", OnClick: resume}}},
-		{Y: 48, Items: []ui.MenuItem{
-			{Label: "Save Game", Disabled: !playing, OnClick: func() { resume(); g.quicksave() }},
-			{Label: "Load Game", Disabled: !playing || !g.hasSave(), OnClick: func() { resume(); g.quickload() }}}},
+		{Y: 48, Items: saveItems},
 		{Y: 72, Items: []ui.MenuItem{
 			{Label: "Restart", Disabled: !playing || g.editing, OnClick: func() { resume(); g.restart() }},
 			{Label: "Controls...", OnClick: func() { ctx.Screens.Open(g.helpScreen()) }}}},
@@ -302,7 +308,7 @@ var editorPages = []helpPage{
 		{"Backspace", "delete the object or NPC at the crosshair"},
 		{"R", "add a room from the marked box"},
 		{"T / Y", "set the start here / set the exit to the marked box"},
-		{"Ctrl+S", "save"},
+		{"Ctrl+S", "save the mission (only this or Esc > Save Mission writes it; Load Mission drops unsaved edits)"},
 		{"F6", "playtest (again: back to editing)"},
 	}, nil},
 }
